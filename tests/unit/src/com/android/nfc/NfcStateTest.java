@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.nfc.NfcAdapter;
+import android.nfc.NfcAdapter.ControllerAlwaysOnStateCallback;
 import android.util.Log;
 
 import androidx.test.InstrumentationRegistry;
@@ -34,6 +35,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.concurrent.Executor;
+
 @RunWith(AndroidJUnit4.class)
 public final class NfcStateTest {
 
@@ -43,7 +46,15 @@ public final class NfcStateTest {
     private NfcAdapter mNfcAdapter;
     private BroadcastReceiver mAdapterStateChangedReceiver;
     private int mState;
+    private boolean mIsAlwaysOnEnabled;
     private boolean mNfcSupported;
+    private ControllerAlwaysOnStateCallback mListener;
+
+    class SynchronousExecutor implements Executor {
+        public void execute(Runnable r) {
+            r.run();
+        }
+    }
 
     @Before
     public void setUp() {
@@ -64,156 +75,164 @@ public final class NfcStateTest {
         } else {
             mState = NfcAdapter.STATE_OFF;
         }
+        if (mNfcAdapter.isControllerAlwaysOnSupported()) {
+            mListener = new AlwaysOnStateListener();
+            mNfcAdapter.registerControllerAlwaysOnStateCallback(new SynchronousExecutor(),
+                    mListener);
+        }
     }
 
     @After
     public void tearDown() throws Exception {
         mContext.unregisterReceiver(mAdapterStateChangedReceiver);
+        if (mNfcAdapter.isControllerAlwaysOnSupported()) {
+            mNfcAdapter.unregisterControllerAlwaysOnStateCallback(mListener);
+        }
     }
 
     @Test
-    public void testSetAlwaysOnTrueFromFalseWhenDisabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(false);
+    public void testSetControllerAlwaysOnTrueFromFalseWhenDisabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(false);
             wait_for_always_on(false);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
         }
         if (mNfcAdapter.isEnabled()) {
             mNfcAdapter.disable();
             wait_for_state(NfcAdapter.STATE_OFF);
         }
-        mNfcAdapter.setAlwaysOn(true);
+        mNfcAdapter.setControllerAlwaysOn(true);
         wait_for_always_on(true);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
     }
 
     @Test
-    public void testSetAlwaysOnFalseFromTrueWhenDisabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(true);
+    public void testSetControllerAlwaysOnFalseFromTrueWhenDisabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(true);
             wait_for_always_on(true);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
         }
         if (mNfcAdapter.isEnabled()) {
             mNfcAdapter.disable();
             wait_for_state(NfcAdapter.STATE_OFF);
         }
-        mNfcAdapter.setAlwaysOn(false);
+        mNfcAdapter.setControllerAlwaysOn(false);
         wait_for_always_on(false);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
     }
 
     @Test
-    public void testSetAlwaysOnFalseFromFalseWhenDisabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(false);
+    public void testSetControllerAlwaysOnFalseFromFalseWhenDisabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(false);
             wait_for_always_on(false);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
         }
         if (mNfcAdapter.isEnabled()) {
             mNfcAdapter.disable();
             wait_for_state(NfcAdapter.STATE_OFF);
         }
-        mNfcAdapter.setAlwaysOn(false);
+        mNfcAdapter.setControllerAlwaysOn(false);
         wait_for_always_on(false);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
     }
 
     @Test
-    public void testSetAlwaysOnTrueFromTrueWhenDisabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(true);
+    public void testSetControllerAlwaysOnTrueFromTrueWhenDisabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(true);
             wait_for_always_on(true);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
         }
         if (mNfcAdapter.isEnabled()) {
             mNfcAdapter.disable();
             wait_for_state(NfcAdapter.STATE_OFF);
         }
-        mNfcAdapter.setAlwaysOn(true);
+        mNfcAdapter.setControllerAlwaysOn(true);
         wait_for_always_on(true);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
     }
 
     @Test
-    public void testSetAlwaysOnTrueFromFalseWhenEnabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(false);
+    public void testSetControllerAlwaysOnTrueFromFalseWhenEnabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(false);
             wait_for_always_on(false);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
         }
         if (!mNfcAdapter.isEnabled()) {
             mNfcAdapter.enable();
             wait_for_state(NfcAdapter.STATE_ON);
         }
-        mNfcAdapter.setAlwaysOn(true);
+        mNfcAdapter.setControllerAlwaysOn(true);
         wait_for_always_on(true);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
     }
 
     @Test
     public void testSetAlwaysOnFalseFromTrueWhenEnabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(true);
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(true);
             wait_for_always_on(true);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
         }
         if (!mNfcAdapter.isEnabled()) {
             mNfcAdapter.enable();
             wait_for_state(NfcAdapter.STATE_ON);
         }
-        mNfcAdapter.setAlwaysOn(false);
+        mNfcAdapter.setControllerAlwaysOn(false);
         wait_for_always_on(false);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
     }
 
     @Test
-    public void testSetAlwaysOnFalseFromFalseWhenEnabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(false);
+    public void testSetControllerAlwaysOnFalseFromFalseWhenEnabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(false);
             wait_for_always_on(false);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
         }
         if (!mNfcAdapter.isEnabled()) {
             mNfcAdapter.enable();
             wait_for_state(NfcAdapter.STATE_ON);
         }
-        mNfcAdapter.setAlwaysOn(false);
+        mNfcAdapter.setControllerAlwaysOn(false);
         wait_for_always_on(false);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(false);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(false);
     }
 
     @Test
-    public void testSetAlwaysOnTrueFromTrueWhenEnabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(true);
+    public void testSetControllerAlwaysOnTrueFromTrueWhenEnabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(true);
             wait_for_always_on(true);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
         }
         if (!mNfcAdapter.isEnabled()) {
             mNfcAdapter.enable();
             wait_for_state(NfcAdapter.STATE_ON);
         }
-        mNfcAdapter.setAlwaysOn(true);
+        mNfcAdapter.setControllerAlwaysOn(true);
         wait_for_always_on(true);
-        assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+        assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
     }
 
     @Test
-    public void testEnableWhenSetAlwaysOnTrueAndDisabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(true);
+    public void testEnableWhenSetControllerAlwaysOnTrueAndDisabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(true);
             wait_for_always_on(true);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
         }
         if (mNfcAdapter.isEnabled()) {
             mNfcAdapter.disable();
@@ -227,12 +246,12 @@ public final class NfcStateTest {
     }
 
     @Test
-    public void testDisableWhenSetAlwaysOnTrueAndEnabled() {
-        if (!mNfcSupported || !mNfcAdapter.isAlwaysOnSupported()) return;
-        if (!mNfcAdapter.isAlwaysOnEnabled()) {
-            mNfcAdapter.setAlwaysOn(true);
+    public void testDisableWhenSetControllerAlwaysOnTrueAndEnabled() {
+        if (!mNfcSupported || !mNfcAdapter.isControllerAlwaysOnSupported()) return;
+        if (!mNfcAdapter.isControllerAlwaysOn()) {
+            mNfcAdapter.setControllerAlwaysOn(true);
             wait_for_always_on(true);
-            assertThat(mNfcAdapter.isAlwaysOnEnabled()).isEqualTo(true);
+            assertThat(mNfcAdapter.isControllerAlwaysOn()).isEqualTo(true);
         }
         if (!mNfcAdapter.isEnabled()) {
             mNfcAdapter.enable();
@@ -307,6 +326,13 @@ public final class NfcStateTest {
             }
         }
     }
+    private class AlwaysOnStateListener implements ControllerAlwaysOnStateCallback {
+        @Override
+        public void onStateChanged(boolean isEnabled) {
+            Log.i(TAG, "onStateChanged, mIsAlwaysOnEnabled = " + isEnabled);
+            mIsAlwaysOnEnabled = isEnabled;
+        }
+    }
     private void wait_for_state(int targetState) {
         int duration = 100;
         for (int i = 0; i < MAX_TIMEOUT_MS / duration; i++) {
@@ -318,7 +344,7 @@ public final class NfcStateTest {
         int duration = 1000;
         for (int i = 0; i < MAX_TIMEOUT_MS / duration; i++) {
             msleep(duration);
-            if (isEnabled == mNfcAdapter.isAlwaysOnEnabled()) break;
+            if (isEnabled == mIsAlwaysOnEnabled) break;
         }
     }
 
