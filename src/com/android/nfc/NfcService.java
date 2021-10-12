@@ -144,8 +144,8 @@ public class NfcService implements DeviceHostListener {
     static final String TRON_NFC_P2P = "nfc_p2p";
     static final String TRON_NFC_TAG = "nfc_tag";
 
-    static final String NATIVE_LOG_FILE_PATH = "/data/misc/nfc/logs";
     static final String NATIVE_LOG_FILE_NAME = "native_crash_logs";
+    static final String NATIVE_LOG_FILE_PATH = "/data/misc/nfc/logs";
     static final int NATIVE_CRASH_FILE_SIZE = 1024 * 1024;
 
     static final int MSG_NDEF_TAG = 0;
@@ -713,7 +713,7 @@ public class NfcService implements DeviceHostListener {
     class EnableDisableTask extends AsyncTask<Integer, Void, Void> {
         @Override
         protected Void doInBackground(Integer... params) {
-            // Sanity check mState
+            // Quick check mState
             switch (mState) {
                 case NfcAdapter.STATE_TURNING_OFF:
                 case NfcAdapter.STATE_TURNING_ON:
@@ -781,8 +781,9 @@ public class NfcService implements DeviceHostListener {
                 return true;
             }
             Log.i(TAG, "Enabling NFC");
-            NfcStatsLog.write(
-                    NfcStatsLog.NFC_STATE_CHANGED, NfcStatsLog.NFC_STATE_CHANGED__STATE__ON);
+            NfcStatsLog.write(NfcStatsLog.NFC_STATE_CHANGED,
+                    mIsSecureNfcEnabled ? NfcStatsLog.NFC_STATE_CHANGED__STATE__ON_LOCKED :
+                    NfcStatsLog.NFC_STATE_CHANGED__STATE__ON);
             updateState(NfcAdapter.STATE_TURNING_ON);
 
             WatchDogThread watchDog = new WatchDogThread("enableInternal", INIT_WATCHDOG_MS);
@@ -1212,22 +1213,28 @@ public class NfcService implements DeviceHostListener {
             }
 
             synchronized (NfcService.this) {
+                if (mIsSecureNfcEnabled == enable) {
+                    Log.e(TAG, "setNfcSecure error, can't apply the same state twice!");
+                    return false;
+                }
                 Log.i(TAG, "setting Secure NFC " + enable);
                 mPrefsEditor.putBoolean(PREF_SECURE_NFC_ON, enable);
                 mPrefsEditor.apply();
                 mIsSecureNfcEnabled = enable;
                 mBackupManager.dataChanged();
                 mDeviceHost.setNfcSecure(enable);
+                if (mIsHceCapable) {
+                    // update HCE/HCEF routing and commitRouting if Nfc is enabled
+                    mCardEmulationManager.onSecureNfcToggled();
+                } else if (isNfcEnabled()) {
+                    // commit only tech/protocol route without HCE support
+                    mDeviceHost.commitRouting();
+                }
             }
-            if (mIsHceCapable) {
-                mCardEmulationManager.onSecureNfcToggled();
-            }
-            if (enable)
-                NfcStatsLog.write(NfcStatsLog.NFC_STATE_CHANGED,
-                        NfcStatsLog.NFC_STATE_CHANGED__STATE__ON_LOCKED);
-            else
-                NfcStatsLog.write(
-                        NfcStatsLog.NFC_STATE_CHANGED, NfcStatsLog.NFC_STATE_CHANGED__STATE__ON);
+
+            NfcStatsLog.write(NfcStatsLog.NFC_STATE_CHANGED,
+                    mIsSecureNfcEnabled ? NfcStatsLog.NFC_STATE_CHANGED__STATE__ON_LOCKED :
+                    NfcStatsLog.NFC_STATE_CHANGED__STATE__ON);
             return true;
         }
 
@@ -2506,16 +2513,17 @@ public class NfcService implements DeviceHostListener {
                     break;
                 }
                 case MSG_COMMIT_ROUTING: {
-                    boolean commit = false;
                     synchronized (NfcService.this) {
+                        if (mState == NfcAdapter.STATE_OFF
+                                || mState == NfcAdapter.STATE_TURNING_OFF) {
+                            Log.d(TAG, "Skip commit routing when NFCC is off or turning off");
+                            return;
+                        }
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
-                            commit = true;
+                            mDeviceHost.commitRouting();
                         } else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
                         }
-                    }
-                    if (commit) {
-                        mDeviceHost.commitRouting();
                     }
                     break;
                 }
@@ -3223,6 +3231,9 @@ public class NfcService implements DeviceHostListener {
                 return;
             }
 
+            if (mCardEmulationManager == null) {
+                return;
+            }
             if (action.equals(Intent.ACTION_MANAGED_PROFILE_ADDED) ||
                     action.equals(Intent.ACTION_MANAGED_PROFILE_AVAILABLE) ||
                     action.equals(Intent.ACTION_MANAGED_PROFILE_REMOVED) ||
@@ -3434,7 +3445,7 @@ public class NfcService implements DeviceHostListener {
         proto.end(token);
 
         // Dump native crash logs if any
-        File file = new File(getNfaStorageDir(), NATIVE_LOG_FILE_NAME);
+        File file = new File(NATIVE_LOG_FILE_PATH, NATIVE_LOG_FILE_NAME);
         if (!file.exists()) {
             return;
         }
