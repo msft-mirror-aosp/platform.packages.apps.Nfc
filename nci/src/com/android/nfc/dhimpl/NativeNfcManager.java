@@ -28,8 +28,8 @@ import com.android.nfc.NfcDiscoveryParameters;
 
 import java.io.FileDescriptor;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
+import java.util.HashMap;
 
 /**
  * Native interface to the NFC Manager functions
@@ -403,12 +403,6 @@ public class NativeNfcManager implements DeviceHost {
     public void setNfceePowerAndLinkCtrl(boolean enable) {
         doSetNfceePowerAndLinkCtrl(enable);
     }
-
-    @Override
-    public native byte[] getRoutingTable();
-
-    @Override
-    public native int getMaxRoutingTableSize();
 
     /**
      * Notifies Ndef Message (TODO: rename into notifyTargetDiscovered)
