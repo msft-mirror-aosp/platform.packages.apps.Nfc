@@ -28,20 +28,18 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
-
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
 public class HostNfcFEmulationManager {
     static final String TAG = "HostNfcFEmulationManager";
-    static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
+    static final boolean DBG = false;
 
     static final int STATE_IDLE = 0;
     static final int STATE_W4_SERVICE = 1;
@@ -60,12 +58,10 @@ public class HostNfcFEmulationManager {
 
     // All variables below protected by mLock
     ComponentName mEnabledFgServiceName;
-    int mEnabledFgServiceUserId;
 
     Messenger mService;
     boolean mServiceBound;
     ComponentName mServiceName;
-    int mServiceUserId;
 
     // mActiveService denotes the service interface
     // that is the current active one, until a new packet
@@ -86,12 +82,8 @@ public class HostNfcFEmulationManager {
         mState = STATE_IDLE;
     }
 
-    /**
-     * Enabled Foreground NfcF service changed
-     */
-    public void onEnabledForegroundNfcFServiceChanged(int userId, ComponentName service) {
+    public void onEnabledForegroundNfcFServiceChanged(ComponentName service) {
         synchronized (mLock) {
-            mEnabledFgServiceUserId = userId;
             mEnabledFgServiceName = service;
             if (service == null) {
                 sendDeactivateToActiveServiceLocked(HostNfcFService.DEACTIVATION_LINK_LOSS);
@@ -108,10 +100,9 @@ public class HostNfcFEmulationManager {
         if (DBG) Log.d(TAG, "notifyHostEmulationData");
         String nfcid2 = findNfcid2(data);
         ComponentName resolvedServiceName = null;
-        NfcFServiceInfo resolvedService = null;
         synchronized (mLock) {
             if (nfcid2 != null) {
-                resolvedService = mT3tIdentifiersCache.resolveNfcid2(nfcid2);
+                NfcFServiceInfo resolvedService = mT3tIdentifiersCache.resolveNfcid2(nfcid2);
                 if (resolvedService != null) {
                     resolvedServiceName = resolvedService.getComponent();
                 }
@@ -130,38 +121,30 @@ public class HostNfcFEmulationManager {
             if (DBG) Log.d(TAG, "resolvedServiceName: " + resolvedServiceName.toString() +
                     "mState: " + String.valueOf(mState));
             switch (mState) {
-                case STATE_IDLE:
-                    int userId;
-                    if (resolvedService == null) {
-                        userId = mEnabledFgServiceUserId;
-                    } else {
-                        userId = UserHandle.getUserHandleForUid(resolvedService.getUid())
-                                .getIdentifier();
-                    }
-                    Messenger existingService =
-                            bindServiceIfNeededLocked(userId, resolvedServiceName);
-                    if (existingService != null) {
-                        Log.d(TAG, "Binding to existing service");
-                        mState = STATE_XFER;
-                        sendDataToServiceLocked(existingService, data);
-                    } else {
-                        // Waiting for service to be bound
-                        Log.d(TAG, "Waiting for new service.");
-                        // Queue packet to be used
-                        mPendingPacket = data;
-                        mState = STATE_W4_SERVICE;
-                    }
-                    NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
-                            NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT,
-                            "HCEF");
-                    break;
-                case STATE_W4_SERVICE:
-                    Log.d(TAG, "Unexpected packet in STATE_W4_SERVICE");
-                    break;
-                case STATE_XFER:
-                    // Regular packet data
-                    sendDataToServiceLocked(mActiveService, data);
-                    break;
+            case STATE_IDLE:
+                Messenger existingService = bindServiceIfNeededLocked(resolvedServiceName);
+                if (existingService != null) {
+                    Log.d(TAG, "Binding to existing service");
+                    mState = STATE_XFER;
+                    sendDataToServiceLocked(existingService, data);
+                } else {
+                    // Waiting for service to be bound
+                    Log.d(TAG, "Waiting for new service.");
+                    // Queue packet to be used
+                    mPendingPacket = data;
+                    mState = STATE_W4_SERVICE;
+                }
+                NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
+                               NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT,
+                               "HCEF");
+                break;
+            case STATE_W4_SERVICE:
+                Log.d(TAG, "Unexpected packet in STATE_W4_SERVICE");
+                break;
+            case STATE_XFER:
+                // Regular packet data
+                sendDataToServiceLocked(mActiveService, data);
+                break;
             }
         }
     }
@@ -238,9 +221,9 @@ public class HostNfcFEmulationManager {
         }
     }
 
-    Messenger bindServiceIfNeededLocked(int userId, ComponentName service) {
+    Messenger bindServiceIfNeededLocked(ComponentName service) {
         if (DBG) Log.d(TAG, "bindServiceIfNeededLocked");
-        if (mServiceBound && mServiceName.equals(service) && mServiceUserId == userId) {
+        if (mServiceBound && mServiceName.equals(service)) {
             Log.d(TAG, "Service already bound.");
             return mService;
         } else {
@@ -250,11 +233,9 @@ public class HostNfcFEmulationManager {
             bindIntent.setComponent(service);
             try {
                 mServiceBound = mContext.bindServiceAsUser(bindIntent, mConnection,
-                        Context.BIND_AUTO_CREATE, UserHandle.of(userId));
+                        Context.BIND_AUTO_CREATE, UserHandle.CURRENT);
                 if (!mServiceBound) {
                     Log.e(TAG, "Could not bind service.");
-                } else {
-                    mServiceUserId = userId;
                 }
             } catch (SecurityException e) {
                 Log.e(TAG, "Could not bind service due to security exception.");
@@ -271,7 +252,6 @@ public class HostNfcFEmulationManager {
             mServiceBound = false;
             mService = null;
             mServiceName = null;
-            mServiceUserId = -1;
         }
     }
 
