@@ -19,7 +19,6 @@ package com.android.nfc;
 import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.os.Bundle;
-
 import java.io.FileDescriptor;
 import java.io.IOException;
 
@@ -84,15 +83,6 @@ public interface DeviceHost {
         boolean makeReadOnly();
 
         int getConnectedTechnology();
-
-        /**
-         * Find Ndef only
-         * As per NFC forum test specification ndef write test expects only
-         * ndef detection followed by ndef write. System property
-         * nfc.dta.skipNdefRead added to skip default ndef read before tag
-         * dispatch. This system property is valid only in reader mode.
-         */
-        void findNdef();
     }
 
     public interface TagDisconnectedCallback {
@@ -272,16 +262,6 @@ public interface DeviceHost {
     public boolean setNfcSecure(boolean enable);
 
     public String getNfaStorageDir();
-
-    /**
-    * Get the committed listen mode routing configuration
-    */
-    byte[] getRoutingTable();
-
-    /**
-    * Get the Max Routing Table size from cache
-    */
-    int getMaxRoutingTableSize();
 
     /**
     * Start or stop RF polling
