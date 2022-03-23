@@ -315,7 +315,8 @@ static jbyteArray nativeNfcTag_doRead(JNIEnv* e, jobject) {
   }
   sReadDataLen = 0;
 
-  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
+  DLOG_IF(INFO, nfc_debug_enabled)
+      << StringPrintf("%s: exit: Status = 0x%X", __func__, status);
   return buf;
 }
 
@@ -1463,8 +1464,8 @@ static jboolean nativeNfcTag_doIsNdefFormatable(JNIEnv* e, jobject o,
   } else if (NFA_PROTOCOL_T3T == protocol) {
     isFormattable = NfcTag::getInstance().isFelicaLite() ? JNI_TRUE : JNI_FALSE;
   } else if (NFA_PROTOCOL_T2T == protocol) {
-    isFormattable = (NfcTag::getInstance().isMifareUltralight() |
-                     NfcTag::getInstance().isInfineonMyDMove() |
+    isFormattable = (NfcTag::getInstance().isMifareUltralight() ||
+                     NfcTag::getInstance().isInfineonMyDMove() ||
                      NfcTag::getInstance().isKovioType2Tag())
                         ? JNI_TRUE
                         : JNI_FALSE;
@@ -1636,6 +1637,8 @@ static jboolean nativeNfcTag_doNdefFormat(JNIEnv* e, jobject o, jbyteArray) {
   if (sCurrentConnectedTargetProtocol == NFA_PROTOCOL_ISO_DEP) {
     int retCode = NFCSTATUS_SUCCESS;
     retCode = nativeNfcTag_doReconnect(e, o);
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s Status = 0x%X", __func__, retCode);
   }
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   return (status == NFA_STATUS_OK) ? JNI_TRUE : JNI_FALSE;
