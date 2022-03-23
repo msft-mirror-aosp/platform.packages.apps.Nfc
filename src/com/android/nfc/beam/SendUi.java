@@ -66,7 +66,6 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.android.internal.policy.PhoneWindow;
-import com.android.internal.policy.SystemBarUtils;
 import com.android.nfc.R;
 import com.android.nfc.beam.FireflyRenderer;
 import java.util.List;
@@ -331,7 +330,7 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
         new ScreenshotTask().execute();
 
         final IntentFilter filter = new IntentFilter(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
-        mContext.registerReceiver(mReceiver, filter, Context.RECEIVER_EXPORTED);
+        mContext.registerReceiver(mReceiver, filter);
     }
 
     /** Show pre-send animation */
@@ -363,7 +362,8 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
         // Update display metrics
         mDisplay.getRealMetrics(mDisplayMetrics);
 
-        final int statusBarHeight = SystemBarUtils.getStatusBarHeight(mContext);
+        final int statusBarHeight = mContext.getResources().getDimensionPixelSize(
+                                        com.android.internal.R.dimen.status_bar_height);
 
         mBlackLayer.setVisibility(View.GONE);
         mBlackLayer.setAlpha(0f);
@@ -595,7 +595,8 @@ public class SendUi implements Animator.AnimatorListener, View.OnTouchListener,
     Bitmap createScreenshot() {
         boolean hasNavBar =  mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_showNavigationBar);
-        final int statusBarHeight = SystemBarUtils.getStatusBarHeight(mContext);
+        final int statusBarHeight = mContext.getResources().getDimensionPixelSize(
+                                        com.android.internal.R.dimen.status_bar_height);
 
         // Navbar has different sizes, depending on orientation
         final int navBarHeight = hasNavBar ? mContext.getResources().getDimensionPixelSize(
