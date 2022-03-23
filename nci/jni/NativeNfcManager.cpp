@@ -23,7 +23,6 @@
 #include <nativehelper/ScopedPrimitiveArray.h>
 #include <nativehelper/ScopedUtfChars.h>
 #include <semaphore.h>
-
 #include "HciEventManager.h"
 #include "JavaClassConstants.h"
 #include "NfcAdaptation.h"
@@ -33,13 +32,13 @@
 #include "PowerSwitch.h"
 #include "RoutingManager.h"
 #include "SyncEvent.h"
+#include "nfc_config.h"
+
 #include "ce_api.h"
-#include "debug_lmrt.h"
 #include "nfa_api.h"
 #include "nfa_ee_api.h"
 #include "nfa_p2p_api.h"
 #include "nfc_brcm_defs.h"
-#include "nfc_config.h"
 #include "phNxpExtns.h"
 #include "rw_api.h"
 
@@ -183,9 +182,14 @@ void initializeGlobalDebugEnabledFlag() {
   nfc_debug_enabled =
       (NfcConfig::getUnsigned(NAME_NFC_DEBUG_ENABLED, 1) != 0) ? true : false;
 
-  bool debug_enabled = property_get_bool("persist.nfc.debug_enabled", false);
-
-  nfc_debug_enabled = (nfc_debug_enabled || debug_enabled);
+  char valueStr[PROPERTY_VALUE_MAX] = {0};
+  int len = property_get("nfc.debug_enabled", valueStr, "");
+  if (len > 0) {
+    unsigned debug_enabled = 1;
+    // let Android property override .conf variable
+    sscanf(valueStr, "%u", &debug_enabled);
+    nfc_debug_enabled = (debug_enabled == 0) ? false : true;
+  }
 
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: level=%u", __func__, nfc_debug_enabled);
@@ -1437,8 +1441,7 @@ void nfcManager_disableDiscovery(JNIEnv* e, jobject o) {
   if (!PowerSwitch::getInstance().setModeOff(PowerSwitch::DISCOVERY))
     PowerSwitch::getInstance().setLevel(PowerSwitch::LOW_POWER);
 TheEnd:
-  DLOG_IF(INFO, nfc_debug_enabled)
-      << StringPrintf("%s: exit: Status = 0x%X", __func__, status);
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
 }
 
 /*******************************************************************************
@@ -1585,12 +1588,10 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
   sAbortConnlessWait = true;
   nativeLlcpConnectionlessSocket_abortWait();
   sIsNfaEnabled = false;
-  sRoutingInitialized = false;
   sDiscoveryEnabled = false;
   sPollingEnabled = false;
   sIsDisabling = false;
   sP2pEnabled = false;
-  sReaderModeEnabled = false;
   gActivated = false;
   sLfT3tMax = 0;
 
@@ -2112,28 +2113,18 @@ static void nfcManager_doStartStopPolling(JNIEnv* e, jobject o,
   startStopPolling(start);
 }
 
-/*******************************************************************************
-**
-** Function:        nfcManager_doSetNfcSecure
-**
-** Description:     Set NfcSecure enable/disable.
-**                  e: JVM environment.
-**                  o: Java object.
-**                  enable: Sets true/false to enable/disable NfcSecure
-**                  It only updates the routing table cache without commit to
-**                  NFCC.
-**
-** Returns:         True always
-**
-*******************************************************************************/
 static jboolean nfcManager_doSetNfcSecure(JNIEnv* e, jobject o,
                                           jboolean enable) {
   RoutingManager& routingManager = RoutingManager::getInstance();
   routingManager.setNfcSecure(enable);
+  bool rfEnabled = sRfEnabled;
   if (sRoutingInitialized) {
     routingManager.disableRoutingToHost();
+    if (rfEnabled) startRfDiscovery(false);
     routingManager.updateRoutingTable();
     routingManager.enableRoutingToHost();
+    routingManager.commitRouting();
+    if (rfEnabled) startRfDiscovery(true);
   }
   return true;
 }
@@ -2151,44 +2142,6 @@ static void nfcManager_doSetNfceePowerAndLinkCtrl(JNIEnv* e, jobject o,
   } else {
     routingManager.eeSetPwrAndLinkCtrl(0);
   }
-}
-
-/*******************************************************************************
-**
-** Function:        nfcManager_doGetMaxRoutingTableSize
-**
-** Description:     Retrieve the max routing table size from cache
-**                  e: JVM environment.
-**                  o: Java object.
-**
-** Returns:         Max Routing Table size
-**
-*******************************************************************************/
-static jint nfcManager_doGetMaxRoutingTableSize(JNIEnv* e, jobject o) {
-  return lmrt_get_max_size();
-}
-
-/*******************************************************************************
-**
-** Function:        nfcManager_doGetRoutingTable
-**
-** Description:     Retrieve the committed listen mode routing configuration
-**                  e: JVM environment.
-**                  o: Java object.
-**
-** Returns:         Committed listen mode routing configuration
-**
-*******************************************************************************/
-static jbyteArray nfcManager_doGetRoutingTable(JNIEnv* e, jobject o) {
-  std::vector<uint8_t>* routingTable = lmrt_get_tlvs();
-
-  CHECK(e);
-  jbyteArray rtJavaArray = e->NewByteArray((*routingTable).size());
-  CHECK(rtJavaArray);
-  e->SetByteArrayRegion(rtJavaArray, 0, (*routingTable).size(),
-                        (jbyte*)&(*routingTable)[0]);
-
-  return rtJavaArray;
 }
 
 /*****************************************************************************
@@ -2286,11 +2239,6 @@ static JNINativeMethod gMethods[] = {
 
     {"doSetNfceePowerAndLinkCtrl", "(Z)V",
      (void*)nfcManager_doSetNfceePowerAndLinkCtrl},
-
-    {"getRoutingTable", "()[B", (void*)nfcManager_doGetRoutingTable},
-
-    {"getMaxRoutingTableSize", "()I",
-     (void*)nfcManager_doGetMaxRoutingTableSize},
 };
 
 /*******************************************************************************
