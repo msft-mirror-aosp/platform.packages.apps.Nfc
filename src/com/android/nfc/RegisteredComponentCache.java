@@ -30,7 +30,6 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.Log;
 
@@ -44,8 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class RegisteredComponentCache {
     private static final String TAG = "RegisteredComponentCache";
-    private static final boolean DEBUG =
-            SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
+    private static final boolean DEBUG = false;
 
     final Context mContext;
     final String mAction;
