@@ -235,7 +235,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
             Log.d(TAG, "Requested foreground service unexpectedly removed");
             return false;
         }
-        // Do some quick checking
+        // Do some sanity checking
         if (!mPaymentDefaults.preferForeground) {
             // Foreground apps are not allowed to override payment default
             // Check if this app registers payment AIDs, in which case we'll fail anyway

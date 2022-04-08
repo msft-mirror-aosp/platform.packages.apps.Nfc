@@ -37,7 +37,6 @@ public class NfcRootActivity extends Activity {
                 try {
                     startActivityAsUser(launchIntent, UserHandle.CURRENT);
                 } catch (ActivityNotFoundException e) {
-                } catch (SecurityException e) {
                 }
             }
         }

@@ -581,14 +581,11 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetHandle) {
 
   if (sCurrentConnectedTargetType == TARGET_TYPE_ISO14443_3A ||
       sCurrentConnectedTargetType == TARGET_TYPE_ISO14443_3B) {
-
-      if (sCurrentConnectedTargetProtocol != NFC_PROTOCOL_MIFARE) {
-        DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
         "%s: switching to tech: %d need to switch rf intf to frame", __func__,
         sCurrentConnectedTargetType);
-        retCode = switchRfInterface(NFA_INTERFACE_FRAME) ? NFA_STATUS_OK
-                                                         : NFA_STATUS_FAILED;
-      }
+    retCode = switchRfInterface(NFA_INTERFACE_FRAME) ? NFA_STATUS_OK
+                                                     : NFA_STATUS_FAILED;
   } else if (sCurrentConnectedTargetType == TARGET_TYPE_MIFARE_CLASSIC) {
     retCode = switchRfInterface(NFA_INTERFACE_MIFARE) ? NFA_STATUS_OK
                                                       : NFA_STATUS_FAILED;
@@ -866,7 +863,7 @@ jboolean nativeNfcTag_doDisconnect(JNIEnv*, jobject) {
   NfcTag::getInstance().resetAllTransceiveTimeouts();
 
   if (NfcTag::getInstance().getActivationState() != NfcTag::Active) {
-    LOG(WARNING) << StringPrintf("%s: tag already deactivated", __func__);
+    LOG(ERROR) << StringPrintf("%s: tag already deactivated", __func__);
     goto TheEnd;
   }
 

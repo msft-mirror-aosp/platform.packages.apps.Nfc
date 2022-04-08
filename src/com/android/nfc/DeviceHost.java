@@ -51,8 +51,6 @@ public interface DeviceHost {
         public void onNfcTransactionEvent(byte[] aid, byte[] data, String seName);
 
         public void onEeUpdated();
-
-        public void onHwErrorReported();
     }
 
     public interface TagEndpoint {
@@ -190,7 +188,7 @@ public interface DeviceHost {
 
     public boolean sendRawFrame(byte[] data);
 
-    public boolean routeAid(byte[] aid, int route, int aidInfo, int power);
+    public boolean routeAid(byte[] aid, int route, int aidInfo);
 
     public boolean unrouteAid(byte[] aid);
 
@@ -262,14 +260,4 @@ public interface DeviceHost {
     public boolean setNfcSecure(boolean enable);
 
     public String getNfaStorageDir();
-
-    /**
-    * Start or stop RF polling
-    */
-    void startStopPolling(boolean enable);
-
-    /**
-    * Set NFCC power state by sending NFCEE_POWER_AND_LINK_CNTRL_CMD
-    */
-    void setNfceePowerAndLinkCtrl(boolean enable);
 }

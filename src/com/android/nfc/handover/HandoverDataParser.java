@@ -16,6 +16,15 @@
 
 package com.android.nfc.handover;
 
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.nio.charset.Charset;
+import java.util.Arrays;
+import java.util.Random;
+
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
@@ -29,14 +38,6 @@ import android.nfc.NdefRecord;
 import android.os.ParcelUuid;
 import android.os.UserHandle;
 import android.util.Log;
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Random;
 
 /**
  * Manages handover of NFC to other technologies.
@@ -461,20 +462,18 @@ public class HandoverDataParser {
 
         try {
 
-            byte[] bdaddr = null;
-            byte role = 0xF; // invalid default
-            byte[] leScC = null;
-            byte[] leScR = null;
-            byte[] nameBytes = null;
-            byte[] securityManagerTK = null;
             while (payload.remaining() > 0) {
                 int len = payload.get();
                 int type = payload.get();
                 switch (type) {
                     case BT_HANDOVER_TYPE_MAC: // mac address
+
                         int startpos = payload.position();
-                        bdaddr = new byte[7]; // 6 bytes for mac, 1 for address type
+                        byte[] bdaddr = new byte[7]; // 6 bytes for mac, 1 for addres type
                         payload.get(bdaddr);
+                        if (result.oobData == null)
+                            result.oobData = new OobData();
+                        result.oobData.setLeBluetoothDeviceAddress(bdaddr);
                         payload.position(startpos);
 
                         byte[] address = parseMacFromBluetoothRecord(payload);
@@ -482,22 +481,19 @@ public class HandoverDataParser {
                         result.device = mBluetoothAdapter.getRemoteDevice(address);
                         result.valid = true;
                         break;
-
                     case BT_HANDOVER_TYPE_LE_ROLE:
-                        role = payload.get();
+                        byte role = payload.get();
                         if (role == BT_HANDOVER_LE_ROLE_CENTRAL_ONLY) {
                             // only central role supported, can't pair
                             result.valid = false;
                             return result;
                         }
                         break;
-
                     case BT_HANDOVER_TYPE_LONG_LOCAL_NAME:
-                        nameBytes = new byte[len - 1];
+                        byte[] nameBytes = new byte[len - 1];
                         payload.get(nameBytes);
                         result.name = new String(nameBytes, StandardCharsets.UTF_8);
                         break;
-
                     case BT_HANDOVER_TYPE_SECURITY_MANAGER_TK:
                         if (len-1 != SECURITY_MANAGER_TK_SIZE) {
                             Log.i(TAG, "BT OOB: invalid size of SM TK, should be " +
@@ -505,8 +501,12 @@ public class HandoverDataParser {
                             break;
                         }
 
-                        securityManagerTK = new byte[len - 1];
+                        byte[] securityManagerTK = new byte[len - 1];
                         payload.get(securityManagerTK);
+
+                        if (result.oobData == null)
+                            result.oobData = new OobData();
+                        result.oobData.setSecurityManagerTk(securityManagerTK);
                         break;
 
                     case BT_HANDOVER_TYPE_LE_SC_CONFIRMATION:
@@ -516,8 +516,12 @@ public class HandoverDataParser {
                             break;
                         }
 
-                        leScC = new byte[len - 1];
+                        byte[] leScC = new byte[len - 1];
                         payload.get(leScC);
+
+                        if (result.oobData == null)
+                            result.oobData = new OobData();
+                        result.oobData.setLeSecureConnectionsConfirmation(leScC);
                         break;
 
                     case BT_HANDOVER_TYPE_LE_SC_RANDOM:
@@ -527,8 +531,12 @@ public class HandoverDataParser {
                             break;
                         }
 
-                        leScR = new byte[len - 1];
+                        byte[] leScR = new byte[len - 1];
                         payload.get(leScR);
+
+                        if (result.oobData == null)
+                            result.oobData = new OobData();
+                        result.oobData.setLeSecureConnectionsRandom(leScR);
                         break;
 
                     default:
@@ -536,11 +544,6 @@ public class HandoverDataParser {
                         break;
                 }
             }
-            result.oobData = new OobData.LeBuilder(leScC, bdaddr, (int)(role & 0xFF))
-                .setRandomizerHash(leScR)
-                .setDeviceName(nameBytes)
-                .setLeTemporaryKey(securityManagerTK)
-                .build();
         } catch (IllegalArgumentException e) {
             Log.i(TAG, "BLE OOB: error parsing OOB data", e);
         } catch (BufferUnderflowException e) {
