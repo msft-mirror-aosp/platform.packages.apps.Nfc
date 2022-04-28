@@ -273,6 +273,7 @@ public class NfcService implements DeviceHostListener {
     boolean mInProvisionMode; // whether we're in setup wizard and enabled NFC provisioning
     boolean mIsNdefPushEnabled;
     boolean mIsSecureNfcEnabled;
+    boolean mSkipNdefRead;
     NfcDiscoveryParameters mCurrentDiscoveryParameters =
             NfcDiscoveryParameters.getNfcOffParameters();
 
@@ -690,8 +691,14 @@ public class NfcService implements DeviceHostListener {
             for (UserHandle uh : luh) {
                 if (um.isQuietModeEnabled(uh)) continue;
 
-                PackageManager pm = mContext.createContextAsUser(uh,
-                        /*flags=*/0).getPackageManager();
+                PackageManager pm;
+                try {
+                    pm = mContext.createContextAsUser(uh, /*flags=*/0).getPackageManager();
+                } catch (IllegalStateException e) {
+                    Log.d(TAG, "Fail to get PackageManager for user: " + uh);
+                    continue;
+                }
+
                 List<PackageInfo> packagesNfcEvents = pm.getPackagesHoldingPermissions(
                         new String[] {android.Manifest.permission.NFC_TRANSACTION_EVENT},
                         PackageManager.GET_ACTIVITIES);
@@ -852,6 +859,8 @@ public class NfcService implements DeviceHostListener {
                 // Generate the initial card emulation routing table
                 mCardEmulationManager.onNfcEnabled();
             }
+
+            mSkipNdefRead = SystemProperties.getBoolean("nfc.dta.skipNdefRead", false);
 
             nci_version = getNciVersion();
             Log.d(TAG, "NCI_Version: " + nci_version);
@@ -2656,6 +2665,14 @@ public class NfcService implements DeviceHostListener {
                             dispatchTagEndpoint(tag, readerParams);
                             break;
                         }
+
+                        if (mIsDebugBuild && mSkipNdefRead) {
+                            if (DBG) Log.d(TAG, "Only NDEF detection in reader mode");
+                            tag.findNdef();
+                            tag.startPresenceChecking(presenceCheckDelay, callback);
+                            dispatchTagEndpoint(tag, readerParams);
+                            break;
+                        }
                     }
 
                     if (tag.getConnectedTechnology() == TagTechnology.NFC_BARCODE) {
@@ -2998,8 +3015,14 @@ public class NfcService implements DeviceHostListener {
                             mContext.sendBroadcastAsUser(intent, userHandle);
                         }
                     }
-                    PackageManager pm = mContext.createContextAsUser(userHandle,
-                            /*flags=*/0).getPackageManager();
+                    PackageManager pm;
+                    try {
+                        pm = mContext.createContextAsUser(userHandle, /*flags=*/0)
+                                .getPackageManager();
+                    } catch (IllegalStateException e) {
+                        Log.d(TAG, "Fail to get PackageManager for user: " + userHandle);
+                        continue;
+                    }
                     for (String packageName :
                             mNfcPreferredPaymentChangedInstalledPackages.get(userId)) {
                         try {
