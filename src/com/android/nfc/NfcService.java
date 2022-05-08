@@ -271,6 +271,7 @@ public class NfcService implements DeviceHostListener {
     boolean mInProvisionMode; // whether we're in setup wizard and enabled NFC provisioning
     boolean mIsNdefPushEnabled;
     boolean mIsSecureNfcEnabled;
+    boolean mSkipNdefRead;
     NfcDiscoveryParameters mCurrentDiscoveryParameters =
             NfcDiscoveryParameters.getNfcOffParameters();
 
@@ -684,8 +685,14 @@ public class NfcService implements DeviceHostListener {
             for (UserHandle uh : luh) {
                 if (um.isQuietModeEnabled(uh)) continue;
 
-                PackageManager pm = mContext.createContextAsUser(uh,
-                        /*flags=*/0).getPackageManager();
+                PackageManager pm;
+                try {
+                    pm = mContext.createContextAsUser(uh, /*flags=*/0).getPackageManager();
+                } catch (IllegalStateException e) {
+                    Log.d(TAG, "Fail to get PackageManager for user: " + uh);
+                    continue;
+                }
+
                 List<PackageInfo> packagesNfcEvents = pm.getPackagesHoldingPermissions(
                         new String[] {android.Manifest.permission.NFC_TRANSACTION_EVENT},
                         PackageManager.GET_ACTIVITIES);
@@ -846,6 +853,8 @@ public class NfcService implements DeviceHostListener {
                 mCardEmulationManager.onNfcEnabled();
             }
 
+            mSkipNdefRead = SystemProperties.getBoolean("nfc.dta.skipNdefRead", false);
+
             nci_version = getNciVersion();
             Log.d(TAG, "NCI_Version: " + nci_version);
 
@@ -921,10 +930,6 @@ public class NfcService implements DeviceHostListener {
                 mP2pLinkManager.enableDisable(false, false);
             }
 
-            // Disable delay polling when disabling
-            mPollingDelayed = false;
-            mHandler.removeMessages(MSG_DELAY_POLLING);
-
             // Stop watchdog if tag present
             // A convenient way to stop the watchdog properly consists of
             // disconnecting the tag. The polling loop shall be stopped before
@@ -932,6 +937,9 @@ public class NfcService implements DeviceHostListener {
             maybeDisconnectTarget();
 
             synchronized (NfcService.this) {
+                // Disable delay polling when disabling
+                mPollingDelayed = false;
+                mHandler.removeMessages(MSG_DELAY_POLLING);
                 mPollingDisableDeathRecipients.clear();
                 mReaderModeParams = null;
             }
@@ -2629,6 +2637,14 @@ public class NfcService implements DeviceHostListener {
                             dispatchTagEndpoint(tag, readerParams);
                             break;
                         }
+
+                        if (mIsDebugBuild && mSkipNdefRead) {
+                            if (DBG) Log.d(TAG, "Only NDEF detection in reader mode");
+                            tag.findNdef();
+                            tag.startPresenceChecking(presenceCheckDelay, callback);
+                            dispatchTagEndpoint(tag, readerParams);
+                            break;
+                        }
                     }
 
                     if (tag.getConnectedTechnology() == TagTechnology.NFC_BARCODE) {
@@ -2783,12 +2799,11 @@ public class NfcService implements DeviceHostListener {
                     mScreenState = (Integer)msg.obj;
                     Log.d(TAG, "MSG_APPLY_SCREEN_STATE " + mScreenState);
 
-                    // Disable delay polling when screen state changed
-                    mPollingDelayed = false;
-                    mHandler.removeMessages(MSG_DELAY_POLLING);
-
-                    // If NFC is turning off, we shouldn't need any changes here
                     synchronized (NfcService.this) {
+                        // Disable delay polling when screen state changed
+                        mPollingDelayed = false;
+                        mHandler.removeMessages(MSG_DELAY_POLLING);
+                        // If NFC is turning off, we shouldn't need any changes here
                         if (mState == NfcAdapter.STATE_TURNING_OFF)
                             return;
                     }
@@ -2971,8 +2986,14 @@ public class NfcService implements DeviceHostListener {
                             mContext.sendBroadcastAsUser(intent, userHandle);
                         }
                     }
-                    PackageManager pm = mContext.createContextAsUser(userHandle,
-                            /*flags=*/0).getPackageManager();
+                    PackageManager pm;
+                    try {
+                        pm = mContext.createContextAsUser(userHandle, /*flags=*/0)
+                                .getPackageManager();
+                    } catch (IllegalStateException e) {
+                        Log.d(TAG, "Fail to get PackageManager for user: " + userHandle);
+                        continue;
+                    }
                     for (String packageName :
                             mNfcPreferredPaymentChangedInstalledPackages.get(userId)) {
                         try {
@@ -3088,12 +3109,18 @@ public class NfcService implements DeviceHostListener {
                     if (mPollDelay > NO_POLL_DELAY) {
                         tagEndpoint.stopPresenceChecking();
                         mDeviceHost.startStopPolling(false);
-                        mPollingDelayed = true;
-                        if (DBG) Log.d(TAG, "Polling delayed");
-                        mHandler.sendMessageDelayed(
-                                mHandler.obtainMessage(MSG_DELAY_POLLING), mPollDelay);
+                        synchronized (NfcService.this) {
+                            if (!mPollingDelayed) {
+                                mPollingDelayed = true;
+                                if (DBG) Log.d(TAG, "Polling delayed");
+                                mHandler.sendMessageDelayed(
+                                        mHandler.obtainMessage(MSG_DELAY_POLLING), mPollDelay);
+                            } else {
+                                if (DBG) Log.d(TAG, "Keep waiting for polling delay");
+                            }
+                        }
                     } else {
-                        Log.e(TAG, "Keep presence checking.");
+                        Log.d(TAG, "Keep presence checking.");
                     }
                     if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED && mNotifyDispatchFailed) {
                         if (!sToast_debounce) {
