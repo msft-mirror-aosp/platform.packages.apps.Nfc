@@ -15,12 +15,14 @@
  */
 package com.android.nfc.cardemulation;
 
+import android.os.SystemProperties;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -34,7 +36,7 @@ public class AidRoutingManager {
 
     static final String TAG = "AidRoutingManager";
 
-    static final boolean DBG = false;
+    static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
 
     static final int ROUTE_HOST = 0x00;
 
@@ -201,6 +203,7 @@ public class AidRoutingManager {
         boolean aidRouteResolved = false;
         HashMap<String, AidEntry> aidRoutingTableCache = new HashMap<String, AidEntry>(aidMap.size());
         ArrayList<Integer> seList = new ArrayList<Integer>();
+        mDefaultRoute = doGetDefaultRouteDestination();
         seList.add(mDefaultRoute);
         if (mDefaultRoute != ROUTE_HOST) {
             seList.add(ROUTE_HOST);
@@ -335,7 +338,11 @@ public class AidRoutingManager {
                  }
               }
 
-              if (mDefaultRoute != mDefaultIsoDepRoute) {
+              // register default route in below cases:
+              // 1. mDefaultRoute is different with mDefaultIsoDepRoute
+              // 2. mDefaultRoute and mDefaultIsoDepRoute all equal to ROUTE_HOST
+              //    , which is used for screen off HCE scenarios
+              if (mDefaultRoute != mDefaultIsoDepRoute || mDefaultIsoDepRoute == ROUTE_HOST) {
                   if (NfcService.getInstance().getNciVersion()
                           >= NfcService.getInstance().NCI_VERSION_2_0) {
                       String emptyAid = "";
