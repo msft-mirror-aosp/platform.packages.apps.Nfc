@@ -15,20 +15,19 @@
  */
 package com.android.nfc;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import android.app.ActivityManager;
 import android.app.IActivityManager;
 import android.app.IProcessObserver;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class ForegroundUtils extends IProcessObserver.Stub {
-    static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);;
+    static final boolean DBG = false;
     private final String TAG = "ForegroundUtils";
     private final IActivityManager mIActivityManager;
 

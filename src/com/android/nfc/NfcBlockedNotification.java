@@ -25,6 +25,8 @@ import android.content.Intent;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import com.android.nfc.R;
+
 /**
  * This class handles the Notification Manager for the antenna blocked notification
  */
