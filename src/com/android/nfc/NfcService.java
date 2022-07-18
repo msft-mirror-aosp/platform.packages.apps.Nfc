@@ -251,6 +251,8 @@ public class NfcService implements DeviceHostListener {
             new HashMap<Integer, ReaderModeDeathRecipient>();
     private final ReaderModeDeathRecipient mReaderModeDeathRecipient =
             new ReaderModeDeathRecipient();
+    private final SeServiceDeathRecipient mSeServiceDeathRecipient =
+            new SeServiceDeathRecipient();
     private final NfcUnlockManager mNfcUnlockManager;
 
     private final BackupManager mBackupManager;
@@ -650,16 +652,27 @@ public class NfcService implements DeviceHostListener {
                 Log.e(TAG, "Failed to register VR mode state listener: " + e);
             }
         }
-        mSEService = ISecureElementService.Stub.asInterface(ServiceManager.getService(
-                Context.SECURE_ELEMENT_SERVICE));
+        connectToSeService();
     }
 
     private boolean isSEServiceAvailable() {
         if (mSEService == null) {
-            mSEService = ISecureElementService.Stub.asInterface(ServiceManager.getService(
-                    Context.SECURE_ELEMENT_SERVICE));
+            connectToSeService();
         }
         return (mSEService != null);
+    }
+
+    private void connectToSeService() {
+        try {
+            mSEService = ISecureElementService.Stub.asInterface(ServiceManager.getService(
+                  Context.SECURE_ELEMENT_SERVICE));
+            if (mSEService != null) {
+                IBinder seServiceBinder = mSEService.asBinder();
+                seServiceBinder.linkToDeath(mSeServiceDeathRecipient, 0);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error Registering SE service to linktoDeath : " + e);
+        }
     }
 
     void initSoundPool() {
@@ -1728,6 +1741,16 @@ public class NfcService implements DeviceHostListener {
             if (!mIsAlwaysOnSupported) return;
 
             mAlwaysOnListeners.remove(listener);
+        }
+    }
+
+    final class SeServiceDeathRecipient implements IBinder.DeathRecipient {
+        @Override
+        public void binderDied() {
+            synchronized (NfcService.this) {
+                Log.i(TAG, "SE Service died");
+                mSEService = null;
+            }
         }
     }
 
@@ -2844,17 +2867,24 @@ public class NfcService implements DeviceHostListener {
                             return;
                     }
 
-                    if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
-                        applyRouting(false);
-                        mIsRequestUnlockShowed = false;
+                    mRoutingWakeLock.acquire();
+                    try {
+                        if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
+                            applyRouting(false);
+                            mIsRequestUnlockShowed = false;
+                        }
+                        int screen_state_mask = (mNfcUnlockManager.isLockscreenPollingEnabled())
+                                ? (ScreenStateHelper.SCREEN_POLLING_TAG_MASK | mScreenState) :
+                                mScreenState;
+
+                        if (mNfcUnlockManager.isLockscreenPollingEnabled()) {
+                            applyRouting(false);
+                        }
+
+                        mDeviceHost.doSetScreenState(screen_state_mask);
+                    } finally {
+                        mRoutingWakeLock.release();
                     }
-                    int screen_state_mask = (mNfcUnlockManager.isLockscreenPollingEnabled()) ?
-                                (ScreenStateHelper.SCREEN_POLLING_TAG_MASK | mScreenState) : mScreenState;
-
-                   if (mNfcUnlockManager.isLockscreenPollingEnabled())
-                        applyRouting(false);
-
-                    mDeviceHost.doSetScreenState(screen_state_mask);
                     break;
 
                 case MSG_TRANSACTION_EVENT:
