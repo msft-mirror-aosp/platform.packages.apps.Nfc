@@ -30,6 +30,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
@@ -39,6 +40,7 @@ import com.android.nfc.NfcService;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -64,6 +66,20 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     static final int NFC_HCE_APDU = 0x01;
     static final int NFC_HCE_NFCF = 0x04;
+    /** Minimum AID length as per ISO7816 */
+    static final int MINIMUM_AID_LENGTH = 5;
+    /** Length of Select APDU header including length byte */
+    static final int SELECT_APDU_HDR_LENGTH = 5;
+    /** Length of the NDEF Tag application AID */
+    static final int NDEF_AID_LENGTH = 7;
+    /** AID of the NDEF Tag application Mapping Version 1.0 */
+    static final byte[] NDEF_AID_V1 =
+            new byte[] {(byte) 0xd2, 0x76, 0x00, 0x00, (byte) 0x85, 0x01, 0x00};
+    /** AID of the NDEF Tag application Mapping Version 2.0 */
+    static final byte[] NDEF_AID_V2 =
+            new byte[] {(byte) 0xd2, 0x76, 0x00, 0x00, (byte) 0x85, 0x01, 0x01};
+    /** Select APDU header */
+    static final byte[] SELECT_AID_HDR = new byte[] {0x00, (byte) 0xa4, 0x04, 0x00};
 
     final RegisteredAidCache mAidCache;
     final RegisteredT3tIdentifiersCache mT3tIdentifiersCache;
@@ -77,6 +93,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     final CardEmulationInterface mCardEmulationInterface;
     final NfcFCardEmulationInterface mNfcFCardEmulationInterface;
     final PowerManager mPowerManager;
+    boolean mNotSkipAid;
 
     public CardEmulationManager(Context context) {
         mContext = context;
@@ -107,11 +124,16 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     public void onHostCardEmulationActivated(int technology) {
         if (mPowerManager != null) {
-            mPowerManager.userActivity(SystemClock.uptimeMillis(), PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
+            // Use USER_ACTIVITY_FLAG_INDIRECT to applying power hints without resets
+            // the screen timeout
+            mPowerManager.userActivity(SystemClock.uptimeMillis(),
+                    PowerManager.USER_ACTIVITY_EVENT_TOUCH,
+                    PowerManager.USER_ACTIVITY_FLAG_INDIRECT);
         }
         if (technology == NFC_HCE_APDU) {
             mHostEmulationManager.onHostEmulationActivated();
             mPreferredServices.onHostEmulationActivated();
+            mNotSkipAid = false;
         } else if (technology == NFC_HCE_NFCF) {
             mHostNfcFEmulationManager.onHostEmulationActivated();
             mNfcFServicesCache.onHostEmulationActivated();
@@ -120,13 +142,16 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     public void onHostCardEmulationData(int technology, byte[] data) {
-        if (mPowerManager != null) {
-            mPowerManager.userActivity(SystemClock.uptimeMillis(), PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
-        }
         if (technology == NFC_HCE_APDU) {
             mHostEmulationManager.onHostEmulationData(data);
         } else if (technology == NFC_HCE_NFCF) {
             mHostNfcFEmulationManager.onHostEmulationData(data);
+        }
+        // Don't trigger userActivity if it's selecting NDEF AID
+        if (mPowerManager != null && !(technology == NFC_HCE_APDU && isSkipAid(data))) {
+            // Caution!! USER_ACTIVITY_EVENT_TOUCH resets the screen timeout
+            mPowerManager.userActivity(SystemClock.uptimeMillis(),
+                    PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
         }
     }
 
@@ -240,9 +265,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     @Override
-    public void onServicesUpdated(int userId, List<ApduServiceInfo> services) {
-        // Verify defaults are still sane
-        verifyDefaults(userId, services);
+    public void onServicesUpdated(int userId, List<ApduServiceInfo> services,
+            boolean validateInstalled) {
+        // Verify defaults are still the same
+        verifyDefaults(userId, services, validateInstalled);
         // Update the AID cache
         mAidCache.onServicesUpdated(userId, services);
         // Update the preferred services list
@@ -259,14 +285,65 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mEnabledNfcFServices.onServicesUpdated();
     }
 
-    void verifyDefaults(int userId, List<ApduServiceInfo> services) {
-        ComponentName defaultPaymentService =
-                getDefaultServiceForCategory(userId, CardEmulation.CATEGORY_PAYMENT, true);
-        if (DBG) Log.d(TAG, "Current default: " + defaultPaymentService + " for user:" + userId);
+    void verifyDefaults(int userId, List<ApduServiceInfo> services, boolean validateInstalled) {
+        UserManager um = mContext.createContextAsUser(
+                UserHandle.of(userId), /*flags=*/0).getSystemService(UserManager.class);
+        List<UserHandle> luh = um.getEnabledProfiles();
+
+        ComponentName defaultPaymentService = null;
+        int numDefaultPaymentServices = 0;
+        int userIdDefaultPaymentService = userId;
+
+        for (UserHandle uh : luh) {
+            ComponentName paymentService = getDefaultServiceForCategory(uh.getIdentifier(),
+                    CardEmulation.CATEGORY_PAYMENT,
+                    validateInstalled && (uh.getIdentifier() == userId));
+            if (DBG) Log.d(TAG, "default: " + paymentService + " for user:" + uh);
+            if (paymentService != null) {
+                numDefaultPaymentServices++;
+                defaultPaymentService = paymentService;
+                userIdDefaultPaymentService = uh.getIdentifier();
+            }
+        }
+        if (numDefaultPaymentServices > 1) {
+            Log.e(TAG, "Current default is not aligned across multiple users");
+            // leave default unset
+            for (UserHandle uh : luh) {
+                setDefaultServiceForCategoryChecked(uh.getIdentifier(), null,
+                        CardEmulation.CATEGORY_PAYMENT);
+            }
+        } else {
+            if (DBG) {
+                Log.d(TAG, "Current default: " + defaultPaymentService + " for user:"
+                        + userIdDefaultPaymentService);
+            }
+        }
+
         if (defaultPaymentService == null) {
-            // A payment service may have been removed, set default payment selection to "not set".
-            if (DBG) Log.d(TAG, "No default set, last payment service removed.");
-            setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
+            // A payment service may have been removed, leaving only one;
+            // in that case, automatically set that app as default.
+            int numPaymentServices = 0;
+            ComponentName lastFoundPaymentService = null;
+            for (ApduServiceInfo service : services) {
+                if (service.hasCategory(CardEmulation.CATEGORY_PAYMENT))  {
+                    numPaymentServices++;
+                    lastFoundPaymentService = service.getComponent();
+                }
+            }
+            if (numPaymentServices > 1) {
+                // More than one service left, leave default unset
+                if (DBG) Log.d(TAG, "No default set, more than one service left.");
+                setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
+            } else if (numPaymentServices == 1) {
+                // Make single found payment service the default
+                if (DBG) Log.d(TAG, "No default set, making single service default.");
+                setDefaultServiceForCategoryChecked(userId, lastFoundPaymentService,
+                        CardEmulation.CATEGORY_PAYMENT);
+            } else {
+                // No payment services left, leave default at null
+                if (DBG) Log.d(TAG, "No default set, last payment service removed.");
+                setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
+            }
         }
     }
 
@@ -320,7 +397,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             // calls to our APIs referencing that service to fail.
             // Hence, update the cache in case we don't know about the service.
             if (DBG) Log.d(TAG, "Didn't find passed in service, invalidating cache.");
-            mServiceCache.invalidateCache(userId);
+            mServiceCache.invalidateCache(userId, true);
         }
         return mServiceCache.hasService(userId, service);
     }
@@ -337,6 +414,37 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             mNfcFServicesCache.invalidateCache(userId);
         }
         return mNfcFServicesCache.hasService(userId, service);
+    }
+
+    /**
+     * Returns true if it's not selecting NDEF AIDs
+     * It's used to skip userActivity if it only selects NDEF AIDs
+     */
+    boolean isSkipAid(byte[] data) {
+        if (mNotSkipAid || data == null
+                || data.length < SELECT_APDU_HDR_LENGTH + MINIMUM_AID_LENGTH
+                || !Arrays.equals(SELECT_AID_HDR, 0, SELECT_AID_HDR.length,
+                        data, 0, SELECT_AID_HDR.length)) {
+            return false;
+        }
+        int aidLength = data[SELECT_APDU_HDR_LENGTH - 1];
+        if (data.length >= SELECT_APDU_HDR_LENGTH + NDEF_AID_LENGTH
+                && aidLength == NDEF_AID_LENGTH) {
+            if (Arrays.equals(data, SELECT_APDU_HDR_LENGTH,
+                        SELECT_APDU_HDR_LENGTH + NDEF_AID_LENGTH,
+                        NDEF_AID_V1, 0, NDEF_AID_LENGTH)) {
+                if (DBG) Log.d(TAG, "Skip for NDEF_V1");
+                return true;
+            } else if (Arrays.equals(data, SELECT_APDU_HDR_LENGTH,
+                        SELECT_APDU_HDR_LENGTH + NDEF_AID_LENGTH,
+                        NDEF_AID_V2, 0, NDEF_AID_LENGTH)) {
+                if (DBG) Log.d(TAG, "Skip for NDEF_V2");
+                return true;
+            }
+        }
+        // The data payload is not selecting the skip AID.
+        mNotSkipAid = true;
+        return false;
     }
 
     /**

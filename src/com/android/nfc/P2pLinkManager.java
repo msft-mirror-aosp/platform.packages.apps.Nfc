@@ -55,7 +55,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.util.List;
-
+import java.util.Arrays;
 
 /**
  * Interface to listen for P2P events.
@@ -327,9 +327,11 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
         mDtaRwSize  = rwSize;
         mTestCaseID = testCaseId;
         synchronized (this) {
-            if(mExtDtaSnepServer == null)
-            mExtDtaSnepServer = new ExtDtaSnepServer(mServiceName, mServiceSap, mDtaMiu, mDtaRwSize,
-                                                     mExtDtaSnepServerCallback,mContext, mTestCaseID);
+            if(mExtDtaSnepServer == null) {
+                mExtDtaSnepServer = new ExtDtaSnepServer(mServiceName, mServiceSap, mDtaMiu,
+                                                         mDtaRwSize, mExtDtaSnepServerCallback,
+                                                         mContext, mTestCaseID);
+            }
             mExtDtaSnepServer.start();
             mExtDtaSnepServerRunning = true;
         }
@@ -567,7 +569,7 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
             }
 
             if (DBG) Log.d(TAG, "mMessageToSend = " + mMessageToSend);
-            if (DBG) Log.d(TAG, "mUrisToSend = " + mUrisToSend);
+            if (DBG) Log.d(TAG, "mUrisToSend = " + Arrays.toString(mUrisToSend));
         }
     }
 
@@ -988,10 +990,11 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
     final SnepServer.Callback mDefaultSnepCallback = new SnepServer.Callback() {
         @Override
         public SnepMessage doPut(NdefMessage msg) {
-            if(NfcService.sIsDtaMode)
-            Log.d(TAG, "DTA mode enabled, dont dispatch the tag");
-            else
-            onReceiveComplete(msg);
+            if(NfcService.sIsDtaMode) {
+                Log.d(TAG, "DTA mode enabled, don't dispatch the tag");
+            } else {
+                onReceiveComplete(msg);
+            }
             return SnepMessage.getMessage(SnepMessage.RESPONSE_SUCCESS);
         }
 
@@ -1292,7 +1295,7 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
 
             pw.println("mCallbackNdef=" + mCallbackNdef);
             pw.println("mMessageToSend=" + mMessageToSend);
-            pw.println("mUrisToSend=" + mUrisToSend);
+            pw.println("mUrisToSend=" + Arrays.toString(mUrisToSend));
         }
     }
 
