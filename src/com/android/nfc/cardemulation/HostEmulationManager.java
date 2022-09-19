@@ -111,7 +111,7 @@ public class HostEmulationManager {
         mLock = new Object();
         mAidCache = aidCache;
         mState = STATE_IDLE;
-        mKeyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        mKeyguard = context.getSystemService(KeyguardManager.class);
         mPowerManager = context.getSystemService(PowerManager.class);
     }
 
@@ -408,14 +408,18 @@ public class HostEmulationManager {
         Log.d(TAG, "Binding to payment service " + service + " for userid:" + userId);
         Intent intent = new Intent(HostApduService.SERVICE_INTERFACE);
         intent.setComponent(service);
-        if (mContext.bindServiceAsUser(intent, mPaymentConnection,
-                Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS,
-                UserHandle.of(userId))) {
-            mPaymentServiceBound = true;
-            mPaymentServiceUserId = userId;
-            mLastBoundPaymentServiceName = service;
-        } else {
-            Log.e(TAG, "Could not bind (persistent) payment service.");
+        try {
+            if (mContext.bindServiceAsUser(intent, mPaymentConnection,
+                    Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS,
+                    UserHandle.of(userId))) {
+                mPaymentServiceBound = true;
+                mPaymentServiceUserId = userId;
+                mLastBoundPaymentServiceName = service;
+            } else {
+                Log.e(TAG, "Could not bind (persistent) payment service.");
+            }
+        } catch (SecurityException e) {
+            Log.e(TAG, "Could not bind service due to security exception.");
         }
     }
 
