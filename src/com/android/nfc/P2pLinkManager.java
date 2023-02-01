@@ -16,12 +16,12 @@
 
 package com.android.nfc;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
-import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.nfc.BeamShareData;
 import android.nfc.IAppCallback;
@@ -54,6 +54,7 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -282,7 +283,8 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
         mDefaultRwSize = defaultRwSize;
         mLlcpServicesConnected = false;
         mNdefCallbackUid = -1;
-        mForegroundUtils = ForegroundUtils.getInstance();
+        mForegroundUtils = ForegroundUtils.getInstance(
+                context.getSystemService(ActivityManager.class));
      }
 
     /**
@@ -506,7 +508,7 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
         synchronized (P2pLinkManager.this) {
             try {
                 mPackageManager  = mContext.createPackageContextAsUser("android", 0,
-                        new UserHandle(userId)).getPackageManager();
+                        UserHandle.of(userId)).getPackageManager();
             } catch (NameNotFoundException e) {
                 Log.e(TAG, "Failed to retrieve PackageManager for user");
             }
@@ -568,15 +570,14 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
             }
 
             if (DBG) Log.d(TAG, "mMessageToSend = " + mMessageToSend);
-            if (DBG) Log.d(TAG, "mUrisToSend = " + mUrisToSend);
+            if (DBG) Log.d(TAG, "mUrisToSend = " + Arrays.toString(mUrisToSend));
         }
     }
 
     private boolean isBeamDisabled(int uid) {
         UserManager userManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
-        UserInfo userInfo = userManager.getUserInfo(UserHandle.getUserId(uid));
-        return userManager.hasUserRestriction(
-                        UserManager.DISALLOW_OUTGOING_BEAM, userInfo.getUserHandle());
+        return userManager.hasUserRestrictionForUser(
+                UserManager.DISALLOW_OUTGOING_BEAM, UserHandle.getUserHandleForUid(uid));
 
     }
 
@@ -1294,7 +1295,7 @@ class P2pLinkManager implements Handler.Callback, P2pEventListener.Callback {
 
             pw.println("mCallbackNdef=" + mCallbackNdef);
             pw.println("mMessageToSend=" + mMessageToSend);
-            pw.println("mUrisToSend=" + mUrisToSend);
+            pw.println("mUrisToSend=" + Arrays.toString(mUrisToSend));
         }
     }
 

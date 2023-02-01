@@ -30,6 +30,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
@@ -109,7 +110,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 context, mNfcFServicesCache, mT3tIdentifiersCache, this);
         mServiceCache.initialize();
         mNfcFServicesCache.initialize();
-        mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        mPowerManager = context.getSystemService(PowerManager.class);
     }
 
     public INfcCardEmulation getNfcCardEmulationInterface() {
@@ -264,9 +265,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     @Override
-    public void onServicesUpdated(int userId, List<ApduServiceInfo> services) {
-        // Verify defaults are still sane
-        verifyDefaults(userId, services);
+    public void onServicesUpdated(int userId, List<ApduServiceInfo> services,
+            boolean validateInstalled) {
+        // Verify defaults are still the same
+        verifyDefaults(userId, services, validateInstalled);
         // Update the AID cache
         mAidCache.onServicesUpdated(userId, services);
         // Update the preferred services list
@@ -283,14 +285,65 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mEnabledNfcFServices.onServicesUpdated();
     }
 
-    void verifyDefaults(int userId, List<ApduServiceInfo> services) {
-        ComponentName defaultPaymentService =
-                getDefaultServiceForCategory(userId, CardEmulation.CATEGORY_PAYMENT, true);
-        if (DBG) Log.d(TAG, "Current default: " + defaultPaymentService + " for user:" + userId);
+    void verifyDefaults(int userId, List<ApduServiceInfo> services, boolean validateInstalled) {
+        UserManager um = mContext.createContextAsUser(
+                UserHandle.of(userId), /*flags=*/0).getSystemService(UserManager.class);
+        List<UserHandle> luh = um.getEnabledProfiles();
+
+        ComponentName defaultPaymentService = null;
+        int numDefaultPaymentServices = 0;
+        int userIdDefaultPaymentService = userId;
+
+        for (UserHandle uh : luh) {
+            ComponentName paymentService = getDefaultServiceForCategory(uh.getIdentifier(),
+                    CardEmulation.CATEGORY_PAYMENT,
+                    validateInstalled && (uh.getIdentifier() == userId));
+            if (DBG) Log.d(TAG, "default: " + paymentService + " for user:" + uh);
+            if (paymentService != null) {
+                numDefaultPaymentServices++;
+                defaultPaymentService = paymentService;
+                userIdDefaultPaymentService = uh.getIdentifier();
+            }
+        }
+        if (numDefaultPaymentServices > 1) {
+            Log.e(TAG, "Current default is not aligned across multiple users");
+            // leave default unset
+            for (UserHandle uh : luh) {
+                setDefaultServiceForCategoryChecked(uh.getIdentifier(), null,
+                        CardEmulation.CATEGORY_PAYMENT);
+            }
+        } else {
+            if (DBG) {
+                Log.d(TAG, "Current default: " + defaultPaymentService + " for user:"
+                        + userIdDefaultPaymentService);
+            }
+        }
+
         if (defaultPaymentService == null) {
-            // A payment service may have been removed, set default payment selection to "not set".
-            if (DBG) Log.d(TAG, "No default set, last payment service removed.");
-            setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
+            // A payment service may have been removed, leaving only one;
+            // in that case, automatically set that app as default.
+            int numPaymentServices = 0;
+            ComponentName lastFoundPaymentService = null;
+            for (ApduServiceInfo service : services) {
+                if (service.hasCategory(CardEmulation.CATEGORY_PAYMENT))  {
+                    numPaymentServices++;
+                    lastFoundPaymentService = service.getComponent();
+                }
+            }
+            if (numPaymentServices > 1) {
+                // More than one service left, leave default unset
+                if (DBG) Log.d(TAG, "No default set, more than one service left.");
+                setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
+            } else if (numPaymentServices == 1) {
+                // Make single found payment service the default
+                if (DBG) Log.d(TAG, "No default set, making single service default.");
+                setDefaultServiceForCategoryChecked(userId, lastFoundPaymentService,
+                        CardEmulation.CATEGORY_PAYMENT);
+            } else {
+                // No payment services left, leave default at null
+                if (DBG) Log.d(TAG, "No default set, last payment service removed.");
+                setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
+            }
         }
     }
 
@@ -301,9 +354,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             return null;
         }
         // Load current payment default from settings
-        String name = Settings.Secure.getStringForUser(
-                mContext.getContentResolver(), Settings.Secure.NFC_PAYMENT_DEFAULT_COMPONENT,
-                userId);
+        String name = Settings.Secure.getString(
+                mContext.createContextAsUser(UserHandle.of(userId), 0).getContentResolver(),
+                Settings.Secure.NFC_PAYMENT_DEFAULT_COMPONENT);
         if (name != null) {
             ComponentName service = ComponentName.unflattenFromString(name);
             if (!validateInstalled || service == null) {
@@ -326,9 +379,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         // ideally we overlay our local changes over whatever is in
         // Settings.Secure
         if (service == null || mServiceCache.hasService(userId, service)) {
-            Settings.Secure.putStringForUser(mContext.getContentResolver(),
+            Settings.Secure.putString(mContext
+                    .createContextAsUser(UserHandle.of(userId), 0).getContentResolver(),
                     Settings.Secure.NFC_PAYMENT_DEFAULT_COMPONENT,
-                    service != null ? service.flattenToString() : null, userId);
+                    service != null ? service.flattenToString() : null);
         } else {
             Log.e(TAG, "Could not find default service to make default: " + service);
         }
@@ -344,7 +398,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             // calls to our APIs referencing that service to fail.
             // Hence, update the cache in case we don't know about the service.
             if (DBG) Log.d(TAG, "Didn't find passed in service, invalidating cache.");
-            mServiceCache.invalidateCache(userId);
+            mServiceCache.invalidateCache(userId, true);
         }
         return mServiceCache.hasService(userId, service);
     }
@@ -374,7 +428,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                         data, 0, SELECT_AID_HDR.length)) {
             return false;
         }
-        int aidLength = data[SELECT_APDU_HDR_LENGTH - 1];
+        int aidLength = Byte.toUnsignedInt(data[SELECT_APDU_HDR_LENGTH - 1]);
         if (data.length >= SELECT_APDU_HDR_LENGTH + NDEF_AID_LENGTH
                 && aidLength == NDEF_AID_LENGTH) {
             if (Arrays.equals(data, SELECT_APDU_HDR_LENGTH,
@@ -543,7 +597,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         public boolean setPreferredService(ComponentName service)
                 throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
-            if (!isServiceRegistered(UserHandle.getCallingUserId(), service)) {
+            if (!isServiceRegistered( UserHandle.getUserHandleForUid(
+                    Binder.getCallingUid()).getIdentifier(), service)) {
                 Log.e(TAG, "setPreferredService: unknown component.");
                 return false;
             }
@@ -649,7 +704,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         public boolean enableNfcFForegroundService(ComponentName service)
                 throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
-            if (isNfcFServiceInstalled(UserHandle.getCallingUserId(), service)) {
+            if (isNfcFServiceInstalled(UserHandle.getUserHandleForUid(
+                    Binder.getCallingUid()).getIdentifier(), service)) {
                 return mEnabledNfcFServices.registerEnabledForegroundService(service,
                         Binder.getCallingUid());
             }
@@ -701,5 +757,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     public void onEnabledForegroundNfcFServiceChanged(int userId, ComponentName service) {
         mT3tIdentifiersCache.onEnabledForegroundNfcFServiceChanged(userId, service);
         mHostNfcFEmulationManager.onEnabledForegroundNfcFServiceChanged(userId, service);
+    }
+
+    public String getRegisteredAidCategory(String aid) {
+        RegisteredAidCache.AidResolveInfo resolvedInfo = mAidCache.resolveAid(aid);
+        if (resolvedInfo != null) {
+            return resolvedInfo.category;
+        }
+        return "";
     }
 }

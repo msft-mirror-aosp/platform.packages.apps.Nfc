@@ -21,8 +21,23 @@ android_app {
     platform_apis: true,
     certificate: "platform",
     jni_libs: ["libnfc_nci_jni"],
-    static_libs: ["androidx.appcompat_appcompat"],
+    static_libs: [
+        "androidx.annotation_annotation",
+        "androidx.appcompat_appcompat",
+        "com.google.android.material_material",
+    ],
     optimize: {
-        enabled: false,
+        proguard_flags_files: ["proguard.flags"],
     },
+}
+
+filegroup {
+    name: "nfc-sources",
+    srcs: [
+        "src/**/*.java",
+        ":statslog-Nfc-java-gen",
+    ],
+    visibility: [
+        "//packages/apps/Nfc/tests/unit",
+    ],
 }
