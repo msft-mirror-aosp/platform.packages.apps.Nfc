@@ -29,11 +29,13 @@
     <string name="pair_no" msgid="5022308368904055020">"নহয়"</string>
     <string name="tap_again_to_pay" msgid="5754988005412859897">"<xliff:g id="APP">%1$s</xliff:g>ৰ জৰিয়তে পৰিশোধ কৰিবলৈ আকৌ টিপক"</string>
     <string name="tap_again_to_complete" msgid="5423640945118279123">"<xliff:g id="APP">%1$s</xliff:g>ৰ জৰিয়তে সম্পূৰ্ণ কৰিবলৈ আকৌ টিপক"</string>
+    <string name="tap_again_description" msgid="3019101527041529661">"ৰীডাৰটোত ধৰি ৰাখক"</string>
+    <string name="appchooser_description" msgid="2554187931814833244">"স্কেন কৰিবলৈ এপ্‌ বাছনি কৰক"</string>
     <string name="transaction_failure" msgid="7828102078637936513">"<xliff:g id="APP">%1$s</xliff:g>ৰ জৰিয়তে এই লেনদেন সম্পূৰ্ণ কৰিব পৰা নগ\'ল৷"</string>
     <string name="could_not_use_app" msgid="8137587876138569083">"<xliff:g id="APP">%1$s</xliff:g> ব্যৱহাৰ কৰিব পৰা নগ\'ল৷"</string>
     <string name="pay_with" msgid="5531545488795798945">"ইয়াৰ জৰিয়তে পৰিশোধ কৰক"</string>
     <string name="complete_with" msgid="6797459104103012992">"ইয়াৰ জৰিয়তে সম্পূৰ্ণ কৰক"</string>
-    <string name="default_pay_app_removed" msgid="4108250545457437360">"আপোনাৰ পচন্দৰ \'টিপক আৰু পৰিশোধ কৰক\' এপটো আঁতৰোৱা হৈছে৷ অন্য এটা বাছনি কৰিবনে?"</string>
+    <string name="default_pay_app_removed" msgid="4108250545457437360">"আপোনাৰ পচন্দৰ \'টিপক আৰু পৰিশোধ কৰক\' এপ্‌টো আঁতৰোৱা হৈছে৷ অন্য এটা বাছনি কৰিবনে?"</string>
     <string name="ask_nfc_tap" msgid="2925239870458286340">"সম্পূৰ্ণ কৰিবলৈ অন্য এটা ডিভাইচত টিপক"</string>
     <string name="wifi_connect" msgid="6250727951843550671">"সংযোগ কৰক"</string>
     <string name="status_unable_to_connect" msgid="9183908200295307657">"নেটৱৰ্কৰ লগত সংযোগ কৰিব পৰা নগ\'ল"</string>
