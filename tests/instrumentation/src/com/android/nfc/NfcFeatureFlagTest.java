@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 The Android Open Source Project
+ * Copyright (C) 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,5 +81,13 @@ public final class NfcFeatureFlagTest {
         assertThat(mContext.getResources()
                 .getBoolean(R.bool.nfcc_always_on_allowed))
                 .isEqualTo(mNfcAdapter.isControllerAlwaysOnSupported());
+    }
+
+    @Test
+    public void testIsTagIntentAppPreferenceSupported() {
+        if (!mNfcSupported) return;
+        assertThat(mContext.getResources()
+                .getBoolean(R.bool.tag_intent_app_pref_supported))
+                .isEqualTo(mNfcAdapter.isTagIntentAppPreferenceSupported());
     }
 }
