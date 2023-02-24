@@ -67,7 +67,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
     final RegisteredServicesCache mServiceCache;
     final RegisteredAidCache mAidCache;
     final Callback mCallback;
-    final ForegroundUtils mForegroundUtils = ForegroundUtils.getInstance();
+    final ForegroundUtils mForegroundUtils;
     final Handler mHandler = new Handler(Looper.getMainLooper());
 
     final class PaymentDefaults {
@@ -105,17 +105,19 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
     public PreferredServices(Context context, RegisteredServicesCache serviceCache,
             RegisteredAidCache aidCache, Callback callback) {
         mContext = context;
+        mForegroundUtils = ForegroundUtils.getInstance(
+                context.getSystemService(ActivityManager.class));
         mServiceCache = serviceCache;
         mAidCache = aidCache;
         mCallback = callback;
         mSettingsObserver = new SettingsObserver(mHandler);
-        mContext.getContentResolver().registerContentObserver(
+        mContext.getContentResolver().registerContentObserverAsUser(
                 paymentDefaultUri,
-                true, mSettingsObserver, UserHandle.USER_ALL);
+                true, mSettingsObserver, UserHandle.ALL);
 
-        mContext.getContentResolver().registerContentObserver(
+        mContext.getContentResolver().registerContentObserverAsUser(
                 paymentForegroundUri,
-                true, mSettingsObserver, UserHandle.USER_ALL);
+                true, mSettingsObserver, UserHandle.ALL);
 
         // Load current settings defaults for payments
         loadDefaultsFromSettings(ActivityManager.getCurrentUser(), false);
