@@ -225,6 +225,7 @@ public class HostEmulationManager {
                     // Ask the user to confirm.
                     // Just ignore all future APDUs until we resolve to only one
                     mState = STATE_W4_DEACTIVATE;
+                    NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, selectAid);
                     launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services, null,
                             resolveInfo.category);
                     return;
@@ -233,8 +234,9 @@ public class HostEmulationManager {
             switch (mState) {
                 case STATE_W4_SELECT:
                     if (selectAid != null) {
+                        int uid = resolvedServiceInfo.getUid();
                         UserHandle user =
-                                UserHandle.getUserHandleForUid(resolvedServiceInfo.getUid());
+                                UserHandle.getUserHandleForUid(uid);
                         Messenger existingService =
                                 bindServiceIfNeededLocked(user.getIdentifier(), resolvedService);
                         if (existingService != null) {
@@ -251,11 +253,13 @@ public class HostEmulationManager {
                         if (CardEmulation.CATEGORY_PAYMENT.equals(resolveInfo.category)) {
                             NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
                                     NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT,
-                                    "HCE");
+                                    "HCE",
+                                    uid);
                         } else {
                             NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
                                     NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_OTHER,
-                                    "HCE");
+                                    "HCE",
+                                    uid);
                         }
                     } else {
                         Log.d(TAG, "Dropping non-select APDU in STATE_W4_SELECT");
@@ -573,6 +577,7 @@ public class HostEmulationManager {
                     AidResolveInfo resolveInfo = mAidCache.resolveAid(mLastSelectedAid);
                     boolean isPayment = false;
                     if (resolveInfo.services.size() > 0) {
+                        NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, mLastSelectedAid);
                         launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services,
                                 mActiveServiceName, resolveInfo.category);
                     }
