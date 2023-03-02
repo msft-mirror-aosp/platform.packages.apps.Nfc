@@ -17,6 +17,9 @@ package com.android.nfc.cardemulation;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.nfc.INfcCardEmulation;
 import android.nfc.INfcFCardEmulation;
 import android.nfc.NfcAdapter;
@@ -28,10 +31,10 @@ import android.os.Binder;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.sysprop.NfcProperties;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
@@ -62,7 +65,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         RegisteredNfcFServicesCache.Callback, PreferredServices.Callback,
         EnabledNfcFServices.Callback {
     static final String TAG = "CardEmulationManager";
-    static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
 
     static final int NFC_HCE_APDU = 0x01;
     static final int NFC_HCE_NFCF = 0x04;
@@ -318,14 +321,23 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                         + userIdDefaultPaymentService);
             }
         }
-
         if (defaultPaymentService == null) {
             // A payment service may have been removed, leaving only one;
             // in that case, automatically set that app as default.
             int numPaymentServices = 0;
             ComponentName lastFoundPaymentService = null;
+            PackageManager pm;
+            try {
+                pm = mContext.createPackageContextAsUser("android", /*flags=*/0,
+                    new UserHandle(userId)).getPackageManager();
+            } catch (NameNotFoundException e) {
+                Log.e(TAG, "Could not create user package context");
+                return;
+            }
+
             for (ApduServiceInfo service : services) {
-                if (service.hasCategory(CardEmulation.CATEGORY_PAYMENT))  {
+                if (service.hasCategory(CardEmulation.CATEGORY_PAYMENT)
+                            && wasServicePreInstalled(pm, service.getComponent())) {
                     numPaymentServices++;
                     lastFoundPaymentService = service.getComponent();
                 }
@@ -345,6 +357,22 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 setDefaultServiceForCategoryChecked(userId, null, CardEmulation.CATEGORY_PAYMENT);
             }
         }
+    }
+
+    boolean wasServicePreInstalled(PackageManager packageManager, ComponentName service) {
+        try {
+            ApplicationInfo ai = packageManager
+                    .getApplicationInfo(service.getPackageName(), /*flags=*/0);
+            if ((ApplicationInfo.FLAG_SYSTEM & ai.flags) != 0) {
+                if (DBG) Log.d(TAG, "Service was pre-installed on the device");
+                return true;
+            }
+        } catch (NameNotFoundException e) {
+            Log.e(TAG, "Service is not currently installed on the device.");
+            return false;
+        }
+        if (DBG) Log.d(TAG, "Service was not pre-installed on the device");
+        return false;
     }
 
     ComponentName getDefaultServiceForCategory(int userId, String category,
