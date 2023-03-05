@@ -21,9 +21,11 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
+import android.nfc.cardemulation.Utils;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.sysprop.NfcProperties;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
@@ -45,7 +47,7 @@ import java.util.TreeMap;
 public class RegisteredAidCache {
     static final String TAG = "RegisteredAidCache";
 
-    static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
 
     static final int AID_ROUTE_QUAL_SUBSET = 0x20;
     static final int AID_ROUTE_QUAL_PREFIX = 0x10;
@@ -1103,7 +1105,8 @@ public class RegisteredAidCache {
             ComponentName defaultComponent = defaultServiceInfo != null ?
                     defaultServiceInfo.getComponent() : null;
             if (defaultComponent != null) {
-                defaultComponent.dumpDebug(proto,
+                Utils.dumpDebugComponentName(
+                        defaultComponent, proto,
                         RegisteredAidCacheProto.AidCacheEntry.DEFAULT_COMPONENT);
             }
             for (ApduServiceInfo serviceInfo : entry.getValue().services) {
@@ -1114,7 +1117,8 @@ public class RegisteredAidCache {
             proto.end(token);
         }
         if (mPreferredForegroundService != null) {
-            mPreferredForegroundService.dumpDebug(proto,
+            Utils.dumpDebugComponentName(
+                    mPreferredForegroundService, proto,
                     RegisteredAidCacheProto.PREFERRED_FOREGROUND_SERVICE);
         }
         if (mPreferredPaymentService != null) {
