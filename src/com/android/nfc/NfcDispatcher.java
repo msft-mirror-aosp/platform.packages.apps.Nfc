@@ -47,9 +47,9 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.Process;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.sysprop.NfcProperties;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 import android.view.LayoutInflater;
@@ -78,7 +78,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 class NfcDispatcher {
     private static final boolean DBG =
-            SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
+            NfcProperties.debug_enabled().orElse(false);
     private static final String TAG = "NfcDispatcher";
 
     static final int DISPATCH_SUCCESS = 1;
@@ -1080,11 +1080,12 @@ class NfcDispatcher {
                 proto.write(NfcDispatcherProto.OVERRIDE_TECH_LISTS, techListsJoiner.toString());
             }
             if (mOverrideIntent != null) {
-                mOverrideIntent.dumpDebug(proto, NfcDispatcherProto.OVERRIDE_INTENT);
+                Utils.dumpDebugPendingIntent(
+                        mOverrideIntent, proto, NfcDispatcherProto.OVERRIDE_INTENT);
             }
             if (mOverrideFilters != null) {
                 for (IntentFilter filter : mOverrideFilters) {
-                    filter.dumpDebug(proto, NfcDispatcherProto.OVERRIDE_FILTERS);
+                    Utils.dumpDebugIntentFilter(filter, proto, NfcDispatcherProto.OVERRIDE_FILTERS);
                 }
             }
         }
