@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="app_name" msgid="78565911793142902">"Nfc Service"</string>
+    <string name="app_name" msgid="78565911793142902">"Услуга NFC"</string>
     <string name="nfcUserLabel" msgid="7708535817084357357">"NFC"</string>
     <string name="accessibility_nfc_enabled" msgid="7796246979948787735">"NFC е активирана."</string>
     <string name="tap_to_beam" msgid="5819197866281059878">"Докоснете за излъчване"</string>
@@ -53,4 +53,6 @@
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"Няма приложение, което поддържа този маркер за NFC"</string>
     <string name="nfc_blocking_alert_title" msgid="1086172436984457085">"Функцията NFC може да е блокирана"</string>
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Докоснете, за да научите как да отстраните проблема."</string>
+    <string name="nfc_logging_alert_title" msgid="5300867034660942987">"Записват се данни посредством NFC"</string>
+    <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Докоснете за спиране на записването."</string>
 </resources>
