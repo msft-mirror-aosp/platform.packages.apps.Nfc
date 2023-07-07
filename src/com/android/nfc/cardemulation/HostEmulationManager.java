@@ -24,6 +24,7 @@ import android.content.ServiceConnection;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
+import android.nfc.cardemulation.Utils;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -188,7 +189,9 @@ public class HostEmulationManager {
                     // Resolve to default
                     // Check if resolvedService requires unlock
                     ApduServiceInfo defaultServiceInfo = resolveInfo.defaultService;
-                    if (defaultServiceInfo.requiresUnlock() && mKeyguard.isKeyguardLocked()) {
+                    if ((defaultServiceInfo.requiresUnlock()
+                            || NfcService.getInstance().isSecureNfcEnabled())
+                          && mKeyguard.isKeyguardLocked()) {
                         NfcService.getInstance().sendRequireUnlockIntent();
                         NfcService.getInstance().sendData(AID_NOT_FOUND);
                         if (DBG) Log.d(TAG, "requiresUnlock()! show toast");
@@ -196,7 +199,6 @@ public class HostEmulationManager {
                         return;
                     }
                     if (defaultServiceInfo.requiresScreenOn() && !mPowerManager.isScreenOn()) {
-                        NfcService.getInstance().sendRequireUnlockIntent();
                         NfcService.getInstance().sendData(AID_NOT_FOUND);
                         if (DBG) Log.d(TAG, "requiresScreenOn()!");
                         return;
@@ -622,7 +624,8 @@ public class HostEmulationManager {
             mPaymentServiceName.dumpDebug(proto, HostEmulationManagerProto.PAYMENT_SERVICE_NAME);
         }
         if (mServiceBound) {
-            mServiceName.dumpDebug(proto, HostEmulationManagerProto.SERVICE_NAME);
+            Utils.dumpDebugComponentName(
+                    mServiceName, proto, HostEmulationManagerProto.SERVICE_NAME);
         }
     }
 }
