@@ -1402,8 +1402,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 IntentFilter[] filters, TechListParcel techListsParcel) {
             NfcPermissions.enforceUserPermissions(mContext);
             if (!mForegroundUtils.isInForeground(Binder.getCallingUid())) {
-                Log.e(TAG, "setForegroundDispatch: Caller not in foreground.");
-                return;
+                throw new IllegalStateException("Foreground dispatch can only be enabled/disabled "
+                        + "when your activity is in foreground");
             }
             // Short-cut the disable path
             if (intent == null && filters == null && techListsParcel == null) {
@@ -1568,6 +1568,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 return;
                             }
                             binder.linkToDeath(mReaderModeDeathRecipient, 0);
+                        }
+                        if (mPollDelayed) {
+                            mHandler.removeMessages(MSG_DELAY_POLLING);
+                            mPollDelayCount = 0;
+                            mPollDelayed = false;
+                            mDeviceHost.startStopPolling(true);
+                            if (DBG) Log.d(TAG, "setReaderMode() polling is started");
                         }
                         updateReaderModeParams(callback, flags, extras, binder, callingUid);
                     } catch (RemoteException e) {
