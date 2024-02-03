@@ -307,7 +307,7 @@ public class RegisteredAidCache {
                             serviceAidInfo.service.getComponent() +
                             " because it's not the payment default.)");
                 } else {
-                    if (serviceAidInfo.service.isOtherServiceEnabled()) {
+                    if (serviceAidInfo.service.isCategoryOtherServiceEnabled()) {
                         if (DBG) Log.d(TAG, serviceAidInfo.service.getComponent() +
                                 " is selected other service");
                         resolveInfo.services.add(serviceAidInfo.service);
@@ -1063,6 +1063,12 @@ public class RegisteredAidCache {
     }
 
     public void onSecureNfcToggled() {
+        synchronized (mLock) {
+            updateRoutingLocked(true);
+        }
+    }
+
+    public void onRoutingOverridedOrRecovered() {
         synchronized (mLock) {
             updateRoutingLocked(true);
         }

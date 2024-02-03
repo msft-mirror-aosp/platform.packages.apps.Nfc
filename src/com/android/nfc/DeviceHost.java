@@ -227,4 +227,19 @@ public interface DeviceHost {
     * Set NFCC power state by sending NFCEE_POWER_AND_LINK_CNTRL_CMD
     */
     void setNfceePowerAndLinkCtrl(boolean enable);
+
+    /**
+     * Enable or Disable the Power Saving Mode based on flag
+     */
+    boolean setPowerSavingMode(boolean flag);
+
+    void setIsoDepProtocolRoute(int route);
+    void setTechnologyABRoute(int route);
+    void clearRoutingEntry(int clearFlags);
+
+    /**
+    * Set NFCC discovery technology for polling and listening
+    */
+    void setDiscoveryTech(int pollTech, int listenTech);
+    void resetDiscoveryTech();
 }
