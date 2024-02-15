@@ -33,18 +33,6 @@ public interface DeviceHost {
         public void onHostCardEmulationData(int technology, byte[] data);
         public void onHostCardEmulationDeactivated(int technology);
 
-        /**
-         * Notifies P2P Device detected, to activate LLCP link
-         */
-        public void onLlcpLinkActivated(NfcDepEndpoint device);
-
-        /**
-         * Notifies P2P Device detected, to activate LLCP link
-         */
-        public void onLlcpLinkDeactivated(NfcDepEndpoint device);
-
-        public void onLlcpFirstPacketReceived(NfcDepEndpoint device);
-
         public void onRemoteFieldActivated();
 
         public void onRemoteFieldDeactivated();
@@ -54,6 +42,10 @@ public interface DeviceHost {
         public void onEeUpdated();
 
         public void onHwErrorReported();
+
+        public void onPollingLoopDetected(Bundle pollingFrame);
+
+        public void onWlcStopped(int wpt_end_condition);
     }
 
     public interface TagEndpoint {
@@ -79,6 +71,7 @@ public interface DeviceHost {
         byte[] readNdef();
         boolean writeNdef(byte[] data);
         NdefMessage findAndReadNdef();
+        NdefMessage getNdef();
         boolean formatNdef(byte[] key);
         boolean isNdefFormatable();
         boolean makeReadOnly();
@@ -133,48 +126,6 @@ public interface DeviceHost {
         public int getMode();
 
         public byte[] getGeneralBytes();
-
-        public byte getLlcpVersion();
-    }
-
-    public interface LlcpSocket {
-        public void connectToSap(int sap) throws IOException;
-
-        public void connectToService(String serviceName) throws IOException;
-
-        public void close() throws IOException;
-
-        public void send(byte[] data) throws IOException;
-
-        public int receive(byte[] recvBuff) throws IOException;
-
-        public int getRemoteMiu();
-
-        public int getRemoteRw();
-
-        public int getLocalSap();
-
-        public int getLocalMiu();
-
-        public int getLocalRw();
-    }
-
-    public interface LlcpServerSocket {
-        public LlcpSocket accept() throws IOException, LlcpException;
-
-        public void close() throws IOException;
-    }
-
-    public interface LlcpConnectionlessSocket {
-        public int getLinkMiu();
-
-        public int getSap();
-
-        public void send(int sap, byte[] data) throws IOException;
-
-        public LlcpPacket receive() throws IOException;
-
-        public void close() throws IOException;
     }
 
     /**
@@ -214,19 +165,6 @@ public interface DeviceHost {
 
     public int getLfT3tMax();
 
-    public LlcpConnectionlessSocket createLlcpConnectionlessSocket(int nSap, String sn)
-            throws LlcpException;
-
-    public LlcpServerSocket createLlcpServerSocket(int nSap, String sn, int miu,
-            int rw, int linearBufferLength) throws LlcpException;
-
-    public LlcpSocket createLlcpSocket(int sap, int miu, int rw,
-            int linearBufferLength) throws LlcpException;
-
-    public boolean doCheckLlcp();
-
-    public boolean doActivateLlcp();
-
     public void resetTimeouts();
 
     public boolean setTimeout(int technology, int timeout);
@@ -247,17 +185,13 @@ public interface DeviceHost {
 
     boolean getExtendedLengthApdusSupported();
 
-    int getDefaultLlcpMiu();
-
-    int getDefaultLlcpRwSize();
-
     void dump(FileDescriptor fd);
 
     boolean enableScreenOffSuspend();
 
     boolean disableScreenOffSuspend();
 
-    public void doSetScreenState(int screen_state_mask);
+    public void doSetScreenState(int screen_state_mask, boolean alwaysPoll);
 
     public int getNciVersion();
 
@@ -272,6 +206,12 @@ public interface DeviceHost {
     public boolean setNfcSecure(boolean enable);
 
     public String getNfaStorageDir();
+
+    public boolean isObserveModeSupported();
+
+    public boolean setObserveMode(boolean enable);
+
+    public boolean isObserveModeEnabled();
 
     /**
     * Get the committed listen mode routing configuration
@@ -292,4 +232,25 @@ public interface DeviceHost {
     * Set NFCC power state by sending NFCEE_POWER_AND_LINK_CNTRL_CMD
     */
     void setNfceePowerAndLinkCtrl(boolean enable);
+
+    /**
+     * Enable or Disable the Power Saving Mode based on flag
+     */
+    boolean setPowerSavingMode(boolean flag);
+
+    boolean isMultiTag();
+
+    void setIsoDepProtocolRoute(int route);
+    void setTechnologyABRoute(int route);
+    void clearRoutingEntry(int clearFlags);
+
+    /**
+    * Set NFCC discovery technology for polling and listening
+    */
+    void setDiscoveryTech(int pollTech, int listenTech);
+    void resetDiscoveryTech();
+    /**
+     * Sends Vendor NCI command
+     */
+    NfcVendorNciResponse sendRawVendorCmd(int mt, int gid, int oid, byte[] payload);
 }

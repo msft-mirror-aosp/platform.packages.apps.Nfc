@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 The Android Open Source Project
+ * Copyright (C) 2024 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,24 +16,15 @@
 
 package com.android.nfc;
 
-import android.nfc.ErrorCodes;
+import android.app.Activity;
+import android.os.Bundle;
 
-/**
- * Generic exception thrown in case something unexpected happened during an
- * LLCP communication.
- */
-public class LlcpException extends Exception {
-    /**
-     * Constructs a new LlcpException with the current stack trace and the
-     * specified detail message.
-     *
-     * @param s the detail message for this exception.
-     */
-    public LlcpException(String s) {
-        super(s);
-    }
+// Stub for compilation only. Uses #createNfcResolverIntent API instead.
+public class TechListChooserActivity extends Activity {
+    public static final String EXTRA_RESOLVE_INFOS = "rlist";
 
-    public LlcpException(int error) {
-        super(ErrorCodes.asString(error));
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
     }
 }

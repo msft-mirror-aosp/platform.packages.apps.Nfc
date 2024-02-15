@@ -17,16 +17,17 @@
 package com.android.nfc.dhimpl;
 
 import android.content.Context;
-import android.nfc.ErrorCodes;
+import android.nfc.cardemulation.HostApduService;
 import android.nfc.tech.Ndef;
 import android.nfc.tech.TagTechnology;
+import android.os.Bundle;
 import android.util.Log;
-
 import com.android.nfc.DeviceHost;
-import com.android.nfc.LlcpException;
 import com.android.nfc.NfcDiscoveryParameters;
-
+import com.android.nfc.NfcVendorNciResponse;
 import java.io.FileDescriptor;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -35,9 +36,6 @@ import java.util.Iterator;
 public class NativeNfcManager implements DeviceHost {
     private static final String TAG = "NativeNfcManager";
     static final String PREF = "NciDeviceHost";
-
-    static final int DEFAULT_LLCP_MIU = 1980;
-    static final int DEFAULT_LLCP_RWSIZE = 2;
 
     static final String DRIVER_NAME = "android-nci";
 
@@ -54,6 +52,13 @@ public class NativeNfcManager implements DeviceHost {
 
     private final Object mLock = new Object();
     private final HashMap<Integer, byte[]> mT3tIdentifiers = new HashMap<Integer, byte[]>();
+
+    private static final int MIN_POLLING_FRAME_TLV_SIZE = 5;
+    private static final int TAG_FIELD_CHANGE = 0;
+    private static final int TAG_NFC_A = 1;
+    private static final int TAG_NFC_B = 2;
+    private static final int TAG_NFC_F = 3;
+    private static final int TAG_NFC_UNKNOWN = 7;
 
     public NativeNfcManager(Context context, DeviceHostListener listener) {
         mListener = listener;
@@ -105,6 +110,13 @@ public class NativeNfcManager implements DeviceHost {
         doFactoryReset();
     }
 
+    private native boolean doSetPowerSavingMode(boolean flag);
+
+    @Override
+    public boolean setPowerSavingMode(boolean flag) {
+        return doSetPowerSavingMode(flag);
+    }
+
     private native void doShutdown();
 
     @Override
@@ -137,6 +149,22 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean commitRouting();
 
     public native int doRegisterT3tIdentifier(byte[] t3tIdentifier);
+
+    @Override
+    public boolean isObserveModeSupported() {
+        if (!android.nfc.Flags.nfcObserveMode()) {
+            return false;
+        }
+
+        return mContext.getResources().getBoolean(
+            com.android.nfc.R.bool.config_nfcObserveModeSupported);
+    }
+
+    @Override
+    public native boolean setObserveMode(boolean enabled);
+
+    @Override
+    public native boolean isObserveModeEnabled();
 
     @Override
     public void registerT3tIdentifier(byte[] t3tIdentifier) {
@@ -177,7 +205,7 @@ public class NativeNfcManager implements DeviceHost {
     public native int getLfT3tMax();
 
     @Override
-    public native void doSetScreenState(int screen_state_mask);
+    public native void doSetScreenState(int screen_state_mask, boolean alwaysPoll);
 
     @Override
     public native int getNciVersion();
@@ -203,87 +231,6 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native void disableDiscovery();
-
-    private native NativeLlcpConnectionlessSocket doCreateLlcpConnectionlessSocket(
-            int nSap, String sn);
-
-    @Override
-    public LlcpConnectionlessSocket createLlcpConnectionlessSocket(int nSap, String sn)
-            throws LlcpException {
-        LlcpConnectionlessSocket socket = doCreateLlcpConnectionlessSocket(nSap, sn);
-        if (socket != null) {
-            return socket;
-        } else {
-            /* Get Error Status */
-            int error = doGetLastError();
-
-            Log.d(TAG, "failed to create llcp socket: " + ErrorCodes.asString(error));
-
-            switch (error) {
-                case ErrorCodes.ERROR_BUFFER_TO_SMALL:
-                case ErrorCodes.ERROR_INSUFFICIENT_RESOURCES:
-                    throw new LlcpException(error);
-                default:
-                    throw new LlcpException(ErrorCodes.ERROR_SOCKET_CREATION);
-            }
-        }
-    }
-
-    private native NativeLlcpServiceSocket doCreateLlcpServiceSocket(
-            int nSap, String sn, int miu, int rw, int linearBufferLength);
-
-    @Override
-    public LlcpServerSocket createLlcpServerSocket(
-            int nSap, String sn, int miu, int rw, int linearBufferLength) throws LlcpException {
-        LlcpServerSocket socket = doCreateLlcpServiceSocket(nSap, sn, miu, rw, linearBufferLength);
-        if (socket != null) {
-            return socket;
-        } else {
-            /* Get Error Status */
-            int error = doGetLastError();
-
-            Log.d(TAG, "failed to create llcp socket: " + ErrorCodes.asString(error));
-
-            switch (error) {
-                case ErrorCodes.ERROR_BUFFER_TO_SMALL:
-                case ErrorCodes.ERROR_INSUFFICIENT_RESOURCES:
-                    throw new LlcpException(error);
-                default:
-                    throw new LlcpException(ErrorCodes.ERROR_SOCKET_CREATION);
-            }
-        }
-    }
-
-    private native NativeLlcpSocket doCreateLlcpSocket(
-            int sap, int miu, int rw, int linearBufferLength);
-
-    @Override
-    public LlcpSocket createLlcpSocket(int sap, int miu, int rw, int linearBufferLength)
-            throws LlcpException {
-        LlcpSocket socket = doCreateLlcpSocket(sap, miu, rw, linearBufferLength);
-        if (socket != null) {
-            return socket;
-        } else {
-            /* Get Error Status */
-            int error = doGetLastError();
-
-            Log.d(TAG, "failed to create llcp socket: " + ErrorCodes.asString(error));
-
-            switch (error) {
-                case ErrorCodes.ERROR_BUFFER_TO_SMALL:
-                case ErrorCodes.ERROR_INSUFFICIENT_RESOURCES:
-                    throw new LlcpException(error);
-                default:
-                    throw new LlcpException(ErrorCodes.ERROR_SOCKET_CREATION);
-            }
-        }
-    }
-
-    @Override
-    public native boolean doCheckLlcp();
-
-    @Override
-    public native boolean doActivateLlcp();
 
     private native void doResetTimeouts();
 
@@ -360,16 +307,6 @@ public class NativeNfcManager implements DeviceHost {
         return false;
     }
 
-    @Override
-    public int getDefaultLlcpMiu() {
-        return DEFAULT_LLCP_MIU;
-    }
-
-    @Override
-    public int getDefaultLlcpRwSize() {
-        return DEFAULT_LLCP_RWSIZE;
-    }
-
     private native void doDump(FileDescriptor fd);
 
     @Override
@@ -423,24 +360,20 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public native int getMaxRoutingTableSize();
 
+    public native boolean isMultiTag();
+
+    private native NfcVendorNciResponse nativeSendRawVendorCmd(
+            int mt, int gid, int oid, byte[] payload);
+
+    @Override
+    public NfcVendorNciResponse sendRawVendorCmd(int mt, int gid, int oid, byte[] payload) {
+        NfcVendorNciResponse res= nativeSendRawVendorCmd(mt, gid, oid, payload);
+        return res;
+    }
+
     /** Notifies Ndef Message (TODO: rename into notifyTargetDiscovered) */
     private void notifyNdefMessageListeners(NativeNfcTag tag) {
         mListener.onRemoteEndpointDiscovered(tag);
-    }
-
-    /** Notifies P2P Device detected, to activate LLCP link */
-    private void notifyLlcpLinkActivation(NativeP2pDevice device) {
-        mListener.onLlcpLinkActivated(device);
-    }
-
-    /** Notifies P2P Device detected, to activate LLCP link */
-    private void notifyLlcpLinkDeactivated(NativeP2pDevice device) {
-        mListener.onLlcpLinkDeactivated(device);
-    }
-
-    /** Notifies first packet received from remote LLCP */
-    private void notifyLlcpLinkFirstPacketReceived(NativeP2pDevice device) {
-        mListener.onLlcpFirstPacketReceived(device);
     }
 
     private void notifyHostEmuActivated(int technology) {
@@ -474,4 +407,103 @@ public class NativeNfcManager implements DeviceHost {
     private void notifyHwErrorReported() {
         mListener.onHwErrorReported();
     }
+
+    private void notifyPollingLoopFrame(int data_len, byte[] p_data) {
+        if (data_len < MIN_POLLING_FRAME_TLV_SIZE) {
+            return;
+        }
+        Bundle frame = new Bundle();
+        final int header_len = 4;
+        int pos = header_len;
+        final int TLV_header_len = 2;
+        final int TLV_type_offset = 0;
+        final int TLV_len_offset = 1;
+        final int TLV_timestamp_offset = 2;
+        final int TLV_gain_offset = 6;
+        final int TLV_data_offset = 7;
+        while (pos + TLV_len_offset < data_len) {
+            int type = p_data[pos + TLV_type_offset];
+            int length = p_data[pos + TLV_len_offset];
+            if (length < 5 ) {
+                Log.e(TAG, "Length (" + length + ") is less than a polling frame, dropping.");
+                return;
+            }
+            if (pos + TLV_header_len + length > data_len) {
+                // Frame is bigger than buffer.
+                Log.e(TAG, "Polling frame data ("+ pos + ", " + length
+                        + ") is longer than buffer data length (" + data_len + ").");
+                return;
+            }
+            switch (type) {
+                case TAG_FIELD_CHANGE:
+                    frame.putChar(
+                            HostApduService.KEY_POLLING_LOOP_TYPE,
+                            p_data[pos + TLV_data_offset] != 0x00
+                                    ? HostApduService.POLLING_LOOP_TYPE_ON
+                                    : HostApduService.POLLING_LOOP_TYPE_OFF);
+                    break;
+                case TAG_NFC_A:
+                    frame.putChar(HostApduService.KEY_POLLING_LOOP_TYPE,
+                            HostApduService.POLLING_LOOP_TYPE_A);
+                    break;
+                case TAG_NFC_B:
+                    frame.putChar(HostApduService.KEY_POLLING_LOOP_TYPE,
+                            HostApduService.POLLING_LOOP_TYPE_B);
+                    break;
+                case TAG_NFC_F:
+                    frame.putChar(HostApduService.KEY_POLLING_LOOP_TYPE,
+                            HostApduService.POLLING_LOOP_TYPE_F);
+                    break;
+                case TAG_NFC_UNKNOWN:
+                    frame.putChar(
+                            HostApduService.KEY_POLLING_LOOP_TYPE,
+                            HostApduService.POLLING_LOOP_TYPE_UNKNOWN);
+
+                    frame.putByteArray(
+                            HostApduService.KEY_POLLING_LOOP_DATA,
+                            Arrays.copyOfRange(
+                                    p_data, pos + TLV_data_offset, pos + TLV_header_len + length));
+                    break;
+                default:
+                    Log.e(TAG, "Unknown polling loop tag type.");
+            }
+            if (pos + TLV_header_len + length <= data_len) {
+                frame.putByteArray(
+                        HostApduService.KEY_POLLING_LOOP_DATA,
+                        Arrays.copyOfRange(
+                                p_data, pos + TLV_data_offset,
+                                pos + TLV_header_len + length));
+            }
+            if (pos + TLV_gain_offset <= data_len) {
+                byte gain = p_data[pos + TLV_gain_offset];
+                frame.putByte(HostApduService.KEY_POLLING_LOOP_GAIN, gain);
+            }
+            if (pos + TLV_timestamp_offset + 3 < data_len) {
+                int timestamp = ByteBuffer.wrap(p_data, pos + TLV_timestamp_offset, 4)
+                        .order(ByteOrder.LITTLE_ENDIAN).getInt();
+                frame.putInt(HostApduService.KEY_POLLING_LOOP_TIMESTAMP, timestamp);
+            }
+            pos += (TLV_header_len + length);
+        }
+        mListener.onPollingLoopDetected(frame);
+    }
+
+    private void notifyWlcStopped(int wpt_end_condition) {
+        mListener.onWlcStopped(wpt_end_condition);
+    }
+
+    @Override
+    public native void setDiscoveryTech(int pollTech, int listenTech);
+
+    @Override
+    public native void resetDiscoveryTech();
+
+    @Override
+    public native void clearRoutingEntry(int clearFlags);
+
+    @Override
+    public native void setIsoDepProtocolRoute(int route);
+
+    @Override
+    public native void setTechnologyABRoute(int route);
 }

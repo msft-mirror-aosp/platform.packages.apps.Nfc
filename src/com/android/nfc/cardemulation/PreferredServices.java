@@ -15,18 +15,23 @@
  */
 package com.android.nfc.cardemulation;
 
+import android.annotation.TargetApi;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.nfc.Constants;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.Utils;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.permission.flags.Flags;
+
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.sysprop.NfcProperties;
@@ -37,7 +42,9 @@ import com.android.nfc.ForegroundUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * This class keeps track of what HCE/SE-based services are
@@ -59,12 +66,13 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
     static final String TAG = "PreferredCardEmulationServices";
     static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
     static final Uri paymentDefaultUri = Settings.Secure.getUriFor(
-            Settings.Secure.NFC_PAYMENT_DEFAULT_COMPONENT);
+            Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
     static final Uri paymentForegroundUri = Settings.Secure.getUriFor(
-            Settings.Secure.NFC_PAYMENT_FOREGROUND);
+            Constants.SETTINGS_SECURE_NFC_PAYMENT_FOREGROUND);
 
     final SettingsObserver mSettingsObserver;
     final Context mContext;
+    final WalletRoleObserver mWalletRoleObserver;
     final RegisteredServicesCache mServiceCache;
     final RegisteredAidCache mAidCache;
     final Callback mCallback;
@@ -92,6 +100,10 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
     ComponentName mForegroundCurrent; // The currently computed foreground component
     int mForegroundCurrentUid; // The UID of the currently computed foreground component
 
+    ComponentName mDefaultWalletHolderPaymentService;
+
+    int mUserIdDefaultWalletHolder;
+
     public interface Callback {
         /**
          * Notify when preferred payment service is changed
@@ -104,8 +116,10 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
     }
 
     public PreferredServices(Context context, RegisteredServicesCache serviceCache,
-            RegisteredAidCache aidCache, Callback callback) {
+            RegisteredAidCache aidCache, WalletRoleObserver walletRoleObserver,
+            Callback callback) {
         mContext = context;
+        mWalletRoleObserver = walletRoleObserver;
         mForegroundUtils = ForegroundUtils.getInstance(
                 context.getSystemService(ActivityManager.class));
         mServiceCache = serviceCache;
@@ -140,6 +154,42 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         }
     };
 
+    @TargetApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    public void onWalletRoleHolderChanged(String defaultWalletHolderPackageName, int userId) {
+        if (defaultWalletHolderPackageName == null) {
+            mDefaultWalletHolderPaymentService = null;
+            mCallback.onPreferredPaymentServiceChanged(userId, null);
+            return;
+        }
+        List<ApduServiceInfo> serviceInfos = mServiceCache.getInstalledServices(userId);
+        List<ComponentName> roleHolderPaymentServices = new ArrayList<>();
+        int servicesCount = serviceInfos.size();
+        for(int i = 0; i < servicesCount; i++) {
+            ApduServiceInfo serviceInfo = serviceInfos.get(i);
+            ComponentName componentName = serviceInfo.getComponent();
+            if (componentName.getPackageName()
+                    .equals(defaultWalletHolderPackageName)) {
+                List<String> aids = serviceInfo.getAids();
+                int aidsCount = aids.size();
+                for (int j = 0; j < aidsCount; j++) {
+                    String aid = aids.get(j);
+                    if (serviceInfo.getCategoryForAid(aid)
+                            .equals(CardEmulation.CATEGORY_PAYMENT)) {
+                        roleHolderPaymentServices.add(componentName);
+                        break;
+                    }
+                }
+            }
+        }
+        mUserIdDefaultWalletHolder = userId;
+        ComponentName candidate = !roleHolderPaymentServices.isEmpty()
+                ? roleHolderPaymentServices.get(0) : null;
+        if (!Objects.equals(candidate, mDefaultWalletHolderPaymentService)) {
+            mCallback.onPreferredPaymentServiceChanged(userId, candidate);
+        }
+        mDefaultWalletHolderPaymentService = candidate;
+    }
+
     void loadDefaultsFromSettings(int userId, boolean force) {
         boolean paymentDefaultChanged = false;
         boolean paymentPreferForegroundChanged = false;
@@ -156,7 +206,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         for (UserHandle uh : userHandles) {
             name = Settings.Secure.getString(
                     mContext.createContextAsUser(uh, 0).getContentResolver(),
-                    Settings.Secure.NFC_PAYMENT_DEFAULT_COMPONENT);
+                    Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
             if (name != null) {
                 newUser = uh;
                 newDefaultName = name;
@@ -178,9 +228,10 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         boolean preferForeground = false;
         try {
             // get the setting from the main user instead of from the user profiles.
-            preferForeground = Settings.Secure.getInt(mContext
-                    .createContextAsUser(currentUser, 0).getContentResolver(),
-                    Settings.Secure.NFC_PAYMENT_FOREGROUND) != 0;
+            preferForeground = mWalletRoleObserver.isWalletRoleFeatureEnabled()
+                    || Settings.Secure.getInt(mContext
+                            .createContextAsUser(currentUser, 0).getContentResolver(),
+                    Constants.SETTINGS_SECURE_NFC_PAYMENT_FOREGROUND) != 0;
         } catch (SettingNotFoundException e) {
         }
         synchronized (mLock) {
@@ -480,11 +531,13 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
                         mForegroundCurrent, proto, PreferredServicesProto.FOREGROUND_CURRENT);
             }
             if (mPaymentDefaults.currentPreferred != null) {
-                mPaymentDefaults.currentPreferred.dumpDebug(proto,
+                Utils.dumpDebugComponentName(
+                        mPaymentDefaults.currentPreferred, proto,
                         PreferredServicesProto.FOREGROUND_CURRENT);
             }
             if (mNextTapDefault != null) {
-                mNextTapDefault.dumpDebug(proto, PreferredServicesProto.NEXT_TAP_DEFAULT);
+                Utils.dumpDebugComponentName(
+                        mNextTapDefault, proto, PreferredServicesProto.NEXT_TAP_DEFAULT);
             }
             proto.write(PreferredServicesProto.FOREGROUND_UID, mForegroundUid);
             if (mForegroundRequested != null) {
@@ -492,7 +545,8 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
                         mForegroundRequested, proto, PreferredServicesProto.FOREGROUND_REQUESTED);
             }
             if (mPaymentDefaults.settingsDefault != null) {
-                mPaymentDefaults.settingsDefault.dumpDebug(proto,
+                Utils.dumpDebugComponentName(
+                        mPaymentDefaults.settingsDefault, proto,
                         PreferredServicesProto.SETTINGS_DEFAULT);
             }
             proto.write(PreferredServicesProto.PREFER_FOREGROUND,
