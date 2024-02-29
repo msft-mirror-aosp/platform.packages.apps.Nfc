@@ -582,13 +582,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        public boolean setDefaultToObserveModeForService(int userId,
+        public boolean setShouldDefaultToObserveModeForService(int userId,
             ComponentName service, boolean enable) {
             NfcPermissions.validateUserId(userId);
             if (!isServiceRegistered(userId, service)) {
                 return false;
             }
-            return mServiceCache.setDefaultToObserveModeForService(userId, Binder.getCallingUid(),
+            return mServiceCache.setShouldDefaultToObserveModeForService(userId, Binder.getCallingUid(),
                 service, enable);
         }
 
@@ -613,8 +613,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         @Override
         @TargetApi(35)
         @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-        public boolean registerPollingLoopFilterForService(int userId,
-                ComponentName service, String pollingLoopFilter) throws RemoteException {
+        public boolean registerPollingLoopFilterForService(int userId, ComponentName service,
+                String pollingLoopFilter, boolean autoTransact) throws RemoteException {
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             if (!isServiceRegistered(userId, service)) {
@@ -622,7 +622,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 return false;
             }
             return mServiceCache.registerPollingLoopFilterForService(userId, Binder.getCallingUid(),
-            service, pollingLoopFilter);
+                service, pollingLoopFilter, autoTransact);
         }
 
         @Override
@@ -950,7 +950,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
-        updateForDefaultToObserveMode(userId);
+        updateForShouldDefaultToObserveMode(userId);
     }
 
     @Override
@@ -961,9 +961,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
-        updateForDefaultToObserveMode(userId);
+        updateForShouldDefaultToObserveMode(userId);
     }
-    private void updateForDefaultToObserveMode(int userId) {
+    private void updateForShouldDefaultToObserveMode(int userId) {
         long token = Binder.clearCallingIdentity();
         try {
             if (!android.nfc.Flags.nfcObserveMode()) {
@@ -979,8 +979,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             return;
         }
         ComponentName preferredService = mAidCache.getPreferredService();
-        boolean allowTransaction = !mServiceCache.doesServiceDefaultToObserveMode(userId, preferredService);
-        adapter.setTransactionAllowed(allowTransaction);
+        boolean enableObserveMode = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
+                preferredService);
+        adapter.setObserveModeEnabled(enableObserveMode);
 
     }
 
