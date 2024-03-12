@@ -87,6 +87,8 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.se.omapi.ISecureElementService;
+import android.se.omapi.SeFrameworkInitializer;
+import android.se.omapi.SeServiceManager;
 import android.sysprop.NfcProperties;
 import android.text.TextUtils;
 import android.util.EventLog;
@@ -383,6 +385,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     // for recording the latest Tag object cookie
     long mCookieUpToDate = -1;
 
+    private DeviceConfigFacade mDeviceConfigFacade;
     private NfcDispatcher mNfcDispatcher;
     private PowerManager mPowerManager;
     private KeyguardManager mKeyguard;
@@ -606,6 +609,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         } else {
             mInProvisionMode = false;
         }
+        mDeviceConfigFacade = new DeviceConfigFacade(mContext, mHandler);
 
         mNfcDispatcher = new NfcDispatcher(mContext, mHandoverDataParser, mInProvisionMode);
 
@@ -702,7 +706,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         // Notification message variables
         mDispatchFailedCount = 0;
-        if (mContext.getResources().getBoolean(R.bool.enable_antenna_blocked_alert) &&
+        if (mDeviceConfigFacade.isAntennaBlockedAlertEnabled() &&
             !mPrefs.getBoolean(PREF_ANTENNA_BLOCKED_MESSAGE_SHOWN, ANTENNA_BLOCKED_MESSAGE_SHOWN_DEFAULT)) {
             mAntennaBlockedMessageShown = false;
             mDispatchFailedMax =
@@ -903,8 +907,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private void connectToSeService() {
         try {
-            mSEService = ISecureElementService.Stub.asInterface(ServiceManager.getService(
-                  Context.SECURE_ELEMENT_SERVICE));
+            SeServiceManager manager = SeFrameworkInitializer.getSeServiceManager();
+            if (manager == null) {
+                Log.e(TAG, "SEServiceManager is null");
+                return;
+            }
+            mSEService = ISecureElementService.Stub.asInterface(
+                    manager.getSeManagerServiceRegisterer().get());
             if (mSEService != null) {
                 IBinder seServiceBinder = mSEService.asBinder();
                 seServiceBinder.linkToDeath(mSeServiceDeathRecipient, 0);
@@ -1410,9 +1419,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     public boolean isSecureNfcEnabled() {
-        synchronized (NfcService.this) {
-            return mIsSecureNfcEnabled;
-        }
+        return mIsSecureNfcEnabled;
     }
 
     final class NfcAdapterService extends INfcAdapter.Stub {
