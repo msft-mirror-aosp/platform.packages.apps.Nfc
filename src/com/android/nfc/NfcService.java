@@ -148,7 +148,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class NfcService implements DeviceHostListener, ForegroundUtils.Callback {
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
+    private static final boolean VDBG = false; // turn on for local testing.
     static final String TAG = "NfcService";
     private static final int APP_INFO_FLAGS_SYSTEM_APP =
             ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
@@ -480,9 +481,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     @Override
-    public void onPollingLoopDetected(Bundle pollingFrame) {
+    public void onPollingLoopDetected(List<Bundle> pollingFrames) {
         if (mCardEmulationManager != null) {
-            mCardEmulationManager.onPollingLoopDetected(pollingFrame);
+            mCardEmulationManager.onPollingLoopDetected(pollingFrames);
         }
     }
 
@@ -512,7 +513,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onVendorSpecificEvent(int gid, int oid, byte[] payload) {
-        sendVendorNciNotification(gid, oid, payload);
+        mHandler.post(() -> mNfcAdapter.sendVendorNciNotification(gid, oid, payload));
     }
 
     /**
@@ -2223,7 +2224,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public void notifyPollingLoop(Bundle frame) {
             try {
-                onPollingLoopDetected(frame);
+                ArrayList<Bundle> frames = new ArrayList<Bundle>();
+                frames.add(frame);
+                onPollingLoopDetected(frames);
             } catch (Exception ex) {
                 Log.e(TAG, "error when notifying polling loop", ex);
             }
@@ -2291,43 +2294,46 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public void registerVendorExtensionCallback(INfcVendorNciCallback callbacks)
+        public synchronized void registerVendorExtensionCallback(INfcVendorNciCallback callbacks)
                 throws RemoteException {
             if (DBG) Log.i(TAG, "Register the callback");
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcVendorNciCallBack = callbacks;
+            mDeviceHost.enableVendorNciNotifications(true);
         }
 
         @Override
-        public void unregisterVendorExtensionCallback(INfcVendorNciCallback callbacks)
+        public synchronized void unregisterVendorExtensionCallback(INfcVendorNciCallback callbacks)
                 throws RemoteException {
             if (DBG) Log.i(TAG, "Unregister the callback");
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcVendorNciCallBack = null;
+            mDeviceHost.enableVendorNciNotifications(false);
         }
-    }
 
-    private void sendVendorNciResponse(int gid, int oid, byte[] payload) {
-        if (DBG) Log.i(TAG, "onVendorNciResponseReceived");
-        if (mNfcVendorNciCallBack != null) {
-            try {
-                mNfcVendorNciCallBack.onVendorResponseReceived(gid, oid, payload);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Failed to send vendor response", e);
+        private synchronized void sendVendorNciResponse(int gid, int oid, byte[] payload) {
+            if (VDBG) Log.i(TAG, "onVendorNciResponseReceived");
+            if (mNfcVendorNciCallBack != null) {
+                try {
+                    mNfcVendorNciCallBack.onVendorResponseReceived(gid, oid, payload);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Failed to send vendor response", e);
+                }
+            }
+        }
+
+        private synchronized void sendVendorNciNotification(int gid, int oid, byte[] payload) {
+            if (VDBG) Log.i(TAG, "sendVendorNciNotification");
+            if (mNfcVendorNciCallBack != null) {
+                try {
+                    mNfcVendorNciCallBack.onVendorNotificationReceived(gid, oid, payload);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Failed to send vendor notification", e);
+                }
             }
         }
     }
 
-    private void sendVendorNciNotification(int gid, int oid, byte[] payload) {
-        if (DBG) Log.i(TAG, "sendVendorNciNotification");
-        if (mNfcVendorNciCallBack != null) {
-            try {
-                mNfcVendorNciCallBack.onVendorNotificationReceived(gid, oid, payload);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Failed to send vendor notification", e);
-            }
-        }
-    }
 
     final class SeServiceDeathRecipient implements IBinder.DeathRecipient {
         @Override

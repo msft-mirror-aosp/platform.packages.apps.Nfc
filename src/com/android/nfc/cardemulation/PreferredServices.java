@@ -64,7 +64,7 @@ import java.util.Objects;
  */
 public class PreferredServices implements com.android.nfc.ForegroundUtils.Callback {
     static final String TAG = "PreferredCardEmulationServices";
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
     static final Uri paymentDefaultUri = Settings.Secure.getUriFor(
             Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
     static final Uri paymentForegroundUri = Settings.Secure.getUriFor(
@@ -134,8 +134,15 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
                 paymentForegroundUri,
                 true, mSettingsObserver, UserHandle.ALL);
 
+        int currentUserId = ActivityManager.getCurrentUser();
+
         // Load current settings defaults for payments
-        loadDefaultsFromSettings(ActivityManager.getCurrentUser(), false);
+        loadDefaultsFromSettings(currentUserId, false);
+
+        if (mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
+            String holder = mWalletRoleObserver.getDefaultWalletRoleHolder(currentUserId);
+            onWalletRoleHolderChanged(holder, currentUserId);
+        }
     }
 
     private final class SettingsObserver extends ContentObserver {
@@ -253,7 +260,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
             }
         }
         // Notify if anything changed
-        if (paymentDefaultChanged || force) {
+        if (!mWalletRoleObserver.isWalletRoleFeatureEnabled() && (paymentDefaultChanged || force)) {
             mCallback.onPreferredPaymentServiceChanged(newUser.getIdentifier(), newDefault);
         }
         if (paymentPreferForegroundChanged || force) {
