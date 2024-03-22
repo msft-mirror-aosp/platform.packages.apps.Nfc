@@ -124,6 +124,10 @@ public class ForegroundUtilsTest {
         List<Integer> uids = mForegroundUtils.getForegroundUids();
         Assert.assertNotNull(uids);
         Assert.assertTrue(uids.size() > 0);
+        ForegroundUtils.Callback callback = uid -> {
+            Log.d(TAG, "testOnUidImportanceBackground callback received");
+        };
+        mForegroundUtils.registerUidToBackgroundCallback(callback, 0);
 
         SparseArray<List<ForegroundUtils.Callback>>
                 backGroundCallbacks = mForegroundUtils.getBackgroundCallbacks();
