@@ -97,6 +97,7 @@ jmethodID gCachedNfcManagerNotifyEeUpdated;
 jmethodID gCachedNfcManagerNotifyHwErrorReported;
 jmethodID gCachedNfcManagerNotifyPollingLoopFrame;
 jmethodID gCachedNfcManagerNotifyVendorSpecificEvent;
+jmethodID gCachedNfcManagerNotifyCommandTimeout;
 const char* gNativeP2pDeviceClassName =
     "com/android/nfc/dhimpl/NativeP2pDevice";
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
@@ -673,6 +674,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   gCachedNfcManagerNotifyVendorSpecificEvent =
       e->GetMethodID(cls.get(), "notifyVendorSpecificEvent", "(II[B)V");
 
+  gCachedNfcManagerNotifyCommandTimeout =
+      e->GetMethodID(cls.get(), "notifyCommandTimeout", "()V");
+
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
     LOG(ERROR) << StringPrintf("%s: fail cache NativeNfcTag", __func__);
@@ -784,13 +788,13 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
                                    __func__);
 
       struct nfc_jni_native_data* nat = getNative(NULL, NULL);
+      JNIEnv* e = NULL;
+      ScopedAttach attach(nat->vm, &e);
+      if (e == NULL) {
+        LOG(ERROR) << StringPrintf("jni env is null");
+        return;
+      }
       if (recovery_option && nat != NULL) {
-        JNIEnv* e = NULL;
-        ScopedAttach attach(nat->vm, &e);
-        if (e == NULL) {
-          LOG(ERROR) << StringPrintf("jni env is null");
-          return;
-        }
         LOG(ERROR) << StringPrintf("%s: toggle NFC state to recovery nfc",
                                    __func__);
         sIsRecovering = true;
@@ -865,6 +869,8 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
         }
         PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
         LOG(ERROR) << StringPrintf("%s: crash NFC service", __func__);
+        e->CallVoidMethod(nat->manager,
+                          android::gCachedNfcManagerNotifyCommandTimeout);
         //////////////////////////////////////////////
         // crash the NFC service process so it can restart automatically
         abort();
