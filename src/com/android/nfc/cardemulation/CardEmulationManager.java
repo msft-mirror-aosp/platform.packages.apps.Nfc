@@ -1085,7 +1085,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     public String getRegisteredAidCategory(String aid) {
         RegisteredAidCache.AidResolveInfo resolvedInfo = mAidCache.resolveAid(aid);
         if (resolvedInfo != null) {
-            return resolvedInfo.category;
+            return resolvedInfo.getCategory();
         }
         return "";
     }

@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -116,6 +117,8 @@ public class CardEmulationManagerTest {
     private NfcService mNfcService;
     @Mock
     private UserManager mUserManager;
+    @Mock
+    private NfcAdapter mNfcAdapter;
     @Captor
     private ArgumentCaptor<List<Bundle>> mPollingLoopFrameCaptor;
     @Captor
@@ -136,8 +139,10 @@ public class CardEmulationManagerTest {
                 .mockStatic(NfcService.class)
                 .mockStatic(Binder.class)
                 .mockStatic(UserHandle.class)
+                .mockStatic(NfcAdapter.class)
                 .startMocking();
         MockitoAnnotations.initMocks(this);
+        when(NfcAdapter.getDefaultAdapter(mContext)).thenReturn(mNfcAdapter);
         when(NfcService.getInstance()).thenReturn(mNfcService);
         when(ActivityManager.getCurrentUser()).thenReturn(USER_ID);
         when(UserHandle.getUserHandleForUid(anyInt())).thenReturn(USER_HANDLE);
@@ -1442,6 +1447,498 @@ public class CardEmulationManagerTest {
         verifyNoMoreInteractions(mRegisteredAidCache);
     }
 
+    @Test
+    public void testNfcFCardEmulationGetSystemCodeForService_serviceExists()
+            throws RemoteException {
+        String systemCode = "systemCode";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(true);
+        when(mRegisteredNfcFServicesCache.getSystemCodeForService(anyInt(),
+                anyInt(), any())).thenReturn(systemCode);
+
+        Assert.assertEquals(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .getSystemCodeForService(USER_ID, WALLET_PAYMENT_SERVICE), systemCode);
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredNfcFServicesCache).getSystemCodeForService(eq(USER_ID), anyInt(),
+                eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationGetSystemCodeForService_serviceDoesNotExists()
+            throws RemoteException {
+        String systemCode = "systemCode";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(false);
+        when(mRegisteredNfcFServicesCache.getSystemCodeForService(anyInt(),
+                anyInt(), any())).thenReturn(systemCode);
+
+        Assert.assertNull(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .getSystemCodeForService(USER_ID, WALLET_PAYMENT_SERVICE));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).invalidateCache(eq(USER_ID));
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationRegisterSystemCodeForService_serviceExists()
+            throws RemoteException {
+        String systemCode = "systemCode";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(true);
+        when(mRegisteredNfcFServicesCache.registerSystemCodeForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+
+        Assert.assertTrue(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .registerSystemCodeForService(USER_ID, WALLET_PAYMENT_SERVICE, systemCode));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredNfcFServicesCache).registerSystemCodeForService(eq(USER_ID), anyInt(),
+                eq(WALLET_PAYMENT_SERVICE), eq(systemCode));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationRegisterSystemCodeForService_serviceDoesNotExists()
+            throws RemoteException {
+        String systemCode = "systemCode";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(false);
+        when(mRegisteredNfcFServicesCache.registerSystemCodeForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+
+        Assert.assertFalse(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .registerSystemCodeForService(USER_ID, WALLET_PAYMENT_SERVICE, systemCode));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).invalidateCache(eq(USER_ID));
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationRemoveSystemCodeForService_serviceExists()
+            throws RemoteException {
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(true);
+        when(mRegisteredNfcFServicesCache.removeSystemCodeForService(anyInt(),
+                anyInt(), any())).thenReturn(true);
+
+        Assert.assertTrue(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .removeSystemCodeForService(USER_ID, WALLET_PAYMENT_SERVICE));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredNfcFServicesCache).removeSystemCodeForService(eq(USER_ID), anyInt(),
+                eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationRemoveSystemCodeForService_serviceDoesNotExists()
+            throws RemoteException {
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(false);
+        when(mRegisteredNfcFServicesCache.removeSystemCodeForService(anyInt(),
+                anyInt(), any())).thenReturn(true);
+
+        Assert.assertFalse(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .removeSystemCodeForService(USER_ID, WALLET_PAYMENT_SERVICE));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).invalidateCache(eq(USER_ID));
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationGetNfcid2ForService_serviceExists()
+            throws RemoteException {
+        String nfcid2 = "nfcid2";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(true);
+        when(mRegisteredNfcFServicesCache.getNfcid2ForService(anyInt(),
+                anyInt(), any())).thenReturn(nfcid2);
+
+        Assert.assertEquals(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .getNfcid2ForService(USER_ID, WALLET_PAYMENT_SERVICE), nfcid2);
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredNfcFServicesCache).getNfcid2ForService(eq(USER_ID), anyInt(),
+                eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationGetNfcid2ForService_serviceDoesNotExists()
+            throws RemoteException {
+        String nfcid2 = "nfcid2";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(false);
+        when(mRegisteredNfcFServicesCache.getNfcid2ForService(anyInt(),
+                anyInt(), any())).thenReturn(nfcid2);
+
+        Assert.assertNull(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .getNfcid2ForService(USER_ID, WALLET_PAYMENT_SERVICE));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).invalidateCache(eq(USER_ID));
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationSetNfcid2ForService_serviceExists()
+            throws RemoteException {
+        String nfcid2 = "nfcid2";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(true);
+        when(mRegisteredNfcFServicesCache.setNfcid2ForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+
+        Assert.assertTrue(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .setNfcid2ForService(USER_ID, WALLET_PAYMENT_SERVICE, nfcid2));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredNfcFServicesCache).setNfcid2ForService(eq(USER_ID), anyInt(),
+                eq(WALLET_PAYMENT_SERVICE), eq(nfcid2));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationSetNfcid2ForService_serviceDoesNotExists()
+            throws RemoteException {
+        String nfcid2 = "nfcid2";
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(false);
+        when(mRegisteredNfcFServicesCache.setNfcid2ForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+
+        Assert.assertFalse(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .setNfcid2ForService(USER_ID, WALLET_PAYMENT_SERVICE, nfcid2));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateUserId(USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).invalidateCache(eq(USER_ID));
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationEnableNfcFForegroundService_serviceExists()
+            throws RemoteException {
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(true);
+        when(mEnabledNfcFServices.registerEnabledForegroundService(any(),
+                anyInt())).thenReturn(true);
+        when(Binder.getCallingUserHandle()).thenReturn(USER_HANDLE);
+
+        Assert.assertTrue(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .enableNfcFForegroundService(WALLET_PAYMENT_SERVICE));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verify(mEnabledNfcFServices).registerEnabledForegroundService(eq(WALLET_PAYMENT_SERVICE),
+                anyInt());
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationEnableNfcFForegroundService_serviceDoesNotExists()
+            throws RemoteException {
+        when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any()))
+                .thenReturn(false);
+        when(mEnabledNfcFServices.registerEnabledForegroundService(any(),
+                anyInt())).thenReturn(true);
+
+        Assert.assertFalse(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .enableNfcFForegroundService(WALLET_PAYMENT_SERVICE));
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).invalidateCache(eq(USER_ID));
+        verify(mRegisteredNfcFServicesCache, times(2))
+                .hasService(eq(USER_ID),eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+        verifyNoMoreInteractions(mEnabledNfcFServices);
+    }
+
+    @Test
+    public void testNfcFCardEmulationDisableNfcFForegroundService_serviceDoesNotExists()
+            throws RemoteException {
+        when(mEnabledNfcFServices.unregisteredEnabledForegroundService(anyInt()))
+                .thenReturn(true);
+
+        Assert.assertTrue(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .disableNfcFForegroundService());
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mEnabledNfcFServices).unregisteredEnabledForegroundService(anyInt());
+        verifyNoMoreInteractions(mEnabledNfcFServices);
+    }
+
+    @Test
+    public void testNfcFCardEmulationGetServices()
+            throws RemoteException {
+        when(mRegisteredNfcFServicesCache.getServices(anyInt()))
+                .thenReturn(UPDATED_NFC_SERVICES);
+
+        Assert.assertEquals(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .getNfcFServices(USER_ID), UPDATED_NFC_SERVICES);
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.validateProfileId(mContext, USER_ID);
+        });
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mRegisteredNfcFServicesCache).initialize();
+        verify(mRegisteredNfcFServicesCache).getServices(eq(USER_ID));
+        verifyNoMoreInteractions(mRegisteredNfcFServicesCache);
+    }
+
+    @Test
+    public void testNfcFCardEmulationGetMaxNumOfRegisterableSystemCodes()
+            throws RemoteException {
+        when(mNfcService.getLfT3tMax()).thenReturn(3);
+
+        Assert.assertEquals(mCardEmulationManager.getNfcFCardEmulationInterface()
+                .getMaxNumOfRegisterableSystemCodes(), 3);
+
+        ExtendedMockito.verify(() -> {
+            NfcPermissions.enforceUserPermissions(mContext);
+        });
+        verify(mNfcService).getLfT3tMax();
+        verifyNoMoreInteractions(mNfcService);
+    }
+
+    @Test
+    public void testOnPreferredPaymentServiceChanged_observeModeEnabled() {
+        when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(anyInt(), any()))
+                .thenReturn(true);
+        when(mRegisteredAidCache.getPreferredService()).thenReturn(WALLET_PAYMENT_SERVICE);
+        when(android.nfc.Flags.nfcObserveMode()).thenReturn(true);
+
+        mCardEmulationManager.onPreferredPaymentServiceChanged(USER_ID, WALLET_PAYMENT_SERVICE);
+
+        verify(mHostEmulationManager).onPreferredPaymentServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredAidCache).onWalletRoleHolderChanged(
+                eq(WALLET_HOLDER_PACKAGE_NAME), eq(USER_ID));
+        verify(mRegisteredAidCache).onPreferredPaymentServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredServicesCache).initialize();
+        verify(mNfcService).onPreferredPaymentChanged(eq(NfcAdapter.PREFERRED_PAYMENT_CHANGED));
+        assertUpdateForShouldDefaultToObserveMode(true);
+    }
+
+    @Test
+    public void testOnPreferredPaymentServiceChanged_observeModeDisabled() {
+        when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(anyInt(), any()))
+                .thenReturn(true);
+        when(mRegisteredAidCache.getPreferredService()).thenReturn(WALLET_PAYMENT_SERVICE);
+        when(android.nfc.Flags.nfcObserveMode()).thenReturn(false);
+
+        mCardEmulationManager.onPreferredPaymentServiceChanged(USER_ID, WALLET_PAYMENT_SERVICE);
+
+        verify(mHostEmulationManager).onPreferredPaymentServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredAidCache).onWalletRoleHolderChanged(
+                eq(WALLET_HOLDER_PACKAGE_NAME), eq(USER_ID));
+        verify(mRegisteredAidCache).onPreferredPaymentServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredServicesCache).initialize();
+        verify(mNfcService).onPreferredPaymentChanged(eq(NfcAdapter.PREFERRED_PAYMENT_CHANGED));
+        assertUpdateForShouldDefaultToObserveMode(false);
+    }
+
+    @Test
+    public void testOnPreferredForegroundServiceChanged_observeModeEnabled() {
+        when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(anyInt(), any()))
+                .thenReturn(true);
+        when(mRegisteredAidCache.getPreferredService()).thenReturn(WALLET_PAYMENT_SERVICE);
+        when(android.nfc.Flags.nfcObserveMode()).thenReturn(true);
+
+        mCardEmulationManager.onPreferredForegroundServiceChanged(USER_ID, WALLET_PAYMENT_SERVICE);
+
+        verify(mRegisteredAidCache).onWalletRoleHolderChanged(
+                eq(WALLET_HOLDER_PACKAGE_NAME), eq(USER_ID));
+        verify(mHostEmulationManager).onPreferredForegroundServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredAidCache).onPreferredForegroundServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredServicesCache).initialize();
+        verify(mNfcService).onPreferredPaymentChanged(eq(NfcAdapter.PREFERRED_PAYMENT_CHANGED));
+        assertUpdateForShouldDefaultToObserveMode(true);
+    }
+
+    @Test
+    public void testOnPreferredForegroundServiceChanged_observeModeDisabled() {
+        when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(anyInt(), any()))
+                .thenReturn(true);
+        when(mRegisteredAidCache.getPreferredService()).thenReturn(WALLET_PAYMENT_SERVICE);
+        when(android.nfc.Flags.nfcObserveMode()).thenReturn(false);
+
+        mCardEmulationManager.onPreferredForegroundServiceChanged(USER_ID, WALLET_PAYMENT_SERVICE);
+
+        verify(mHostEmulationManager).onPreferredForegroundServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredAidCache).onWalletRoleHolderChanged(
+                eq(WALLET_HOLDER_PACKAGE_NAME), eq(USER_ID));
+        verify(mRegisteredAidCache).onPreferredForegroundServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mRegisteredServicesCache).initialize();
+        verify(mNfcService).onPreferredPaymentChanged(eq(NfcAdapter.PREFERRED_PAYMENT_CHANGED));
+        assertUpdateForShouldDefaultToObserveMode(false);
+    }
+
+    @Test
+    public void testOnWalletRoleHolderChanged() {
+        mCardEmulationManager.onWalletRoleHolderChanged(WALLET_HOLDER_PACKAGE_NAME, USER_ID);
+
+        verify(mPreferredServices, times(2))
+                .onWalletRoleHolderChanged(eq(WALLET_HOLDER_PACKAGE_NAME), eq(USER_ID));
+        verify(mRegisteredAidCache, times(2))
+                .onWalletRoleHolderChanged(eq(WALLET_HOLDER_PACKAGE_NAME), eq(USER_ID));
+        verifyNoMoreInteractions(mPreferredServices);
+        verifyNoMoreInteractions(mRegisteredAidCache);
+    }
+
+    @Test
+    public void testOnEnabledForegroundNfcFServiceChanged() {
+        mCardEmulationManager.onEnabledForegroundNfcFServiceChanged(USER_ID,
+                WALLET_PAYMENT_SERVICE);
+
+        verify(mRegisteredT3tIdentifiersCache).onEnabledForegroundNfcFServiceChanged(eq(USER_ID),
+                eq(WALLET_PAYMENT_SERVICE));
+        verify(mHostNfcFEmulationManager)
+                .onEnabledForegroundNfcFServiceChanged(eq(USER_ID),
+                        eq(WALLET_PAYMENT_SERVICE));
+        verifyNoMoreInteractions(mRegisteredT3tIdentifiersCache);
+        verifyNoMoreInteractions(mHostNfcFEmulationManager);
+    }
+
+    @Test
+    public void testGetRegisteredAidCategory() {
+        RegisteredAidCache.AidResolveInfo aidResolveInfo = Mockito.mock(
+                RegisteredAidCache.AidResolveInfo.class);
+        when(aidResolveInfo.getCategory()).thenReturn(CardEmulation.CATEGORY_PAYMENT);
+
+        when(mRegisteredAidCache.resolveAid(anyString())).thenReturn(aidResolveInfo);
+
+        Assert.assertEquals(mCardEmulationManager.getRegisteredAidCategory(PAYMENT_AID_1),
+                CardEmulation.CATEGORY_PAYMENT);
+
+        verify(mRegisteredAidCache).resolveAid(eq(PAYMENT_AID_1));
+        verify(aidResolveInfo).getCategory();
+    }
+
+    @Test
+    public void testIsRequiresScreenOnServiceExist() {
+        when(mRegisteredAidCache.isRequiresScreenOnServiceExist()).thenReturn(true);
+
+        Assert.assertTrue(mCardEmulationManager.isRequiresScreenOnServiceExist());
+    }
+
+
+    private void assertUpdateForShouldDefaultToObserveMode(boolean flagEnabled) {
+        if (flagEnabled) {
+            ExtendedMockito.verify(() -> {
+                NfcAdapter.getDefaultAdapter(mContext);
+            });
+            verify(mRegisteredAidCache).getPreferredService();
+            verify(mRegisteredServicesCache).doesServiceShouldDefaultToObserveMode(eq(USER_ID),
+                    eq(WALLET_PAYMENT_SERVICE));
+            verify(mNfcAdapter).setObserveModeEnabled(eq(true));
+        }
+        verifyNoMoreInteractions(mNfcAdapter);
+        verifyNoMoreInteractions(mRegisteredServicesCache);
+        verifyNoMoreInteractions(mRegisteredAidCache);
+    }
 
     private CardEmulationManager createInstanceWithMockParams() {
         when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(TEST_DATA_1);
