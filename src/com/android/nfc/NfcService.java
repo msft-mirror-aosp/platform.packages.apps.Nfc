@@ -318,6 +318,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             NfcDiscoveryParameters.getNfcOffParameters();
 
     ReaderModeParams mReaderModeParams;
+    DiscoveryTechParams mDiscoveryTechParams;
 
     private int mUserId;
     boolean mPollingPaused;
@@ -532,6 +533,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public int flags;
         public IAppCallback callback;
         public int presenceCheckDelay;
+        public IBinder binder;
+        public int uid;
+    }
+
+    final class DiscoveryTechParams {
         public IBinder binder;
         public int uid;
     }
@@ -1244,6 +1250,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mHandler.removeMessages(MSG_DELAY_POLLING);
                 mPollingDisableDeathRecipients.clear();
                 mReaderModeParams = null;
+                mDiscoveryTechParams = null;
             }
             mNfcDispatcher.setForegroundDispatch(null, null, null);
 
@@ -1425,6 +1432,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (mReaderModeParams != null && mReaderModeParams.uid == uid) {
                 mReaderModeParams.binder.unlinkToDeath(mReaderModeDeathRecipient, 0);
                 resetReaderModeParams();
+            }
+        }
+        synchronized (NfcService.this) {
+            if (mDiscoveryTechParams != null && mDiscoveryTechParams.uid == uid) {
+                mDiscoveryTechParams.binder.unlinkToDeath(mDiscoveryTechDeathRecipient, 0);
+                mDeviceHost.resetDiscoveryTech();
+                mDiscoveryTechParams = null;
+                if (isNfcEnabled()) {
+                  applyRouting(true);
+                }
             }
         }
     }
@@ -1713,6 +1730,23 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void updateDiscoveryTechnology(IBinder binder, int pollTech, int listenTech)
                 throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
+            int callingUid = Binder.getCallingUid();
+            boolean privilegedCaller = false;
+            // Allow non-foreground callers with system uid or systemui
+            String packageName = getPackageNameFromUid(callingUid);
+            if (packageName != null) {
+                privilegedCaller = (callingUid == Process.SYSTEM_UID
+                        || packageName.equals(SYSTEM_UI));
+            } else {
+                privilegedCaller = (callingUid == Process.SYSTEM_UID);
+            }
+            if (!privilegedCaller
+                    && !mForegroundUtils.registerUidToBackgroundCallback(
+                            NfcService.this, callingUid)) {
+                Log.e(TAG,
+                  "updateDiscoveryTechnology: Caller shall be in foreground or a system process.");
+                return;
+            }
             synchronized (NfcService.this) {
                 if (!isNfcEnabled()) {
                     Log.d(TAG, "updateDiscoveryTechnology: NFC is not enabled.");
@@ -1723,16 +1757,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         Integer.toHexString(pollTech) +
                         ", listenTech: 0x" + Integer.toHexString(listenTech));
                 if (pollTech == NfcAdapter.FLAG_USE_ALL_TECH &&
-                        listenTech == NfcAdapter.FLAG_USE_ALL_TECH) {
+                        listenTech == NfcAdapter.FLAG_USE_ALL_TECH &&
+                        mDiscoveryTechParams != null) {
                     try {
-                        mDeviceHost.resetDiscoveryTech();
                         binder.unlinkToDeath(mDiscoveryTechDeathRecipient, 0);
+                        mDeviceHost.resetDiscoveryTech();
+                        mDiscoveryTechParams = null;
                     } catch (NoSuchElementException e) {
                         Log.e(TAG, "Change Tech Binder was never registered.");
                     }
                 } else {
                     try {
                         mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        mDiscoveryTechParams = new DiscoveryTechParams();
+                        mDiscoveryTechParams.uid = callingUid;
+                        mDiscoveryTechParams.binder = binder;
                         binder.linkToDeath(mDiscoveryTechDeathRecipient, 0);
                     } catch (RemoteException e) {
                         Log.e(TAG, "Remote binder has already died.");
@@ -2212,13 +2251,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     final class DiscoveryTechDeathRecipient implements IBinder.DeathRecipient {
         @Override
         public void binderDied() {
+            if (DBG) Log.d(TAG, "setDiscoveryTech death recipient");
             synchronized (NfcService.this) {
-                if (isNfcEnabled()) {
-                    if (DBG) Log.d(TAG, "setDiscoveryTech death recipient");
+                if (isNfcEnabled() && mDiscoveryTechParams != null) {
                     mDeviceHost.resetDiscoveryTech();
-                    applyRouting(true);
+                    mDiscoveryTechParams = null;
                 }
             }
+            applyRouting(true);
         }
     }
 
@@ -3881,10 +3921,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             default:
                 return NfcServiceDumpProto.STATE_UNKNOWN;
         }
-    }
-
-    public String getNfaStorageDir() {
-        return mDeviceHost.getNfaStorageDir();
     }
 
     private void copyNativeCrashLogsIfAny(PrintWriter pw) {

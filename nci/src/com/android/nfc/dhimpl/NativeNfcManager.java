@@ -77,8 +77,6 @@ public class NativeNfcManager implements DeviceHost {
 
     private native boolean doDownload();
 
-    public native int doGetLastError();
-
     @Override
     public boolean checkFirmware() {
         return doDownload();
@@ -340,9 +338,6 @@ public class NativeNfcManager implements DeviceHost {
     public boolean setNfcSecure(boolean enable) {
         return doSetNfcSecure(enable);
     }
-
-    @Override
-    public native String getNfaStorageDir();
 
     private native void doStartStopPolling(boolean start);
 
