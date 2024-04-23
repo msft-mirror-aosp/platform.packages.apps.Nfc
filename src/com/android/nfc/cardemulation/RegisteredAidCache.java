@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.PriorityQueue;
 import java.util.TreeMap;
+import androidx.annotation.VisibleForTesting;
 
 public class RegisteredAidCache {
     static final String TAG = "RegisteredAidCache";
@@ -155,8 +156,13 @@ public class RegisteredAidCache {
     boolean mRequiresScreenOnServiceExist = false;
 
     public RegisteredAidCache(Context context) {
+        this(context, new AidRoutingManager());
+    }
+
+    @VisibleForTesting
+    public RegisteredAidCache(Context context, AidRoutingManager routingManager) {
         mContext = context;
-        mRoutingManager = new AidRoutingManager();
+        mRoutingManager = routingManager ;
         mPreferredPaymentService = null;
         mUserIdPreferredPaymentService = -1;
         mPreferredForegroundService = null;
