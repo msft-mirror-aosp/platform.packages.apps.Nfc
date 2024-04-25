@@ -96,15 +96,6 @@ public interface DeviceHost {
     }
 
     public interface NfcDepEndpoint {
-
-        /**
-         * Peer-to-Peer Target
-         */
-        public static final short MODE_P2P_TARGET = 0x00;
-        /**
-         * Peer-to-Peer Initiator
-         */
-        public static final short MODE_P2P_INITIATOR = 0x01;
         /**
          * Invalid target mode
          */
@@ -177,10 +168,6 @@ public interface DeviceHost {
     int getMaxTransceiveLength(int technology);
 
     public int getAidTableSize();
-
-    void setP2pInitiatorModes(int modes);
-
-    void setP2pTargetModes(int modes);
 
     boolean getExtendedLengthApdusSupported();
 
