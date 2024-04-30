@@ -2872,12 +2872,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
             } else {
                 paramsBuilder.setTechMask(NfcDiscoveryParameters.NFC_POLL_DEFAULT);
-                paramsBuilder.setEnableP2p(false);
             }
         } else if (screenState == ScreenStateHelper.SCREEN_STATE_ON_LOCKED && mInProvisionMode) {
             paramsBuilder.setTechMask(NfcDiscoveryParameters.NFC_POLL_DEFAULT);
-            // enable P2P for MFM/EDU/Corp provisioning
-            paramsBuilder.setEnableP2p(false);
         } else if (screenState == ScreenStateHelper.SCREEN_STATE_ON_LOCKED &&
             mNfcUnlockManager.isLockscreenPollingEnabled() && isReaderOptionEnabled()) {
             int techMask = 0;
@@ -2885,7 +2882,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 techMask |= mNfcUnlockManager.getLockscreenPollMask();
             paramsBuilder.setTechMask(techMask);
             paramsBuilder.setEnableLowPowerDiscovery(false);
-            paramsBuilder.setEnableP2p(false);
         }
 
         if (mIsHceCapable && mReaderModeParams == null) {
