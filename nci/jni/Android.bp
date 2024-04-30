@@ -55,11 +55,15 @@ cc_library_shared {
         "libxml2",
     ],
 
+    defaults: [
+        "aconfig_lib_cc_static_link.defaults",
+    ],
+
     product_variables: {
         debuggable: {
             cflags: [
                 "-DDCHECK_ALWAYS_ON",
-                "-DDTA_ENABLED"
+                "-DDTA_ENABLED",
             ],
         },
     },
@@ -70,8 +74,8 @@ cc_library_shared {
     },
     stl: "libc++_static",
     apex_available: [
-         "//apex_available:platform",
-         "com.android.nfcservices"
+        "//apex_available:platform",
+        "com.android.nfcservices",
     ],
     required: [
         // Provide a default libnfc-nci.conf in /system/etc for devices that
@@ -97,7 +101,7 @@ cc_test {
     ],
 
     header_libs: [
-        "jni_headers"
+        "jni_headers",
     ],
 
     include_dirs: [
