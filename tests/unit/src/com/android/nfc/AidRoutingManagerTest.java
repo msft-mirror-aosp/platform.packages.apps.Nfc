@@ -53,6 +53,8 @@ public class AidRoutingManagerTest {
     public void setUp() throws Exception {
         mStaticMockSession = ExtendedMockito.mockitoSession()
                 .mockStatic(RoutingOptionManager.class)
+                .mockStatic(NfcService.class)
+                .mockStatic(NfcStatsLog.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
 
@@ -87,5 +89,47 @@ public class AidRoutingManagerTest {
         aidEntryMap.put("test*", aidEntry);
         size = mAidRoutingManager.calculateAidRouteSize(aidEntryMap);
         Assert.assertEquals(6, size);
+    }
+
+    @Test
+    public void testOnNfccRoutingTableCleared() {
+        if (!mNfcSupported) return;
+
+        mAidRoutingManager.onNfccRoutingTableCleared();
+        boolean isTableCleared = mAidRoutingManager.isRoutingTableCleared();
+        Assert.assertTrue(isTableCleared);
+    }
+
+    @Test
+    public void testSupportsAidPrefixRouting() {
+        if (!mNfcSupported) return;
+
+        boolean isSupportPrefixRouting = mAidRoutingManager.supportsAidPrefixRouting();
+        Assert.assertFalse(isSupportPrefixRouting);
+    }
+
+    @Test
+    public void testSupportsAidSubsetRouting() {
+        if (!mNfcSupported) return;
+
+        boolean isSupportSubsetRouting = mAidRoutingManager.supportsAidSubsetRouting();
+        Assert.assertFalse(isSupportSubsetRouting);
+    }
+
+    @Test
+    public void testConfigureRoutingErrorOccurred() {
+        if (!mNfcSupported) return;
+
+        NfcService nfcService = mock(NfcService.class);
+        when(NfcService.getInstance()).thenReturn(nfcService);
+        when(nfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_2_0);
+        HashMap<String, AidRoutingManager.AidEntry> aidEntryMap = new HashMap<>();
+        boolean isConfigureRouting = mAidRoutingManager.configureRouting(aidEntryMap, true);
+        Assert.assertTrue(isConfigureRouting);
+        ExtendedMockito.verify(() -> NfcStatsLog.write(
+                NfcStatsLog.NFC_ERROR_OCCURRED,
+                NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__AID_OVERFLOW,
+                0,
+                0));
     }
 }

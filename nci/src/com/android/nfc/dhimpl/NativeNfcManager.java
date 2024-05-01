@@ -233,7 +233,6 @@ public class NativeNfcManager implements DeviceHost {
             boolean enableLowPowerPolling,
             boolean enableReaderMode,
             boolean enableHostRouting,
-            boolean enableP2p,
             boolean restart);
 
     @Override
@@ -243,7 +242,6 @@ public class NativeNfcManager implements DeviceHost {
                 params.shouldEnableLowPowerDiscovery(),
                 params.shouldEnableReaderMode(),
                 params.shouldEnableHostRouting(),
-                params.shouldEnableP2p(),
                 restart);
     }
 
@@ -304,20 +302,6 @@ public class NativeNfcManager implements DeviceHost {
 
     public native int getAidTableSize();
 
-    private native void doSetP2pInitiatorModes(int modes);
-
-    @Override
-    public void setP2pInitiatorModes(int modes) {
-        doSetP2pInitiatorModes(modes);
-    }
-
-    private native void doSetP2pTargetModes(int modes);
-
-    @Override
-    public void setP2pTargetModes(int modes) {
-        doSetP2pTargetModes(modes);
-    }
-
     @Override
     public boolean getExtendedLengthApdusSupported() {
         /* 261 is the default size if extended length frames aren't supported */
@@ -330,22 +314,6 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public void dump(FileDescriptor fd) {
         doDump(fd);
-    }
-
-    private native void doEnableScreenOffSuspend();
-
-    @Override
-    public boolean enableScreenOffSuspend() {
-        doEnableScreenOffSuspend();
-        return true;
-    }
-
-    private native void doDisableScreenOffSuspend();
-
-    @Override
-    public boolean disableScreenOffSuspend() {
-        doDisableScreenOffSuspend();
-        return true;
     }
 
     private native boolean doSetNfcSecure(boolean enable);
