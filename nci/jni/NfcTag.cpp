@@ -1334,7 +1334,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
   switch (event) {
     case NFA_DISC_RESULT_EVT: {
       tNFA_DISC_RESULT& disc_result = data->disc_result;
-      if (disc_result.status == NFA_STATUS_OK) {
+      if ((disc_result.status == NFA_STATUS_OK) && !mIsReselecting) {
         discoverTechnologies(disc_result);
       }
     } break;
