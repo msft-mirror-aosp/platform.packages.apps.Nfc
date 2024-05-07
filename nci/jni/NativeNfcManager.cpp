@@ -1729,16 +1729,6 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
   prevScreenState = state;
 }
 
-static void nfcManager_doEnableScreenOffSuspend(JNIEnv* e, jobject o) {
-  PowerSwitch::getInstance().setScreenOffPowerState(
-      PowerSwitch::POWER_STATE_FULL);
-}
-
-static void nfcManager_doDisableScreenOffSuspend(JNIEnv* e, jobject o) {
-  PowerSwitch::getInstance().setScreenOffPowerState(
-      PowerSwitch::POWER_STATE_OFF);
-}
-
 /*******************************************************************************
 **
 ** Function:        nfcManager_getIsoDepMaxTransceiveLength
@@ -2062,13 +2052,7 @@ static JNINativeMethod gMethods[] = {
 
     {"doAbort", "(Ljava/lang/String;)V", (void*)nfcManager_doAbort},
 
-    {"doEnableScreenOffSuspend", "()V",
-     (void*)nfcManager_doEnableScreenOffSuspend},
-
     {"doSetScreenState", "(I)V", (void*)nfcManager_doSetScreenState},
-
-    {"doDisableScreenOffSuspend", "()V",
-     (void*)nfcManager_doDisableScreenOffSuspend},
 
     {"doDump", "(Ljava/io/FileDescriptor;)V", (void*)nfcManager_doDump},
 
