@@ -1,4 +1,5 @@
 package {
+    default_team: "trendy_team_fwk_nfc",
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
@@ -11,6 +12,8 @@ android_test {
         "android.test.runner",
         "android.test.base",
         "android.test.mock",
+        "framework-nfc.impl",
+        "unsupportedappusage",
     ],
 
     static_libs: [
@@ -18,10 +21,14 @@ android_test {
         "androidx.test.rules",
         "androidx.test.ext.junit",
         "mockito-target-extended-minus-junit4",
-        "truth-prebuilt",
+        "frameworks-base-testutils",
+        "truth",
         "androidx.annotation_annotation",
         "androidx.appcompat_appcompat",
         "com.google.android.material_material",
+        "nfc_flags_lib",
+        "flag-junit",
+        "platform-test-annotations",
     ],
 
     jni_libs: [
@@ -32,8 +39,10 @@ android_test {
 
     // Include all test java files.
     srcs: [
-      "src/**/*.java",
-      ":nfc-sources",
+        "src/**/*.java",
+        // TODO(b/263565193): Temp hack until NFC APK can link against module_current.
+        ":framework-nfc-updatable-sources",
+        ":nfc-sources",
     ],
 
     platform_apis: true,

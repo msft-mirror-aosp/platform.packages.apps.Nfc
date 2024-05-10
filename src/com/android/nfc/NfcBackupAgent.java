@@ -29,29 +29,38 @@ public class NfcBackupAgent extends BackupAgentHelper {
     @Override
     public void onCreate() {
         SharedPreferencesBackupHelper helper =
-                new SharedPreferencesBackupHelper(this, NfcService.PREF);
+                new SharedPreferencesBackupHelper(
+                        this, NfcService.PREF, NfcService.PREF_TAG_APP_LIST);
         addHelper(SHARED_PREFS_BACKUP_KEY, helper);
     }
 
     @Override
     public void onRestoreFinished() {
         NfcAdapter nfcAdapter = NfcAdapter.getDefaultAdapter(this);
+        NfcService.sIsNfcRestore = true;
 
         if (nfcAdapter != null) {
             SharedPreferences prefs = getSharedPreferences(NfcService.PREF,
                 Context.MODE_MULTI_PROCESS);
-            if (prefs.getBoolean(NfcService.PREF_NDEF_PUSH_ON,
-                    NfcService.NDEF_PUSH_ON_DEFAULT)) {
-                nfcAdapter.enableNdefPush();
-            } else {
-                nfcAdapter.disableNdefPush();
-            }
-
             if (prefs.getBoolean(NfcService.PREF_NFC_ON,
                     NfcService.NFC_ON_DEFAULT)) {
                 nfcAdapter.enable();
             } else {
                 nfcAdapter.disable();
+            }
+
+            if (prefs.getBoolean(NfcService.PREF_NFC_READER_OPTION_ON,
+                    NfcService.NFC_READER_OPTION_DEFAULT)) {
+                nfcAdapter.enableReaderOption(true);
+            } else {
+                nfcAdapter.enableReaderOption(false);
+            }
+
+            if (prefs.getBoolean(NfcService.PREF_SECURE_NFC_ON, NfcService.SECURE_NFC_ON_DEFAULT)
+                    && nfcAdapter.isSecureNfcSupported()) {
+                nfcAdapter.enableSecureNfc(true);
+            } else {
+                nfcAdapter.enableSecureNfc(false);
             }
         }
     }
