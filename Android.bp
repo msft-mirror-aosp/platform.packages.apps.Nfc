@@ -10,28 +10,74 @@ genrule {
     out: ["com/android/nfc/NfcStatsLog.java"],
 }
 
+java_library {
+    name: "bluetooth-protos-nfc-enums-java-gen",
+    installable: false,
+    proto: {
+        type: "stream",
+    },
+    srcs: [
+        ":srcs_bluetooth_protos_nfc",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.nfcservices",
+    ],
+    min_sdk_version: "VanillaIceCream",
+    sdk_version: "module_current",
+}
+
 // NCI Configuration
 android_app {
     name: "NfcNci",
     srcs: [
         "src/**/*.java",
         "nci/**/*.java",
+        ":framework-nfc-javastream-protos",
+        // TODO(b/263565193): Temp hack until NFC APK can link against module_current.
+        ":framework-nfc-updatable-sources",
         ":statslog-Nfc-java-gen",
     ],
     platform_apis: true,
+    privileged: true,
     certificate: "platform",
+    // TODO(b/263565193): Change when NFC APK can link against module_current.
+    // min_sdk_version: "VanillaIceCream",
+    // sdk_version: "module_current",
     jni_libs: ["libnfc_nci_jni"],
+    required: [
+        // Provide a default libnfc-nci.conf in /system/etc for devices that
+        // does not ship one in /product
+        "libnfc-nci.conf-default",
+    ],
+    libs: [
+        "framework-annotations-lib",
+        "framework-bluetooth",
+        "framework-configinfrastructure",
+        "framework-nfc.impl",
+        "framework-statsd.stubs.module_lib",
+        "framework-wifi",
+        "unsupportedappusage"
+    ],
     static_libs: [
         "android.se.omapi-V1-java",
         "androidx.annotation_annotation",
         "androidx.appcompat_appcompat",
+        "bluetooth-protos-nfc-enums-java-gen",
         "com.google.android.material_material",
+        "modules-utils-fastxmlserializer",
         "PlatformProperties",
+        "nfc_flags_lib",
     ],
     optimize: {
         proguard_flags_files: ["proguard.flags"],
     },
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.nfcservices"
+    ],
     jarjar_rules: "jarjar-rules.txt",
+    privapp_allowlist: ":privapp_allowlist_com.android.nfc.xml",
 }
 
 filegroup {
@@ -43,4 +89,9 @@ filegroup {
     visibility: [
         "//packages/apps/Nfc/tests/unit",
     ],
+}
+
+filegroup {
+    name: "privapp_allowlist_com.android.nfc.xml",
+    srcs: ["com.android.nfc.xml"],
 }
