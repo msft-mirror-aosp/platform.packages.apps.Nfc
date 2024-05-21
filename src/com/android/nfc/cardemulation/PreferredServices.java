@@ -462,7 +462,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         if (um == null) {
             return null;
         }
-        return um.getUserName();
+        return com.android.nfc.Utils.maskSubstring(um.getUserName(), 3);
     }
 
     /**
