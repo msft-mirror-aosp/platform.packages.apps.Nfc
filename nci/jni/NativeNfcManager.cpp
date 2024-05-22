@@ -232,7 +232,12 @@ nfc_jni_native_data* getNative(JNIEnv* e, jobject o) {
 *******************************************************************************/
 static void handleRfDiscoveryEvent(tNFC_RESULT_DEVT* discoveredDevice) {
   NfcTag& natTag = NfcTag::getInstance();
-  natTag.setNumDiscNtf(natTag.getNumDiscNtf() + 1);
+
+  LOG(DEBUG) << StringPrintf("%s: ", __func__);
+
+  if (discoveredDevice->protocol != NFA_PROTOCOL_NFC_DEP) {
+    natTag.setNumDiscNtf(natTag.getNumDiscNtf() + 1);
+  }
   if (discoveredDevice->more == NCI_DISCOVER_NTF_MORE) {
     // there is more discovery notification coming
     return;
@@ -2465,8 +2470,7 @@ static jbyteArray nfcManager_getProprietaryCaps(JNIEnv* e, jobject o) {
                    NCI_ANDROID_GET_CAPS};
   SyncEventGuard guard(gNfaVsCommand);
 
-  tNFA_STATUS status =
-      NFA_SendRawVsCommand(sizeof(cmd), cmd, nfaSendRawVsCmdCallback);
+  tNFA_STATUS status = NFA_SendRawVsCommand(sizeof(cmd), cmd, nfaVSCallback);
   if (status == NFA_STATUS_OK) {
     gNfaVsCommand.wait();
   } else {

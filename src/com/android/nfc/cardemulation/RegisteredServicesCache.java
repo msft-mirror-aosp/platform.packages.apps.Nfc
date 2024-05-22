@@ -105,6 +105,7 @@ public class RegisteredServicesCache {
     final SettingsFile mDynamicSettingsFile;
     final SettingsFile mOthersFile;
     final ServiceParser mServiceParser;
+    final RoutingOptionManager mRoutingOptionManager;
 
     public interface Callback {
         /**
@@ -211,27 +212,43 @@ public class RegisteredServicesCache {
         return services;
     }
 
-    private int getProfileParentId(int userId) {
-        UserManager um = mContext.createContextAsUser(
-                UserHandle.of(userId), /*flags=*/0)
-                .getSystemService(UserManager.class);
+    private int getProfileParentId(Context context, int userId) {
+        UserManager um = context.getSystemService(UserManager.class);
         UserHandle uh = um.getProfileParent(UserHandle.of(userId));
         return uh == null ? userId : uh.getIdentifier();
     }
 
+    private int getProfileParentId(int userId) {
+        return getProfileParentId(mContext.createContextAsUser(
+                UserHandle.of(userId), /*flags=*/0), userId);
+    }
+
     public RegisteredServicesCache(Context context, Callback callback) {
         this(context, callback, new SettingsFile(context, AID_XML_PATH),
-                new SettingsFile(context, OTHER_STATUS_PATH), new RealServiceParser());
+                new SettingsFile(context, OTHER_STATUS_PATH), new RealServiceParser(),
+                RoutingOptionManager.getInstance());
+    }
+
+    @VisibleForTesting
+    RegisteredServicesCache(Context context, Callback callback,
+                                   RoutingOptionManager routingOptionManager) {
+        this(context, callback, new SettingsFile(context, AID_XML_PATH),
+                new SettingsFile(context, OTHER_STATUS_PATH), new RealServiceParser(),
+                routingOptionManager);
     }
 
     @VisibleForTesting
     RegisteredServicesCache(Context context, Callback callback, SettingsFile dynamicSettings,
-                            SettingsFile otherSettings, ServiceParser serviceParser) {
+                            SettingsFile otherSettings, ServiceParser serviceParser,
+                            RoutingOptionManager routingOptionManager) {
         mContext = context;
         mCallback = callback;
         mServiceParser = serviceParser;
+        mRoutingOptionManager = routingOptionManager;
 
-        refreshUserProfilesLocked();
+        synchronized (mLock) {
+            refreshUserProfilesLocked(false);
+        }
 
         final BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
@@ -240,18 +257,20 @@ public class RegisteredServicesCache {
                 String action = intent.getAction();
                 if (VDBG) Log.d(TAG, "Intent action: " + action);
 
-                if (RoutingOptionManager.getInstance().isRoutingTableOverrided()) {
+                if (mRoutingOptionManager.isRoutingTableOverrided()) {
                     if (DEBUG) Log.d(TAG, "Routing table overrided. Skip invalidateCache()");
                 }
                 if (uid == -1) return;
                 int userId = UserHandle.getUserHandleForUid(uid).getIdentifier();
                 int currentUser = ActivityManager.getCurrentUser();
-                if (currentUser != getProfileParentId(userId)) {
+                if (currentUser != getProfileParentId(context, userId)) {
                     // Cache will automatically be updated on user switch
                     if (VDBG) Log.d(TAG, "Ignoring package change intent from non-current user");
                     return;
                 }
-                if (!Utils.hasCeServicesWithValidPermissions(mContext, intent, userId)) {
+                // If app not removed, check if the app has any valid CE services.
+                if (!Intent.ACTION_PACKAGE_REMOVED.equals(action) &&
+                        !Utils.hasCeServicesWithValidPermissions(mContext, intent, userId)) {
                     if (VDBG) Log.d(TAG, "Ignoring package change intent from non-CE app");
                     return;
                 }
@@ -305,17 +324,17 @@ public class RegisteredServicesCache {
 
     public void onUserSwitched() {
         synchronized (mLock) {
-            refreshUserProfilesLocked();
+            refreshUserProfilesLocked(false);
         }
     }
 
     public void onManagedProfileChanged() {
         synchronized (mLock) {
-            refreshUserProfilesLocked();
+            refreshUserProfilesLocked(true);
         }
     }
 
-    private void refreshUserProfilesLocked() {
+    private void refreshUserProfilesLocked(boolean invalidateCache) {
         UserManager um = mContext.createContextAsUser(
                 UserHandle.of(ActivityManager.getCurrentUser()), /*flags=*/0)
                 .getSystemService(UserManager.class);
@@ -328,6 +347,11 @@ public class RegisteredServicesCache {
             }
         }
         mUserHandles.removeAll(removeUserHandles);
+        if (invalidateCache) {
+            for (UserHandle uh : mUserHandles) {
+                invalidateCache(uh.getIdentifier(), false);
+            }
+        }
     }
 
     void dump(List<ApduServiceInfo> services) {
@@ -1351,7 +1375,7 @@ public class RegisteredServicesCache {
                 for (UserHandle uh : mUserHandles) {
                     UserManager um = mContext.createContextAsUser(
                             uh, /*flags=*/0).getSystemService(UserManager.class);
-                    pw.println("User " + um.getUserName() + " : ");
+                    pw.println("User " + Utils.maskSubstring(um.getUserName(), 3));
                     UserServices userServices = findOrCreateUserLocked(uh.getIdentifier());
                     for (ApduServiceInfo service : userServices.services.values()) {
                         service.dump(pFd, pw, args);
