@@ -17,10 +17,12 @@
 package com.android.nfc;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -29,10 +31,16 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.nfc.Constants;
+import android.nfc.cardemulation.HostNfcFService;
+import android.nfc.cardemulation.NfcFServiceInfo;
 import android.os.Build;
 import android.os.Handler;
+import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
@@ -65,13 +73,16 @@ public class HostNfcFEmulationManagerTest {
     private boolean mNfcSupported;
     private MockitoSession mStaticMockSession;
     private HostNfcFEmulationManager mHostNfcFEmulationManager;
+    private ComponentName componentName;
 
     @Before
     public void setUp() throws Exception {
         mStaticMockSession = ExtendedMockito.mockitoSession()
+                .mockStatic(Flags.class)
+                .mockStatic(NfcStatsLog.class)
+                .mockStatic(Message.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
-
 
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         PackageManager pm = context.getPackageManager();
@@ -101,11 +112,31 @@ public class HostNfcFEmulationManagerTest {
                 return mock(ContentResolver.class);
             }
 
+            public boolean bindServiceAsUser(
+                    @NonNull @RequiresPermission Intent service, @NonNull ServiceConnection conn,
+                    int flags,
+                    @NonNull UserHandle user) {
+                return true;
+            }
+
+            public void unbindService(@NonNull ServiceConnection conn) {
+
+            }
+
 
         };
 
+        when(Flags.statsdCeEventsFlag()).thenReturn(false);
         RegisteredT3tIdentifiersCache t3tIdentifiersCache = mock(
                 RegisteredT3tIdentifiersCache.class);
+        NfcFServiceInfo nfcFServiceInfo = mock(NfcFServiceInfo.class);
+        componentName = mock(ComponentName.class);
+        when(nfcFServiceInfo.getComponent()).thenReturn(componentName);
+        when(t3tIdentifiersCache.resolveNfcid2("6D2E616E64726F69")).thenReturn(nfcFServiceInfo);
+        Message message = mock(Message.class);
+        when(Message.obtain(null, HostNfcFService.MSG_COMMAND_PACKET)).thenReturn(message);
+        when(Message.obtain(null, HostNfcFService.MSG_DEACTIVATED)).thenReturn(message);
+        when(Message.obtain()).thenReturn(message);
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> mHostNfcFEmulationManager =
@@ -124,13 +155,61 @@ public class HostNfcFEmulationManagerTest {
 
         String packageName = mHostNfcFEmulationManager.getEnabledFgServiceName();
         Assert.assertNull(packageName);
-        ComponentName componentName = mock(ComponentName.class);
         when(componentName.getPackageName()).thenReturn("com.android.nfc");
         mHostNfcFEmulationManager.onEnabledForegroundNfcFServiceChanged(0, componentName);
         packageName = mHostNfcFEmulationManager.getEnabledFgServiceName();
         Assert.assertNotNull(packageName);
         Assert.assertEquals("com.android.nfc", packageName);
 
+    }
+
+    @Test
+    public void testOnHostEmulationData() {
+        if (!mNfcSupported) return;
+
+        testOnEnabledForegroundNfcFServiceChanged();
+        mHostNfcFEmulationManager.onHostEmulationData("com.android.nfc".getBytes());
+        ExtendedMockito.verify(() -> NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
+                NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT,
+                "HCEF",
+                0));
+    }
+
+    @Test
+    public void testOnNfcDisabled() {
+        if (!mNfcSupported) return;
+
+        testOnHostEmulationData();
+        ServiceConnection serviceConnection = mHostNfcFEmulationManager.getServiceConnection();
+        Message message = mock(Message.class);
+        when(Message.obtain(null, HostNfcFService.MSG_COMMAND_PACKET)).thenReturn(message);
+        serviceConnection.onServiceConnected(mock(ComponentName.class), mock(IBinder.class));
+        int userId = mHostNfcFEmulationManager.getServiceUserId();
+        Assert.assertEquals(0, userId);
+        mHostNfcFEmulationManager.onNfcDisabled();
+        userId = mHostNfcFEmulationManager.getServiceUserId();
+        Assert.assertEquals(-1, userId);
+        ExtendedMockito.verify(() -> Message.obtain(null, HostNfcFService.MSG_COMMAND_PACKET));
+    }
+
+
+    @Test
+    public void testOnUserSwitched() {
+        if (!mNfcSupported) return;
+
+        testOnHostEmulationData();
+        ServiceConnection serviceConnection = mHostNfcFEmulationManager.getServiceConnection();
+        Message message = mock(Message.class);
+        when(Message.obtain(null, HostNfcFService.MSG_COMMAND_PACKET)).thenReturn(message);
+        serviceConnection.onServiceConnected(mock(ComponentName.class), mock(IBinder.class));
+        int userId = mHostNfcFEmulationManager.getServiceUserId();
+        Assert.assertEquals(0, userId);
+        mHostNfcFEmulationManager.onUserSwitched();
+        boolean isUserSwitched = mHostNfcFEmulationManager.isUserSwitched();
+        Assert.assertTrue(isUserSwitched);
+        userId = mHostNfcFEmulationManager.getServiceUserId();
+        Assert.assertEquals(-1, userId);
+        ExtendedMockito.verify(() -> Message.obtain(null, HostNfcFService.MSG_COMMAND_PACKET));
     }
 }
 
