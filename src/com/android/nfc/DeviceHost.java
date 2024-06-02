@@ -88,7 +88,7 @@ public interface DeviceHost {
     }
 
     public interface TagDisconnectedCallback {
-        void onTagDisconnected(long handle);
+        void onTagDisconnected();
     }
 
     public interface NfceeEndpoint {
