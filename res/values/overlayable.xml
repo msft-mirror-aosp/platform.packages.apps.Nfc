@@ -32,6 +32,7 @@
             <item name="toast_debounce_time_ms" type="integer" />
             <item name="unknown_tag_polling_delay" type="integer" />
             <item name="unknown_tag_polling_delay_count_max" type="integer" />
+            <item name="unknown_tag_read_error_count_max" type="integer" />
             <item name="unknown_tag_polling_delay_long" type="integer" />
             <item name="config_skuSupportsSecureNfc" type="array" />
             <item name="enable_secure_nfc_support" type="bool" />
@@ -43,6 +44,8 @@
             <item name="antenna_y" type="array" />
             <item name="nfc_observe_mode_supported" type="bool" />
             <item name="nfc_proprietary_getcaps_supported" type="bool" />
+            <item name="max_event_log_num" type="integer" />
+            <item name="enable_oem_extension" type="bool" />
           <!-- Params from config.xml that can be overlaid -->
 
           <!-- Params from strings.xml that can be overlaid -->

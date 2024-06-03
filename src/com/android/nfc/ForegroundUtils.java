@@ -45,7 +45,8 @@ public class ForegroundUtils implements ActivityManager.OnUidImportanceListener 
         private static ForegroundUtils sInstance = null;
     }
 
-    private ForegroundUtils(ActivityManager am) {
+    @VisibleForTesting
+    public ForegroundUtils(ActivityManager am) {
         mActivityManager = am;
         try {
             mActivityManager.addOnUidImportanceListener(this,
@@ -188,5 +189,10 @@ public class ForegroundUtils implements ActivityManager.OnUidImportanceListener 
     @VisibleForTesting
     public SparseArray<List<Callback>> getBackgroundCallbacks() {
         return mBackgroundCallbacks;
+    }
+
+    @VisibleForTesting
+    public void clearForegroundlist() {
+        mForegroundUids.clear();
     }
 }

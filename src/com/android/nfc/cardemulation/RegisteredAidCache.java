@@ -139,6 +139,10 @@ public class RegisteredAidCache {
                     ", mustRoute=" + mustRoute +
                     '}';
         }
+
+        String getCategory() {
+            return category;
+        }
     }
 
     final AidResolveInfo EMPTY_RESOLVE_INFO = new AidResolveInfo();
@@ -169,7 +173,7 @@ public class RegisteredAidCache {
     }
 
     @VisibleForTesting
-    RegisteredAidCache(Context context, WalletRoleObserver walletRoleObserver,
+    public RegisteredAidCache(Context context, WalletRoleObserver walletRoleObserver,
             AidRoutingManager routingManager) {
         mContext = context;
         mWalletRoleObserver = walletRoleObserver;
@@ -1206,6 +1210,40 @@ public class RegisteredAidCache {
             return mPreferredPaymentService;
         }
     }
+    public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
+        if (mPreferredForegroundService != null) {
+            if (mPreferredForegroundService.getPackageName().equals(packageName) &&
+                userId == mUserIdPreferredForegroundService) {
+                return true;
+            } else {
+                Log.i(TAG, "NfcService:" + packageName + "(" + userId
+                    + ") is not equal to the foreground service "
+                    + mPreferredForegroundService + "(" + mUserIdPreferredForegroundService +")" );
+                return false;
+            }
+        } else if(mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
+            if (mDefaultWalletHolderPackageName != null &&
+                mDefaultWalletHolderPackageName.equals(packageName) &&
+                userId == mUserIdDefaultWalletHolder) {
+                return true;
+            } else {
+                Log.i(TAG, "NfcService:" + packageName + "(" + userId
+                    + ")  is not equal to the default wallet service "
+                    + mDefaultWalletHolderPackageName + "(" + mUserIdDefaultWalletHolder +")" );
+                return false;
+            }
+        } else if (mPreferredPaymentService != null &&
+            userId == mUserIdPreferredPaymentService &&
+            mPreferredPaymentService.getPackageName().equals(packageName)) {
+            return true;
+        } else {
+            Log.i(TAG, "NfcService:" + packageName + "(" + userId
+                    + ") is not equal to the default payment service "
+                    + mPreferredPaymentService + "(" + mUserIdPreferredPaymentService +")" );
+            return false;
+        }
+    }
+
 
     public void onNfcDisabled() {
         synchronized (mLock) {

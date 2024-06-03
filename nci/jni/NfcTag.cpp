@@ -817,11 +817,13 @@ void NfcTag::fillNativeNfcTagMembers4(JNIEnv* e, jclass tag_cls, jobject tag,
       merge_sak = (merge_sak | mTechParams[i].param.pa.sel_rsp);
     }
     for (int i = 0; i < mNumTechList; i++) {
-      mTechParams[i].param.pa.sel_rsp = merge_sak;
-      actBytes.reset(e->NewByteArray(1));
-      e->SetByteArrayRegion(actBytes.get(), 0, 1,
-                            (jbyte*)&mTechParams[i].param.pa.sel_rsp);
-      e->SetObjectArrayElement(techActBytes.get(), i, actBytes.get());
+      if (TARGET_TYPE_ISO14443_3A == mTechList[i]) {
+        mTechParams[i].param.pa.sel_rsp = merge_sak;
+        actBytes.reset(e->NewByteArray(1));
+        e->SetByteArrayRegion(actBytes.get(), 0, 1,
+                              (jbyte*)&mTechParams[i].param.pa.sel_rsp);
+        e->SetObjectArrayElement(techActBytes.get(), i, actBytes.get());
+      }
     }
   }
 
@@ -1020,73 +1022,6 @@ void NfcTag::fillNativeNfcTagMembers5(JNIEnv* e, jclass tag_cls, jobject tag,
   mTechListTail = mNumTechList;
   if (mNumDiscNtf == 0) mTechListTail = 0;
   LOG(DEBUG) << StringPrintf("%s;mTechListTail=%x", fn, mTechListTail);
-}
-
-/*******************************************************************************
-**
-** Function:        isP2pDiscovered
-**
-** Description:     Does the peer support P2P?
-**
-** Returns:         True if the peer supports P2P.
-**
-*******************************************************************************/
-bool NfcTag::isP2pDiscovered() {
-  static const char fn[] = "NfcTag::isP2pDiscovered";
-  bool retval = false;
-
-  for (int i = 0; i < mNumDiscTechList; i++) {
-    if (mTechLibNfcTypesDiscData[i] == NFA_PROTOCOL_NFC_DEP) {
-      // if remote device supports P2P
-      LOG(DEBUG) << StringPrintf("%s: discovered P2P", fn);
-      retval = true;
-      break;
-    }
-  }
-  LOG(DEBUG) << StringPrintf("%s: return=%u", fn, retval);
-  return retval;
-}
-
-/*******************************************************************************
-**
-** Function:        selectP2p
-**
-** Description:     Select the preferred P2P technology if there is a choice.
-**
-** Returns:         None
-**
-*******************************************************************************/
-void NfcTag::selectP2p() {
-  static const char fn[] = "NfcTag::selectP2p";
-  uint8_t rfDiscoveryId = 0;
-
-  for (int i = 0; i < mNumTechList; i++) {
-    // if remote device does not support P2P, just skip it
-    if (mTechLibNfcTypes[i] != NFA_PROTOCOL_NFC_DEP) continue;
-
-    // if remote device supports tech F;
-    // tech F is preferred because it is faster than tech A
-    if ((mTechParams[i].mode == NFC_DISCOVERY_TYPE_POLL_F) ||
-        (mTechParams[i].mode == NFC_DISCOVERY_TYPE_POLL_F_ACTIVE)) {
-      rfDiscoveryId = mTechHandles[i];
-      break;  // no need to search further
-    } else if ((mTechParams[i].mode == NFC_DISCOVERY_TYPE_POLL_A) ||
-               (mTechParams[i].mode == NFC_DISCOVERY_TYPE_POLL_A_ACTIVE)) {
-      // only choose tech A if tech F is unavailable
-      if (rfDiscoveryId == 0) rfDiscoveryId = mTechHandles[i];
-    }
-  }
-
-  if (rfDiscoveryId > 0) {
-    LOG(DEBUG) << StringPrintf("%s: select P2P; target rf discov id=0x%X", fn,
-                               rfDiscoveryId);
-    tNFA_STATUS stat =
-        NFA_Select(rfDiscoveryId, NFA_PROTOCOL_NFC_DEP, NFA_INTERFACE_NFC_DEP);
-    if (stat != NFA_STATUS_OK)
-      LOG(ERROR) << StringPrintf("%s: fail select P2P; error=0x%X", fn, stat);
-  } else
-    LOG(ERROR) << StringPrintf("%s: cannot find P2P", fn);
-  resetTechnologies();
 }
 
 /*******************************************************************************
