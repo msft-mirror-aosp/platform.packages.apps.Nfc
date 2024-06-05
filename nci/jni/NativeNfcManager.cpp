@@ -84,7 +84,8 @@ bool gActivated = false;
 SyncEvent gDeactivatedEvent;
 SyncEvent sNfaSetPowerSubState;
 int recovery_option = 0;
-int nfcee_power_and_link_conf = 0;
+int always_on_nfcee_power_and_link_conf = 0;
+int disable_always_on_nfcee_power_and_link_conf = 0;
 
 namespace android {
 jmethodID gCachedNfcManagerNotifyNdefMessageListeners;
@@ -150,6 +151,7 @@ static bool sEnableVendorNciNotifications = false;
    NFA_TECHNOLOGY_MASK_KOVIO)
 #define DEFAULT_DISCOVERY_DURATION 500
 #define READER_MODE_DISCOVERY_DURATION 200
+#define FLAG_SET_DEFAULT_TECH 0x40000000
 
 static void nfaConnectionCallback(uint8_t event, tNFA_CONN_EVT_DATA* eventData);
 static void nfaDeviceManagementCallback(uint8_t event,
@@ -194,11 +196,19 @@ void initializeRecoveryOption() {
 }
 
 void initializeNfceePowerAndLinkConf() {
-  nfcee_power_and_link_conf =
+  always_on_nfcee_power_and_link_conf =
       NfcConfig::getUnsigned(NAME_ALWAYS_ON_SET_EE_POWER_AND_LINK_CONF, 0);
 
   LOG(DEBUG) << __func__ << ": Always on set NFCEE_POWER_AND_LINK_CONF="
-             << nfcee_power_and_link_conf;
+             << always_on_nfcee_power_and_link_conf;
+}
+
+void initializeDisableAlwaysOnNfceePowerAndLinkConf() {
+  disable_always_on_nfcee_power_and_link_conf = NfcConfig::getUnsigned(
+      NAME_DISABLE_ALWAYS_ON_SET_EE_POWER_AND_LINK_CONF, 0);
+
+  LOG(DEBUG) << __func__ << ": Always on set NFCEE_POWER_AND_LINK_CONF="
+             << disable_always_on_nfcee_power_and_link_conf;
 }
 
 }  // namespace
@@ -571,6 +581,7 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   initializeGlobalDebugEnabledFlag();
   initializeRecoveryOption();
   initializeNfceePowerAndLinkConf();
+  initializeDisableAlwaysOnNfceePowerAndLinkConf();
   LOG(DEBUG) << StringPrintf("%s: enter", __func__);
 
   nfc_jni_native_data* nat =
@@ -1057,12 +1068,10 @@ static jboolean nfcManager_isObserveModeEnabled(JNIEnv* e, jobject o) {
     return false;
   }
 
-  uint8_t cmd[] = {(NCI_MT_CMD << NCI_MT_SHIFT) | NCI_GID_PROP,
-                   NCI_MSG_PROP_ANDROID,
-                   NCI_QUERY_ANDROID_PASSIVE_OBSERVE_PARAM_SIZE,
-                   NCI_QUERY_ANDROID_PASSIVE_OBSERVE};
+  uint8_t cmd[] = {NCI_QUERY_ANDROID_PASSIVE_OBSERVE};
   SyncEventGuard guard(gNfaVsCommand);
-  tNFA_STATUS status = NFA_SendRawVsCommand(sizeof(cmd), cmd, nfaVSCallback);
+  tNFA_STATUS status =
+      NFA_SendVsCommand(NCI_MSG_PROP_ANDROID, sizeof(cmd), cmd, nfaVSCallback);
 
   if (status == NFA_STATUS_OK) {
     if (!gNfaVsCommand.wait(1000)) {
@@ -1112,14 +1121,14 @@ static jboolean nfcManager_setObserveMode(JNIEnv* e, jobject o,
     reenbleDiscovery = true;
   }
   uint8_t cmd[] = {
-      (NCI_MT_CMD << NCI_MT_SHIFT) | NCI_GID_PROP, NCI_MSG_PROP_ANDROID,
-      NCI_ANDROID_PASSIVE_OBSERVE_PARAM_SIZE, NCI_ANDROID_PASSIVE_OBSERVE,
+      NCI_ANDROID_PASSIVE_OBSERVE,
       static_cast<uint8_t>(enable != JNI_FALSE
                                ? NCI_ANDROID_PASSIVE_OBSERVE_PARAM_ENABLE
                                : NCI_ANDROID_PASSIVE_OBSERVE_PARAM_DISABLE)};
   {
     SyncEventGuard guard(gNfaVsCommand);
-    tNFA_STATUS status = NFA_SendRawVsCommand(sizeof(cmd), cmd, nfaVSCallback);
+    tNFA_STATUS status = NFA_SendVsCommand(NCI_MSG_PROP_ANDROID, sizeof(cmd),
+                                           cmd, nfaVSCallback);
 
     if (status == NFA_STATUS_OK) {
       if (!gNfaVsCommand.wait(1000)) {
@@ -1604,10 +1613,6 @@ static bool isListenMode(tNFA_ACTIVATED& activated) {
        activated.activate_ntf.rf_tech_param.mode) ||
       (NFC_DISCOVERY_TYPE_LISTEN_F ==
        activated.activate_ntf.rf_tech_param.mode) ||
-      (NFC_DISCOVERY_TYPE_LISTEN_A_ACTIVE ==
-       activated.activate_ntf.rf_tech_param.mode) ||
-      (NFC_DISCOVERY_TYPE_LISTEN_F_ACTIVE ==
-       activated.activate_ntf.rf_tech_param.mode) ||
       (NFC_DISCOVERY_TYPE_LISTEN_ISO15693 ==
        activated.activate_ntf.rf_tech_param.mode) ||
       (NFC_DISCOVERY_TYPE_LISTEN_B_PRIME ==
@@ -1949,9 +1954,11 @@ static void nfcManager_doSetNfceePowerAndLinkCtrl(JNIEnv* e, jobject o,
                                                   jboolean enable) {
   RoutingManager& routingManager = RoutingManager::getInstance();
   if (enable) {
-    routingManager.eeSetPwrAndLinkCtrl((uint8_t)nfcee_power_and_link_conf);
+    routingManager.eeSetPwrAndLinkCtrl(
+        (uint8_t)always_on_nfcee_power_and_link_conf);
   } else {
-    routingManager.eeSetPwrAndLinkCtrl(0);
+    routingManager.eeSetPwrAndLinkCtrl(
+        (uint8_t)disable_always_on_nfcee_power_and_link_conf);
   }
 }
 
@@ -2028,17 +2035,24 @@ static void nfcManager_setDiscoveryTech(JNIEnv* e, jobject o, jint pollTech,
   tNFA_STATUS nfaStat;
   bool isRevertPoll = false;
   bool isRevertListen = false;
+  bool changeDefaultTech = false;
   LOG(DEBUG) << StringPrintf("%s  pollTech = 0x%x, listenTech = 0x%x", __func__,
                              pollTech, listenTech);
 
   if (pollTech < 0) isRevertPoll = true;
   if (listenTech < 0) isRevertListen = true;
+  if (pollTech & FLAG_SET_DEFAULT_TECH || listenTech & FLAG_SET_DEFAULT_TECH)
+    changeDefaultTech = true;
+
+  // Need listen tech routing update in routing table
+  // for addition of blocking bit
+  RoutingManager::getInstance().setEeTechRouteUpdateRequired();
 
   nativeNfcTag_acquireRfInterfaceMutexLock();
   SyncEventGuard guard(sNfaEnableDisablePollingEvent);
 
   nfaStat = NFA_ChangeDiscoveryTech(pollTech, listenTech, isRevertPoll,
-                                    isRevertListen);
+                                    isRevertListen, changeDefaultTech);
 
   if (nfaStat == NFA_STATUS_OK) {
     // wait for NFA_LISTEN_DISABLED_EVT
@@ -2064,10 +2078,14 @@ static void nfcManager_resetDiscoveryTech(JNIEnv* e, jobject o) {
   tNFA_STATUS nfaStat;
   LOG(DEBUG) << StringPrintf("%s : enter", __func__);
 
+  // Need listen tech routing update in routing table
+  // for addition of blocking bit
+  RoutingManager::getInstance().setEeTechRouteUpdateRequired();
+
   nativeNfcTag_acquireRfInterfaceMutexLock();
   SyncEventGuard guard(sNfaEnableDisablePollingEvent);
 
-  nfaStat = NFA_ChangeDiscoveryTech(0xFF, 0xFF, true, true);
+  nfaStat = NFA_ChangeDiscoveryTech(0xFF, 0xFF, true, true, false);
 
   if (nfaStat == NFA_STATUS_OK) {
     // wait for NFA_LISTEN_DISABLED_EVT
