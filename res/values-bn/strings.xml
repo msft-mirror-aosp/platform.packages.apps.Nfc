@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android বীম"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"ডিভাইসের বাইরের মেমরি ব্যবহার করার অনুমতি এই অ্যাপ্লিকেশানটিকে দেওয়া হয়নি। এই ফাইলটি বিম করার জন্য অনুমতিটি প্রয়োজন"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"লিঙ্কটি খুলবেন?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"আপনার ট্যাবলেট NFC এর মাধ্যমে একটি লিঙ্ক পেয়েছে:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"আপনার ফোন NFC এর মাধ্যমে একটি লিঙ্ক পেয়েছে:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"আপনার ফোন NFC এর মাধ্যমে একটি লিঙ্ক পেয়েছে:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"আপনার ট্যাবলেট NFC-এর মাধ্যমে একটি লিঙ্ক পেয়েছে:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"লিঙ্ক খুলুন"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"NFC পড়তে সমস্যা হয়েছে। আবার চেষ্টা করুন।"</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"এই NFC ট্যাগ ব্যবহার করার মতো কোনও অ্যাপ্লিকেশন নেই"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"কীভাবে সমস্যার সমাধান করবেন তা জানতে ট্যাপ করুন।"</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"NFC ডেটা রেকর্ড করা হচ্ছে"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"রেকর্ডিং বন্ধ করতে ট্যাপ করুন।"</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"NFC চালু করার জন্য <xliff:g id="PKG">%1$s</xliff:g>-কে অনুমতি দেবেন?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"হ্যাঁ"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"না"</string>
 </resources>

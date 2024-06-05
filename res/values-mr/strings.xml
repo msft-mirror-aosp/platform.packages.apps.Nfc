@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android बीम"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"ॲप्लिकेशनला बाह्य स्टोरेज परवानगी नाही. ही फाइल बीम करण्यासाठी हे आवश्यक आहे"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"लिंक उघडायची का?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"तुमच्या टॅबलेटला NFC वरून एक लिंक मिळाली आहे:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"तुमच्या फोनला NFC वरून एक लिंक मिळाली आहे:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"तुमच्या फोनला NFC वरून एक लिंक मिळाली आहे:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"तुमच्या टॅबलेटवर NFC द्वारे लिंक मिळाली आहे:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"लिंक उघडा"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"NFC वाचण्यात एरर आली. पुन्हा प्रयत्न करा."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"या NFC टॅग साठी कोणतेही सपोर्ट करणारे ॲप्लिकेशन नाही"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"निराकरण कसे करायचे ते जाणून घेण्यासाठी टॅप करा."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"NFC डेटा रेकॉर्ड केला जात आहे"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"रेकॉर्डिंग थांबवण्यासाठी टॅप करा."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"<xliff:g id="PKG">%1$s</xliff:g> ला NFC सुरू करण्याची अनुमती द्यायची आहे का?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"होय"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"नाही"</string>
 </resources>

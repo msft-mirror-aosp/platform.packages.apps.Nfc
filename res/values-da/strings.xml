@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"Appen har ikke adgang til det eksterne lager. Adgangstilladelse er påkrævet for at overføre denne fil."</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"Vil du åbne linket?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"Du har modtaget et link på din tablet via NFC:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"Du har modtaget et link på din telefon via NFC:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"Du har modtaget et link på din telefon via NFC:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"Du har modtaget et link på din tablet via NFC:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"Åbn link"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"NFC-læsefejl. Prøv igen."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"Der er ingen understøttede apps til dette NFC-tag"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Tryk for at se, hvordan du løser problemet."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"NFC-data registreres"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Tryk for at stoppe optagelsen."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"Vil du give <xliff:g id="PKG">%1$s</xliff:g> tilladelse til at aktivere NFC?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"Ja"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"Nej"</string>
 </resources>

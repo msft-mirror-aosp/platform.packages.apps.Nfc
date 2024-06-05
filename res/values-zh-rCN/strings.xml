@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"应用不具备外部存储权限。需要此权限才能传输此文件"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"要打开链接吗？"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"您的平板电脑已通过 NFC 收到一个链接："</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"您的手机已通过 NFC 收到一个链接："</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"您的手机已通过 NFC 收到一个链接："</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"您的平板电脑通过 NFC 收到了一个链接："</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"打开链接"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"NFC 读取错误，请重试。"</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"没有应用支持此 NFC 标签"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"点按即可了解如何解决该问题。"</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"正在记录 NFC 数据"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"点按即可停止记录。"</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"允许“<xliff:g id="PKG">%1$s</xliff:g>”启用 NFC？"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"是"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"否"</string>
 </resources>

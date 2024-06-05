@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"برنامه،ِ مجوز فضای ذخیره‌سازی خارجی را ندارد. این مجوز برای «پرتوی» فایل لازم است"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"پیوند باز شود؟"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"‏رایانه لوحی‌تان پیوندی ازطریق NFC دریافت کرد:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"‏تلفنتان پیوندی ازطریق NFC دریافت کرد:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"‏تلفنتان پیوندی ازطریق NFC دریافت کرد:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"‏رایانه لوحی‌تان پیوندی ازطریق NFC دریافت کرد:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"باز کردن پیوند"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"‏خطای خواندن «ارتباطات میدان‌نزدیک» (NFC). دوباره امتحان کنید."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"‏برنامه پشتیبانی‌شده‌ای برای نشان NFC وجود ندارد"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"برای آشنایی با نحوه برطرف کردن مشکل، ضربه بزنید."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"‏داده‌های NFC ضبط می‌شود"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"برای توقف ضبط، ضربه بزنید."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"‏به <xliff:g id="PKG">%1$s</xliff:g> اجازه می‌دهید NFC را فعال کند؟"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"بله"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"نه"</string>
 </resources>

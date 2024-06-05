@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"I-Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"Uhlelo lokusebenza alunayo imvume ekusitoreji esingaphandle. Lokhu kuyadingeka ukuze kwenziwe ibhimu leli fayela"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"Vula isixhumanisi?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"Ithebhulethi yakho ithole isixhumanisi nge-NFC:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"Ifoni yakho ithole isixhumanisi nge-NFC:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"Ifoni yakho ithole isixhumanisi nge-NFC:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"Ithebulethi yakho ithole ilinki nge-NFC:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"Vula isixhumanisi"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"Iphutha lokufunda le-NFC. Zama futhi."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"Uhlelo lokusebenza olungasekelwa lale thegi ye-NFC Tag"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Thepha ukuze ufunde ukuthi ungalungisa kanjani."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"Idatha ye-NFC iyarekhodwa"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Thepha ukuze umise ukurekhoda."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"Vumela i-<xliff:g id="PKG">%1$s</xliff:g> ukunika amandla i-NFC?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"Yebo"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"Cha"</string>
 </resources>

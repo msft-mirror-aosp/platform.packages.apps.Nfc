@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"לאפליקציה אין הרשאת גישה לאחסון החיצוני. ההרשאה הזו נדרשת כדי להעביר את הקובץ"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"לפתוח את הקישור?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"‏הטאבלט קיבל קישור דרך NFC:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"‏הטלפון קיבל קישור דרך NFC:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"‏הטלפון קיבל קישור דרך NFC:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"‏התקבל קישור בטאבלט דרך NFC:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"לפתיחת הקישור"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"‏אירעה שגיאת קריאה של NFC. יש לנסות שוב."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"‏אין אפליקציה תומכת לתג NFC זה"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"יש להקיש כדי לראות איך לפתור את הבעיה."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"‏נתוני ה-NFC מתועדים"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"יש להקיש כדי להפסיק את ההקלטה."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"‏להרשות ל-<xliff:g id="PKG">%1$s</xliff:g> להפעיל NFC?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"כן"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"לא"</string>
 </resources>

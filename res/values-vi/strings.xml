@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"Ứng dụng không có quyền truy cập vào Bộ nhớ ngoài. Ứng dụng cần phải có quyền này để chiếu tệp này"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"Mở đường liên kết?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"Máy tính bảng của bạn đã nhận được một liên kết thông qua NFC:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"Điện thoại của bạn đã nhận được một liên kết thông qua NFC:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"Điện thoại của bạn đã nhận được một liên kết thông qua NFC:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"Máy tính bảng của bạn đã nhận được một liên kết thông qua NFC:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"Mở đường liên kết"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"Lỗi đọc thẻ NFC. Hãy thử lại."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"Không có ứng dụng nào hỗ trợ thẻ NFC này"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Nhấn để tìm hiểu cách khắc phục."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"Dữ liệu về NFC đang được ghi lại"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Nhấn để dừng ghi."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"Cho phép <xliff:g id="PKG">%1$s</xliff:g> bật NFC?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"Có"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"Không"</string>
 </resources>

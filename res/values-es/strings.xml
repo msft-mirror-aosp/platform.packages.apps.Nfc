@@ -46,8 +46,8 @@
     <string name="android_beam" msgid="1666446406999492763">"Android Beam"</string>
     <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"La aplicación no tiene permiso de almacenamiento externo, necesario para compartir este archivo"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"¿Quieres abrir el enlace?"</string>
-    <string name="summary_confirm_url_open" product="tablet" msgid="3353502750736192055">"Has recibido un enlace en tu tablet por NFC:"</string>
-    <string name="summary_confirm_url_open" product="default" msgid="1246398412196449226">"Has recibido un enlace en tu teléfono por NFC:"</string>
+    <string name="summary_confirm_url_open" msgid="1246398412196449226">"Has recibido un enlace en tu teléfono por NFC:"</string>
+    <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"Has recibido un enlace en tu tablet por NFC:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"Abrir enlace"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"Error de lectura de NFC. Inténtalo de nuevo."</string>
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"No hay ninguna aplicación compatible con esta etiqueta NFC"</string>
@@ -55,4 +55,7 @@
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Toca para saber cómo solucionarlo."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"Los datos de NFC se están registrando"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Toca para detener el registro."</string>
+    <string name="title_package_enabling_nfc" msgid="5736481508428918024">"¿Permitir que <xliff:g id="PKG">%1$s</xliff:g> habilite la opción NFC?"</string>
+    <string name="enable_nfc_yes" msgid="694867197186062792">"Sí"</string>
+    <string name="enable_nfc_no" msgid="6549033065900624599">"No"</string>
 </resources>

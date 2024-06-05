@@ -26,13 +26,20 @@ import android.content.pm.PackageManager;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.os.UserHandle;
+import android.os.test.TestLooper;
 import android.util.Log;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import android.platform.test.annotations.RequiresFlagsEnabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
+import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.cardemulation.RegisteredAidCache.AidResolveInfo;
 import com.android.nfc.NfcStatsLog;
+import com.android.nfc.flags.Flags;
+
+import junit.framework.TestListener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +47,7 @@ import java.util.List;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -53,6 +61,9 @@ public final class NfcAidConflictOccurredTest {
 
     private MockitoSession mStaticMockSession;
     private HostEmulationManager mHostEmulation;
+    @Rule
+    public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
+    private final TestLooper mTestLooper = new TestLooper();
 
     @Before
     public void setUp() {
@@ -88,7 +99,8 @@ public final class NfcAidConflictOccurredTest {
             }
         };
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
-              () -> mHostEmulation = new HostEmulationManager(mockContext, mockAidCache));
+              () -> mHostEmulation = new HostEmulationManager(
+                      mockContext, mTestLooper.getLooper(), mockAidCache));
         Assert.assertNotNull(mHostEmulation);
 
         mHostEmulation.onHostEmulationActivated();
@@ -110,6 +122,24 @@ public final class NfcAidConflictOccurredTest {
             (byte)0xA0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00,
             0x00,  // card manager AID
             0x00  // trailer
+        };
+        mHostEmulation.onHostEmulationData(aidBytes);
+        ExtendedMockito.verify(() -> NfcStatsLog.write(
+                NfcStatsLog.NFC_AID_CONFLICT_OCCURRED,
+                "A000000003000000"));
+    }
+
+    @Test
+    @RequiresFlagsEnabled(Flags.FLAG_TEST_FLAG)
+    public void testHCEOtherWithTestFlagEnabled() {
+        if (!mNfcSupported) return;
+
+        byte[] aidBytes = new byte[] {
+                0x00, (byte)0xA4, 0x04, 0x00,  // command
+                0x08,  // data length
+                (byte)0xA0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00,
+                0x00,  // card manager AID
+                0x00  // trailer
         };
         mHostEmulation.onHostEmulationData(aidBytes);
         ExtendedMockito.verify(() -> NfcStatsLog.write(
