@@ -42,6 +42,7 @@ import com.android.nfc.service.PaymentService1;
 import com.android.nfc.service.PaymentService2;
 import com.android.nfc.service.PaymentServiceDynamicAids;
 import com.android.nfc.service.PollingLoopService;
+import com.android.nfc.service.PollingLoopService2;
 import com.android.nfc.service.PrefixAccessService;
 import com.android.nfc.service.PrefixPaymentService1;
 import com.android.nfc.service.PrefixPaymentService2;
@@ -87,7 +88,8 @@ public abstract class BaseEmulatorActivity extends Activity {
                             ScreenOffPaymentService.COMPONENT,
                             OffHostService.COMPONENT,
                             ScreenOnOnlyOffHostService.COMPONENT,
-                            PollingLoopService.COMPONENT));
+                            PollingLoopService.COMPONENT,
+                            PollingLoopService2.COMPONENT));
     protected static final String TAG = "BaseEmulatorActivity";
     protected NfcAdapter mAdapter;
     protected CardEmulation mCardEmulation;
@@ -206,6 +208,16 @@ public abstract class BaseEmulatorActivity extends Activity {
     /** Waits for preferred service to be set, and sends broadcast afterwards. */
     public void waitForService() {
         ensurePreferredService(getPreferredServiceDescription(), this, mCardEmulation);
+    }
+
+    void waitForObserveModeEnabled(boolean enabled) {
+        Log.d(TAG, "waitForObserveModeEnabled: " + enabled);
+        try {
+            CommonTestUtils.waitUntil("Observe mode has not been set", 6,
+                    () -> mAdapter.isObserveModeEnabled() == enabled);
+        } catch (InterruptedException ie) {
+            Log.w(TAG, "Observe mode not set to " + enabled + ". This may cause tests to fail");
+        }
     }
 
     public abstract ComponentName getPreferredServiceComponent();

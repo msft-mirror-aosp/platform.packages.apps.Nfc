@@ -22,12 +22,14 @@ import android.content.Context;
 import android.os.Binder;
 import android.os.UserHandle;
 import android.permission.flags.Flags;
+import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.List;
 
 public class WalletRoleObserver {
+    private static final String TAG = "WalletRoleObserver";
 
     public interface Callback {
         void onWalletRoleHolderChanged(String holder, int userId);
@@ -49,6 +51,8 @@ public class WalletRoleObserver {
             }
             List<String> roleHolders = roleManager.getRoleHolders(RoleManager.ROLE_WALLET);
             String roleHolder = roleHolders.isEmpty() ? null : roleHolders.get(0);
+            Log.i(TAG, "Wallet role changed for user " + user.getIdentifier() + " to "
+                       + roleHolder);
             callback.onWalletRoleHolderChanged(roleHolder, user.getIdentifier());
         };
         this.mRoleManager.addOnRoleHoldersChangedListenerAsUser(context.getMainExecutor(),
@@ -80,6 +84,7 @@ public class WalletRoleObserver {
 
     public void onUserSwitched(int userId) {
         String roleHolder = getDefaultWalletRoleHolder(userId);
+        Log.i(TAG, "Wallet role for user " + userId + ": " + roleHolder);
         mCallback.onWalletRoleHolderChanged(roleHolder, userId);
     }
 }
