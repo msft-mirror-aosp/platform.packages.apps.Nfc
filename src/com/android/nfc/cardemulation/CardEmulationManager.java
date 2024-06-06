@@ -49,6 +49,7 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.nfc.ForegroundUtils;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 
@@ -122,14 +123,15 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     final byte[] mOffHostRouteUicc;
     final byte[] mOffHostRouteEse;
 
-    public CardEmulationManager(Context context) {
+    // TODO: Move this object instantiation and dependencies to NfcInjector.
+    public CardEmulationManager(Context context, NfcInjector nfcInjector) {
         mContext = context;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
         mForegroundUtils = ForegroundUtils.getInstance(
             context.getSystemService(ActivityManager.class));
         mWalletRoleObserver = new WalletRoleObserver(context,
-                context.getSystemService(RoleManager.class), this);
+                context.getSystemService(RoleManager.class), this, nfcInjector);
         mAidCache = new RegisteredAidCache(context, mWalletRoleObserver);
         mT3tIdentifiersCache = new RegisteredT3tIdentifiersCache(context);
         mHostEmulationManager =
@@ -638,8 +640,12 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             if (!isServiceRegistered(userId, service)) {
                 return false;
             }
-            return mServiceCache.setShouldDefaultToObserveModeForService(userId, Binder.getCallingUid(),
-                service, enable);
+            if (!mServiceCache.setShouldDefaultToObserveModeForService(userId, Binder.getCallingUid(),
+                service, enable)) {
+                return false;
+            }
+            updateForShouldDefaultToObserveMode(userId);
+            return true;
         }
 
         @Override
@@ -1039,11 +1045,11 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         ComponentName oldPreferredService = mAidCache.getPreferredService();
         mAidCache.onPreferredPaymentServiceChanged(userId, service);
         mHostEmulationManager.onPreferredPaymentServiceChanged(userId, service);
+        ComponentName newPreferredService = mAidCache.getPreferredService();
 
-            NfcService.getInstance().onPreferredPaymentChanged(
+        NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_CHANGED);
-
-        if (!Objects.equals(oldPreferredService, service)) {
+        if (!Objects.equals(oldPreferredService, newPreferredService)) {
             updateForShouldDefaultToObserveMode(userId);
         }
     }
@@ -1054,10 +1060,11 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         ComponentName oldPreferredService = mAidCache.getPreferredService();
         mAidCache.onPreferredForegroundServiceChanged(userId, service);
         mHostEmulationManager.onPreferredForegroundServiceChanged(userId, service);
+        ComponentName newPreferredService = mAidCache.getPreferredService();
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
-        if (!Objects.equals(oldPreferredService, service)) {
+        if (!Objects.equals(oldPreferredService, newPreferredService)) {
             updateForShouldDefaultToObserveMode(userId);
         }
     }
@@ -1078,7 +1085,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             ComponentName preferredService = mAidCache.getPreferredService();
             boolean enableObserveMode = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
                     preferredService);
-            adapter.setObserveModeEnabled(enableObserveMode);
+            mHostEmulationManager.updateForShouldDefaultToObserveMode(enableObserveMode);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
