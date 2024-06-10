@@ -44,6 +44,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.sysprop.NfcProperties;
 import android.util.Log;
+import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import androidx.annotation.VisibleForTesting;
@@ -102,6 +103,7 @@ public class HostEmulationManager {
             NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_OTHER;
     static final String NFC_PACKAGE = "com.android.nfc";
     static final String DATA_KEY = "data";
+    static final int FIELD_OFF_IDLE_DELAY_MS = 2000;
 
     final Context mContext;
     final RegisteredAidCache mAidCache;
@@ -149,6 +151,20 @@ public class HostEmulationManager {
     int mState;
     byte[] mSelectApdu;
     Handler mHandler;
+
+    // Runnable to return to an IDLE_STATE and reset preferred service. This should be run after we
+    // have left a field and gone a period of time without any HCE or polling frame data.
+    Runnable mReturnToIdleStateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            synchronized (mLock) {
+                Log.d(TAG, "Have been outside field, returning to idle state");
+                mPendingPollingLoopFrames = null;
+                resetActiveService();
+                mState = STATE_IDLE;
+            }
+        }
+    };
 
     public HostEmulationManager(Context context, Looper looper, RegisteredAidCache aidCache) {
         this(context, looper, aidCache, new StatsdUtils(StatsdUtils.SE_NAME_HCE));
@@ -212,7 +228,7 @@ public class HostEmulationManager {
         synchronized (mLock) {
             if (mState == STATE_IDLE || mState == STATE_POLLING_LOOP) {
                 NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
-                mHandler.post(() -> adapter.setObserveModeEnabled(enabled));
+                adapter.setObserveModeEnabled(enabled);
             } else {
                 mEnableObserveModeAfterTransaction = enabled;
             }
@@ -252,10 +268,19 @@ public class HostEmulationManager {
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void onPollingLoopDetected(List<PollingFrame> pollingFrames) {
         synchronized (mLock) {
+            mHandler.removeCallbacks(mReturnToIdleStateRunnable);
+            // We need to have this check here in addition to the one in onFieldChangeDetected,
+            // because we can receive an OFF frame after the field change is detected.
+            if (!pollingFrames.isEmpty()
+                    && pollingFrames.getLast().getType() == PollingFrame.POLLING_LOOP_TYPE_OFF) {
+                mHandler.postDelayed(mReturnToIdleStateRunnable, FIELD_OFF_IDLE_DELAY_MS);
+            }
+
             if (mState == STATE_IDLE) {
                 mState = STATE_POLLING_LOOP;
             }
             int onCount = 0;
+            int offCount = 0;
             int aCount = 0;
             int bCount = 0;
             if (mPendingPollingLoopFrames == null) {
@@ -345,7 +370,8 @@ public class HostEmulationManager {
                                 break;
                             case PollingFrame.POLLING_LOOP_TYPE_OFF:
                                 // Send the loop data if we've seen at least one on before an off.
-                                if (onCount >= 1) {
+                                offCount++;
+                                if (onCount >= 2 && offCount >=2) {
                                     shouldSendFrames = true;
                                 }
                                 break;
@@ -393,6 +419,10 @@ public class HostEmulationManager {
      }
 
     public void onFieldChangeDetected(boolean fieldOn) {
+        mHandler.removeCallbacks(mReturnToIdleStateRunnable);
+        if (!fieldOn) {
+            mHandler.postDelayed(mReturnToIdleStateRunnable, FIELD_OFF_IDLE_DELAY_MS);
+        }
         if (!fieldOn && mEnableObserveModeOnFieldOff &&  mEnableObserveModeAfterTransaction) {
             Log.d(TAG, "re-enabling observe mode after NFC Field off.");
             mEnableObserveModeAfterTransaction = false;
@@ -404,6 +434,7 @@ public class HostEmulationManager {
 
     public void onHostEmulationActivated() {
         synchronized (mLock) {
+            mHandler.removeCallbacks(mReturnToIdleStateRunnable);
             // Regardless of what happens, if we're having a tap again
             // activity up, close it
             Intent intent = new Intent(TapAgainDialog.ACTION_CLOSE);
@@ -441,6 +472,7 @@ public class HostEmulationManager {
 
     public void onHostEmulationData(byte[] data) {
         Log.d(TAG, "notifyHostEmulationData");
+        mHandler.removeCallbacks(mReturnToIdleStateRunnable);
         String selectAid = findSelectAid(data);
         ComponentName resolvedService = null;
         ApduServiceInfo resolvedServiceInfo = null;
@@ -680,10 +712,23 @@ public class HostEmulationManager {
             Log.e(TAG, "service ComponentName is null");
             return null;
         }
+
+        Pair<Integer, ComponentName> preferredPaymentService =
+                mAidCache.getPreferredPaymentService();
+        int preferredPaymentUserId = preferredPaymentService.first  != null ?
+                preferredPaymentService.first : -1;
+        ComponentName preferredPaymentServiceName = preferredPaymentService.second;
+
         if (mPaymentServiceName != null && mPaymentServiceName.equals(service)
                 && mPaymentServiceUserId == userId) {
             Log.d(TAG, "Service already bound as payment service.");
             return mPaymentService;
+        } else if (!mPaymentServiceBound && preferredPaymentServiceName != null
+                && preferredPaymentServiceName.equals(service)
+                && preferredPaymentUserId == userId) {
+            Log.d(TAG, "Service should be bound as payment service but is not, binding now");
+            bindPaymentServiceLocked(userId, preferredPaymentServiceName);
+            return null;
         } else if (mServiceName != null && mServiceName.equals(service)
                 && mServiceUserId == userId) {
             Log.d(TAG, "Service already bound as regular service.");
@@ -733,7 +778,7 @@ public class HostEmulationManager {
         try {
             mActiveService.send(msg);
         } catch (RemoteException e) {
-            Log.e(TAG, "Remote service has died, dropping APDU");
+            Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping APDU", e);
         }
     }
 
@@ -762,7 +807,7 @@ public class HostEmulationManager {
         try {
             mActiveService.send(msg);
         } catch (RemoteException e) {
-            Log.e(TAG, "Remote service has died, dropping frames");
+            Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping frames", e);
         }
     }
 
@@ -903,6 +948,14 @@ public class HostEmulationManager {
             synchronized (mLock) {
                 mPaymentService = null;
                 mPaymentServiceName = null;
+            }
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.i(TAG, "Payment service died: " + name);
+            synchronized (mLock) {
+                bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
             }
         }
     };

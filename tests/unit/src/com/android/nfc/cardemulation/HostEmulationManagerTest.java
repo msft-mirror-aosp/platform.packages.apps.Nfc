@@ -48,6 +48,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
+import android.util.Pair;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.NfcEventLog;
@@ -151,6 +152,7 @@ public class HostEmulationManagerTest {
         when(com.android.nfc.flags.Flags.statsdCeEventsFlag()).thenReturn(true);
         when(mContext.getSystemService(eq(PowerManager.class))).thenReturn(mPowerManager);
         when(mContext.getSystemService(eq(KeyguardManager.class))).thenReturn(mKeyguardManager);
+        when(mRegisteredAidCache.getPreferredPaymentService()).thenReturn(new Pair<>(null, null));
         mHostEmulationManager = new HostEmulationManager(mContext, mTestableLooper.getLooper(),
                 mRegisteredAidCache, mStatsUtils);
     }
@@ -425,6 +427,34 @@ public class HostEmulationManagerTest {
     }
 
     @Test
+    public void testOnFieldChangeDetected_fieldOff_returnToIdle() {
+        mHostEmulationManager.mState = HostEmulationManager.STATE_XFER;
+
+        // Should not change state immediately
+        mHostEmulationManager.onFieldChangeDetected(false);
+        Assert.assertEquals(HostEmulationManager.STATE_XFER, mHostEmulationManager.getState());
+
+        mTestableLooper.moveTimeForward(5000);
+        mTestableLooper.processAllMessages();
+        Assert.assertEquals(HostEmulationManager.STATE_IDLE, mHostEmulationManager.getState());
+    }
+
+    @Test
+    public void testOnPollingLoopDetected_fieldOff_returnToIdle() {
+        PollingFrame frame1 = new PollingFrame(PollingFrame.POLLING_LOOP_TYPE_ON,
+                null, 0, 0, false);
+        PollingFrame frame2 = new PollingFrame(PollingFrame.POLLING_LOOP_TYPE_OFF,
+                null, 0, 0, false);
+        mHostEmulationManager.onPollingLoopDetected(List.of(frame1, frame2));
+        Assert.assertEquals(HostEmulationManager.STATE_POLLING_LOOP,
+                mHostEmulationManager.getState());
+
+        mTestableLooper.moveTimeForward(5000);
+        mTestableLooper.processAllMessages();
+        Assert.assertEquals(HostEmulationManager.STATE_IDLE, mHostEmulationManager.getState());
+    }
+
+    @Test
     public void testOnHostEmulationActivated() {
         mHostEmulationManager.onHostEmulationActivated();
 
@@ -436,6 +466,16 @@ public class HostEmulationManagerTest {
         Intent intent = mIntentArgumentCaptor.getValue();
         Assert.assertEquals(TapAgainDialog.ACTION_CLOSE, intent.getAction());
         Assert.assertEquals(HostEmulationManager.NFC_PACKAGE, intent.getPackage());
+        Assert.assertEquals(HostEmulationManager.STATE_W4_SELECT, mHostEmulationManager.getState());
+    }
+
+    @Test
+    public void testOnHostEmulationActivated_doesNotReturnToIdle() {
+        mHostEmulationManager.onFieldChangeDetected(false);
+        mHostEmulationManager.onHostEmulationActivated();
+
+        mTestableLooper.moveTimeForward(5000);
+        mTestableLooper.processAllMessages();
         Assert.assertEquals(HostEmulationManager.STATE_W4_SELECT, mHostEmulationManager.getState());
     }
 
@@ -890,6 +930,19 @@ public class HostEmulationManagerTest {
     }
 
     @Test
+    public void testOnHostEmulationData_doesNotReturnToIdle() {
+        mHostEmulationManager.mState = HostEmulationManager.STATE_XFER;
+        mHostEmulationManager.onFieldChangeDetected(false);
+
+        byte[] emptyData = new byte[1];
+        mHostEmulationManager.onHostEmulationData(emptyData);
+
+        mTestableLooper.moveTimeForward(5000);
+        mTestableLooper.processAllMessages();
+        Assert.assertEquals(HostEmulationManager.STATE_XFER, mHostEmulationManager.getState());
+    }
+
+    @Test
     public void testOnHostEmulationDeactivated_activeService_enableObserveModeAfterTransaction()
             throws RemoteException {
         mHostEmulationManager.mActiveService = mMessanger;
@@ -1113,6 +1166,71 @@ public class HostEmulationManagerTest {
 
         Assert.assertNull(mHostEmulationManager.mPaymentService);
         Assert.assertNull(mHostEmulationManager.mPaymentServiceName);
+    }
+
+    @Test
+    public void testPaymentServiceConnectionOnBindingDied_successfulRebind() {
+        when(mContext.bindServiceAsUser(any(), any(), anyInt(), any())).thenReturn(true);
+
+        UserHandle userHandle = UserHandle.of(USER_ID);
+
+        mHostEmulationManager.mPaymentService = mMessanger;
+        mHostEmulationManager.mPaymentServiceBound = true;
+        mHostEmulationManager.mPaymentServiceName = WALLET_PAYMENT_SERVICE;
+
+        mHostEmulationManager.getPaymentConnection().onServiceDisconnected(WALLET_PAYMENT_SERVICE);
+        Assert.assertNull(mHostEmulationManager.mPaymentService);
+        Assert.assertNull(mHostEmulationManager.mPaymentServiceName);
+
+        mHostEmulationManager.getPaymentConnection().onBindingDied(WALLET_PAYMENT_SERVICE);
+
+        verify(mContext).unbindService(eq(mHostEmulationManager.getPaymentConnection()));
+        verify(mContext).bindServiceAsUser(mIntentArgumentCaptor.capture(),
+                mServiceConnectionArgumentCaptor.capture(),
+                eq(Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS),
+                eq(userHandle));
+
+        Assert.assertEquals(USER_ID, mHostEmulationManager.mPaymentServiceUserId);
+        Assert.assertTrue(mHostEmulationManager.mPaymentServiceBound);
+    }
+
+    @Test
+    public void testPaymentServiceConnectionOnBindingDied_rebindOnTap() {
+        when(mContext.bindServiceAsUser(any(), any(), anyInt(), any())).thenReturn(false);
+        when(mRegisteredAidCache.getPreferredPaymentService()).
+                thenReturn(new Pair<>(USER_ID, WALLET_PAYMENT_SERVICE));
+
+        UserHandle userHandle = UserHandle.of(USER_ID);
+
+        mHostEmulationManager.mPaymentService = mMessanger;
+        mHostEmulationManager.mPaymentServiceBound = true;
+        mHostEmulationManager.mPaymentServiceName = WALLET_PAYMENT_SERVICE;
+
+        mHostEmulationManager.getPaymentConnection().onServiceDisconnected(WALLET_PAYMENT_SERVICE);
+        Assert.assertNull(mHostEmulationManager.mPaymentService);
+        Assert.assertNull(mHostEmulationManager.mPaymentServiceName);
+
+        mHostEmulationManager.getPaymentConnection().onBindingDied(WALLET_PAYMENT_SERVICE);
+
+        verify(mContext).unbindService(eq(mHostEmulationManager.getPaymentConnection()));
+        Assert.assertFalse(verify(mContext).bindServiceAsUser(mIntentArgumentCaptor.capture(),
+                mServiceConnectionArgumentCaptor.capture(),
+                eq(Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS),
+                eq(userHandle)));
+
+        Assert.assertFalse(mHostEmulationManager.mPaymentServiceBound);
+
+        when(mContext.bindServiceAsUser(any(), any(), anyInt(), any())).thenReturn(true);
+
+        mHostEmulationManager.bindServiceIfNeededLocked(USER_ID, WALLET_PAYMENT_SERVICE);
+
+        verify(mContext, times(2)).bindServiceAsUser(mIntentArgumentCaptor.capture(),
+                mServiceConnectionArgumentCaptor.capture(),
+                eq(Context.BIND_AUTO_CREATE | Context.BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS),
+                eq(userHandle));
+
+        Assert.assertEquals(USER_ID, mHostEmulationManager.mPaymentServiceUserId);
+        Assert.assertTrue(mHostEmulationManager.mPaymentServiceBound);
     }
 
     @Test
