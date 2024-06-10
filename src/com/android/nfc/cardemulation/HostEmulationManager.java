@@ -280,6 +280,7 @@ public class HostEmulationManager {
                 mState = STATE_POLLING_LOOP;
             }
             int onCount = 0;
+            int offCount = 0;
             int aCount = 0;
             int bCount = 0;
             if (mPendingPollingLoopFrames == null) {
@@ -369,7 +370,8 @@ public class HostEmulationManager {
                                 break;
                             case PollingFrame.POLLING_LOOP_TYPE_OFF:
                                 // Send the loop data if we've seen at least one on before an off.
-                                if (onCount >= 1) {
+                                offCount++;
+                                if (onCount >= 2 && offCount >=2) {
                                     shouldSendFrames = true;
                                 }
                                 break;
