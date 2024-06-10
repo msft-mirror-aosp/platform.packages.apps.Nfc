@@ -803,7 +803,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsHceFCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF);
         if (mIsHceCapable) {
-            mCardEmulationManager = new CardEmulationManager(mContext);
+            mCardEmulationManager = new CardEmulationManager(mContext, mNfcInjector);
         }
         mForegroundUtils = mNfcInjector.getForegroundUtils();
         mIsSecureNfcCapable = mNfcInjector.checkIsSecureNfcCapable();
@@ -1765,14 +1765,23 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             long start = SystemClock.elapsedRealtime();
-
             boolean result = mDeviceHost.setObserveMode(enable);
-
+            int latency = Math.toIntExact(SystemClock.elapsedRealtime() - start);
             if (mStatsdUtils != null) {
-                mStatsdUtils.logObserveModeStateChanged(enable, triggerSource,
-                        (int)(SystemClock.elapsedRealtime() - start));
+                mStatsdUtils.logObserveModeStateChanged(enable, triggerSource, latency);
             }
-
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setObserveModeChange(NfcEventProto.NfcObserveModeChange.newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setPackageName(packageName)
+                                            .setUid(callingUid)
+                                            .build())
+                                    .setEnable(enable)
+                                    .setLatencyMs(latency)
+                                    .setResult(result)
+                                    .build())
+                            .build());
             return result;
         }
 
