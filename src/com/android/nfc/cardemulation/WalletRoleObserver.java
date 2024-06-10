@@ -25,6 +25,9 @@ import android.permission.flags.Flags;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.nfc.NfcEventLog;
+import com.android.nfc.NfcInjector;
+import com.android.nfc.proto.NfcEventProto;
 
 import java.util.List;
 
@@ -35,16 +38,18 @@ public class WalletRoleObserver {
         void onWalletRoleHolderChanged(String holder, int userId);
     }
     private Context mContext;
+    private NfcEventLog mNfcEventLog;
     private RoleManager mRoleManager;
     @VisibleForTesting
     final OnRoleHoldersChangedListener mOnRoleHoldersChangedListener;
     private Callback mCallback;
 
     public WalletRoleObserver(Context context, RoleManager roleManager,
-            Callback callback) {
+            Callback callback, NfcInjector nfcInjector) {
         this.mContext = context;
         this.mRoleManager = roleManager;
         this.mCallback = callback;
+        this.mNfcEventLog = nfcInjector.getNfcEventLog();
         this.mOnRoleHoldersChangedListener = (roleName, user) -> {
             if (!roleName.equals(RoleManager.ROLE_WALLET)) {
                 return;
@@ -53,6 +58,13 @@ public class WalletRoleObserver {
             String roleHolder = roleHolders.isEmpty() ? null : roleHolders.get(0);
             Log.i(TAG, "Wallet role changed for user " + user.getIdentifier() + " to "
                        + roleHolder);
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setWalletRoleHolderChange(
+                                NfcEventProto.NfcWalletRoleHolderChange.newBuilder()
+                                .setPackageName(roleHolder != null ? roleHolder : "none")
+                                .build())
+                            .build());
             callback.onWalletRoleHolderChanged(roleHolder, user.getIdentifier());
         };
         this.mRoleManager.addOnRoleHoldersChangedListenerAsUser(context.getMainExecutor(),
