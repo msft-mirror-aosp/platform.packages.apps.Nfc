@@ -206,20 +206,16 @@ public class HostEmulationManager {
     }
 
     private Messenger getForegroundServiceOrDefault() {
-        PackageManager packageManager = mContext.getPackageManager();
-        ComponentName preferredServiceName = mAidCache.getPreferredService();
-        if (preferredServiceName != null) {
-            try {
-                ApplicationInfo preferredServiceInfo =
-                    packageManager.getApplicationInfo(preferredServiceName.getPackageName(), 0);
-                UserHandle user = UserHandle.getUserHandleForUid(preferredServiceInfo.uid);
-                return bindServiceIfNeededLocked(user.getIdentifier(), preferredServiceName);
-            } catch (NameNotFoundException nnfe) {
-                Log.e(TAG, "Packange name not found, dropping polling frame", nnfe);
-                unbindServiceIfNeededLocked();
-            }
+        Pair<Integer, ComponentName> preferredService = mAidCache.getPreferredService();
+        int preferredServiceUserId = preferredService.first != null ?
+                preferredService.first : -1;
+        ComponentName preferredServiceName = preferredService.second;
+
+        if (preferredServiceName == null || preferredServiceUserId < 0) {
+            return null;
         }
-        return bindServiceIfNeededLocked(mPaymentServiceUserId, mPaymentServiceName);
+
+        return bindServiceIfNeededLocked(preferredServiceUserId, preferredServiceName);
     }
 
     @TargetApi(35)
@@ -267,6 +263,7 @@ public class HostEmulationManager {
     @TargetApi(35)
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
     public void onPollingLoopDetected(List<PollingFrame> pollingFrames) {
+        Log.d(TAG, "onPollingLoopDetected, size: " + pollingFrames.size());
         synchronized (mLock) {
             mHandler.removeCallbacks(mReturnToIdleStateRunnable);
             // We need to have this check here in addition to the one in onFieldChangeDetected,
@@ -390,6 +387,8 @@ public class HostEmulationManager {
             if (service != null) {
                 sendPollingFramesToServiceLocked(service, mPendingPollingLoopFrames);
                 mPendingPollingLoopFrames = null;
+            } else {
+                Log.d(TAG, "Dropping polling frames, no service available");
             }
         }
     }
