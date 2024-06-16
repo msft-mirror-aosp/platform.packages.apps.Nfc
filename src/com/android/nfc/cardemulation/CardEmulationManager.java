@@ -634,17 +634,24 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         @Override
         public boolean setShouldDefaultToObserveModeForService(int userId,
-            ComponentName service, boolean enable) {
+                ComponentName service, boolean enable) {
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             if (!isServiceRegistered(userId, service)) {
                 return false;
             }
-            if (!mServiceCache.setShouldDefaultToObserveModeForService(userId, Binder.getCallingUid(),
-                service, enable)) {
-                return false;
+            Log.d(TAG, "Set should default to observe mode for service (" + service + ") to "
+                    + enable);
+            boolean currentStatus = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
+                    service);
+
+            if (currentStatus != enable) {
+                if (!mServiceCache.setShouldDefaultToObserveModeForService(userId,
+                        Binder.getCallingUid(), service, enable)) {
+                    return false;
+                }
+                updateForShouldDefaultToObserveMode(userId);
             }
-            updateForShouldDefaultToObserveMode(userId);
             return true;
         }
 
@@ -1069,7 +1076,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
     }
 
-    private void updateForShouldDefaultToObserveMode(int userId) {
+    public void updateForShouldDefaultToObserveMode(int userId) {
         long token = Binder.clearCallingIdentity();
         try {
             if (!android.nfc.Flags.nfcObserveMode()) {
@@ -1117,5 +1124,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
         return mAidCache.isPreferredServicePackageNameForUser(packageName, userId);
+    }
+
+    public boolean isHostCardEmulationActivated() {
+        return mHostEmulationManager.isHostCardEmulationActivated();
     }
 }
