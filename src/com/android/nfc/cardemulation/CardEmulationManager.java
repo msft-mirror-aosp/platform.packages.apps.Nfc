@@ -49,6 +49,7 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.nfc.ForegroundUtils;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 
@@ -122,14 +123,15 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     final byte[] mOffHostRouteUicc;
     final byte[] mOffHostRouteEse;
 
-    public CardEmulationManager(Context context) {
+    // TODO: Move this object instantiation and dependencies to NfcInjector.
+    public CardEmulationManager(Context context, NfcInjector nfcInjector) {
         mContext = context;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
         mForegroundUtils = ForegroundUtils.getInstance(
             context.getSystemService(ActivityManager.class));
         mWalletRoleObserver = new WalletRoleObserver(context,
-                context.getSystemService(RoleManager.class), this);
+                context.getSystemService(RoleManager.class), this, nfcInjector);
         mAidCache = new RegisteredAidCache(context, mWalletRoleObserver);
         mT3tIdentifiersCache = new RegisteredT3tIdentifiersCache(context);
         mHostEmulationManager =
@@ -632,14 +634,25 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         @Override
         public boolean setShouldDefaultToObserveModeForService(int userId,
-            ComponentName service, boolean enable) {
+                ComponentName service, boolean enable) {
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             if (!isServiceRegistered(userId, service)) {
                 return false;
             }
-            return mServiceCache.setShouldDefaultToObserveModeForService(userId, Binder.getCallingUid(),
-                service, enable);
+            Log.d(TAG, "Set should default to observe mode for service (" + service + ") to "
+                    + enable);
+            boolean currentStatus = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
+                    service);
+
+            if (currentStatus != enable) {
+                if (!mServiceCache.setShouldDefaultToObserveModeForService(userId,
+                        Binder.getCallingUid(), service, enable)) {
+                    return false;
+                }
+                updateForShouldDefaultToObserveMode(userId);
+            }
+            return true;
         }
 
         @Override
@@ -814,7 +827,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             NfcPermissions.enforcePreferredPaymentInfoPermissions(mContext);
-            return mServiceCache.getService(userId, mAidCache.getPreferredService());
+            return mServiceCache.getService(userId, mAidCache.getPreferredService().second);
         }
 
         @Override
@@ -1036,14 +1049,14 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Override
     public void onPreferredPaymentServiceChanged(int userId, ComponentName service) {
         Log.i(TAG, "onPreferredPaymentServiceChanged");
-        ComponentName oldPreferredService = mAidCache.getPreferredService();
+        ComponentName oldPreferredService = mAidCache.getPreferredService().second;
         mAidCache.onPreferredPaymentServiceChanged(userId, service);
         mHostEmulationManager.onPreferredPaymentServiceChanged(userId, service);
+        ComponentName newPreferredService = mAidCache.getPreferredService().second;
 
-            NfcService.getInstance().onPreferredPaymentChanged(
+        NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_CHANGED);
-
-        if (!Objects.equals(oldPreferredService, service)) {
+        if (!Objects.equals(oldPreferredService, newPreferredService)) {
             updateForShouldDefaultToObserveMode(userId);
         }
     }
@@ -1051,18 +1064,19 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Override
     public void onPreferredForegroundServiceChanged(int userId, ComponentName service) {
         Log.i(TAG, "onPreferredForegroundServiceChanged");
-        ComponentName oldPreferredService = mAidCache.getPreferredService();
+        ComponentName oldPreferredService = mAidCache.getPreferredService().second;
         mAidCache.onPreferredForegroundServiceChanged(userId, service);
         mHostEmulationManager.onPreferredForegroundServiceChanged(userId, service);
+        ComponentName newPreferredService = mAidCache.getPreferredService().second;
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
-        if (!Objects.equals(oldPreferredService, service)) {
+        if (!Objects.equals(oldPreferredService, newPreferredService)) {
             updateForShouldDefaultToObserveMode(userId);
         }
     }
 
-    private void updateForShouldDefaultToObserveMode(int userId) {
+    public void updateForShouldDefaultToObserveMode(int userId) {
         long token = Binder.clearCallingIdentity();
         try {
             if (!android.nfc.Flags.nfcObserveMode()) {
@@ -1075,13 +1089,17 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "adapter is null, returning");
                 return;
             }
-            ComponentName preferredService = mAidCache.getPreferredService();
+            ComponentName preferredService = mAidCache.getPreferredService().second;
             boolean enableObserveMode = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
                     preferredService);
-            adapter.setObserveModeEnabled(enableObserveMode);
+            mHostEmulationManager.updateForShouldDefaultToObserveMode(enableObserveMode);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+    }
+
+    public void onObserveModeStateChange(boolean enabled) {
+        mHostEmulationManager.onObserveModeStateChange(enabled);
     }
 
     @Override
@@ -1110,5 +1128,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
         return mAidCache.isPreferredServicePackageNameForUser(packageName, userId);
+    }
+
+    public boolean isHostCardEmulationActivated() {
+        return mHostEmulationManager.isHostCardEmulationActivated();
     }
 }
