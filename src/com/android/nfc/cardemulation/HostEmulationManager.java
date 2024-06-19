@@ -49,7 +49,6 @@ import android.util.proto.ProtoOutputStream;
 
 import androidx.annotation.VisibleForTesting;
 
-import com.android.nfc.ForegroundUtils;
 import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
@@ -131,7 +130,6 @@ public class HostEmulationManager {
     Map<ComponentName, ArrayList<PollingFrame>> mPollingFramesToSend = null;
     private Map<Integer, Map<String, List<ApduServiceInfo>>> mPollingLoopFilters;
     private Map<Integer, Map<Pattern, List<ApduServiceInfo>>> mPollingLoopPatternFilters;
-    AutoDisableObserveMode mAutoDisableObserveMode = null;
 
     // Variables below are for a payment service,
     // which is typically bound persistently to improve on
@@ -303,66 +301,10 @@ public class HostEmulationManager {
         mPollingLoopPatternFilters.put(Integer.valueOf(userId), pollingLoopPatternFilters);
     }
 
-    public void onObserveModeStateChange(boolean enabled) {
-        synchronized(mLock) {
-            if (!enabled && mAutoDisableObserveMode != null) {
-                mHandler.removeCallbacks(mAutoDisableObserveMode);
-                mAutoDisableObserveMode = null;
-            }
-        }
-    }
-
-
-    class AutoDisableObserveMode implements Runnable {
-        ComponentName mComponentName;
-        AutoDisableObserveMode(ComponentName componentName) {
-            mComponentName = componentName;
-        }
-
-        @Override
-        public void run() {
-            synchronized(mLock) {
-                NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
-                if (!adapter.isObserveModeEnabled()) {
-                    return;
-                }
-                if (isPackageInForeground(mComponentName)) {
-                    return;
-                }
-                allowOneTransaction();
-            }
-        }
-
-        boolean isPackageInForeground(ComponentName componentName) {
-            ActivityManager am = mContext.getSystemService(ActivityManager.class);
-            if (am == null) {
-                return false;
-            }
-            ForegroundUtils foregroundUtils = ForegroundUtils.getInstance(am);
-            if (foregroundUtils == null) {
-                return false;
-            }
-            PackageManager packageManager = mContext.getPackageManager();
-            if (packageManager == null) {
-                return false;
-            }
-            for (Integer uid : foregroundUtils.getForegroundUids()) {
-                for (String packageName :  packageManager.getPackagesForUid(uid)) {
-                    if (packageName != null
-                        && componentName.getPackageName().equals(packageName)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-    }
-
     private void sendFrameToServiceLocked(Messenger service, ComponentName name,
         PollingFrame frame) {
         sendFramesToServiceLocked(service, name, Arrays.asList(frame));
     }
-
     private void sendFramesToServiceLocked(Messenger service, ComponentName name,
             List<PollingFrame> frames) {
         if (service != null) {
@@ -377,10 +319,6 @@ public class HostEmulationManager {
             } else {
                 mPollingFramesToSend.put(name, new ArrayList<>(frames));
             }
-        }
-        if (Flags.autoDisableObserveMode() && mAutoDisableObserveMode == null) {
-            mAutoDisableObserveMode = new AutoDisableObserveMode(name);
-            mHandler.postDelayed(mAutoDisableObserveMode, 3000);
         }
     }
 
@@ -811,11 +749,6 @@ public class HostEmulationManager {
             unbindServiceIfNeededLocked();
             mState = STATE_IDLE;
             mPollingLoopState = PollingLoopState.EVALUATING_POLLING_LOOP;
-
-            if (mAutoDisableObserveMode != null) {
-                mHandler.removeCallbacks(mAutoDisableObserveMode);
-                mAutoDisableObserveMode = null;
-            }
 
             if (mEnableObserveModeAfterTransaction) {
                 Log.d(TAG, "HCE deactivated, will re-enable observe mode.");
