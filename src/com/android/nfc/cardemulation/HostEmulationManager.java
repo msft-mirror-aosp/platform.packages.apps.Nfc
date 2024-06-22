@@ -43,12 +43,14 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.sysprop.NfcProperties;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.nfc.ForegroundUtils;
 import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
@@ -130,6 +132,7 @@ public class HostEmulationManager {
     Map<ComponentName, ArrayList<PollingFrame>> mPollingFramesToSend = null;
     private Map<Integer, Map<String, List<ApduServiceInfo>>> mPollingLoopFilters;
     private Map<Integer, Map<Pattern, List<ApduServiceInfo>>> mPollingLoopPatternFilters;
+    AutoDisableObserveModeRunnable mAutoDisableObserveModeRunnable = null;
 
     // Variables below are for a payment service,
     // which is typically bound persistently to improve on
@@ -301,10 +304,77 @@ public class HostEmulationManager {
         mPollingLoopPatternFilters.put(Integer.valueOf(userId), pollingLoopPatternFilters);
     }
 
+    public void onObserveModeStateChange(boolean enabled) {
+        synchronized(mLock) {
+            if (!enabled && mAutoDisableObserveModeRunnable != null) {
+                mHandler.removeCallbacks(mAutoDisableObserveModeRunnable);
+                mAutoDisableObserveModeRunnable = null;
+            }
+        }
+    }
+
+
+    class AutoDisableObserveModeRunnable implements Runnable {
+        Set<String> mServicePackageNames;
+        AutoDisableObserveModeRunnable(ComponentName componentName) {
+            mServicePackageNames = new ArraySet<>(1);
+            addServiceToList(componentName);
+        }
+
+        @Override
+        public void run() {
+            synchronized(mLock) {
+                NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
+                if (!adapter.isObserveModeEnabled()) {
+                    return;
+                }
+                if (arePackagesInForeground()) {
+                    return;
+                }
+                Log.w(TAG, "Observe mode not disabled and no application from the following " +
+                    "packages are in the foreground: " + String.join(", ", mServicePackageNames));
+                allowOneTransaction();
+            }
+        }
+
+
+        void addServiceToList(ComponentName service) {
+            mServicePackageNames.add(service.getPackageName());
+        }
+
+        boolean arePackagesInForeground() {
+            ActivityManager am = mContext.getSystemService(ActivityManager.class);
+            if (am == null) {
+                return false;
+            }
+            ForegroundUtils foregroundUtils = ForegroundUtils.getInstance(am);
+            if (foregroundUtils == null) {
+                return false;
+            }
+            PackageManager packageManager = mContext.getPackageManager();
+            if (packageManager == null) {
+                return false;
+            }
+            for (Integer uid : foregroundUtils.getForegroundUids()) {
+                for (String packageName :  packageManager.getPackagesForUid(uid)) {
+                    if (packageName != null) {
+                        for (String servicePackageName : mServicePackageNames) {
+                            if (Objects.equals(servicePackageName, packageName)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
     private void sendFrameToServiceLocked(Messenger service, ComponentName name,
         PollingFrame frame) {
         sendFramesToServiceLocked(service, name, Arrays.asList(frame));
     }
+
     private void sendFramesToServiceLocked(Messenger service, ComponentName name,
             List<PollingFrame> frames) {
         if (service != null) {
@@ -318,6 +388,14 @@ public class HostEmulationManager {
                 mPollingFramesToSend.get(name).addAll(frames);
             } else {
                 mPollingFramesToSend.put(name, new ArrayList<>(frames));
+            }
+        }
+        if (Flags.autoDisableObserveMode()) {
+            if (mAutoDisableObserveModeRunnable == null) {
+                mAutoDisableObserveModeRunnable = new AutoDisableObserveModeRunnable(name);
+                mHandler.postDelayed(mAutoDisableObserveModeRunnable, 3000);
+            } else {
+                mAutoDisableObserveModeRunnable.addServiceToList(name);
             }
         }
     }
@@ -749,6 +827,11 @@ public class HostEmulationManager {
             unbindServiceIfNeededLocked();
             mState = STATE_IDLE;
             mPollingLoopState = PollingLoopState.EVALUATING_POLLING_LOOP;
+
+            if (mAutoDisableObserveModeRunnable != null) {
+                mHandler.removeCallbacks(mAutoDisableObserveModeRunnable);
+                mAutoDisableObserveModeRunnable = null;
+            }
 
             if (mEnableObserveModeAfterTransaction) {
                 Log.d(TAG, "HCE deactivated, will re-enable observe mode.");
