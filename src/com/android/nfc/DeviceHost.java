@@ -45,6 +45,8 @@ public interface DeviceHost {
 
         public void onPollingLoopDetected(Bundle pollingFrame);
 
+        public void onWlcStopped(int wpt_end_condition);
+
         public void onVendorSpecificEvent(int gid, int oid, byte[] payload);
     }
 
@@ -71,6 +73,7 @@ public interface DeviceHost {
         byte[] readNdef();
         boolean writeNdef(byte[] data);
         NdefMessage findAndReadNdef();
+        NdefMessage getNdef();
         boolean formatNdef(byte[] key);
         boolean isNdefFormatable();
         boolean makeReadOnly();
@@ -173,7 +176,7 @@ public interface DeviceHost {
 
     void dump(FileDescriptor fd);
 
-    public void doSetScreenState(int screen_state_mask);
+    public void doSetScreenState(int screen_state_mask, boolean alwaysPoll);
 
     public int getNciVersion();
 
@@ -190,6 +193,8 @@ public interface DeviceHost {
     public boolean isObserveModeSupported();
 
     public boolean setObserveMode(boolean enable);
+
+    public boolean isObserveModeEnabled();
 
     /**
     * Get the committed listen mode routing configuration
@@ -215,6 +220,8 @@ public interface DeviceHost {
      * Enable or Disable the Power Saving Mode based on flag
      */
     boolean setPowerSavingMode(boolean flag);
+
+    boolean isMultiTag();
 
     void setIsoDepProtocolRoute(int route);
     void setTechnologyABRoute(int route);
