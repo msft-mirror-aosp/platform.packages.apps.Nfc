@@ -49,6 +49,7 @@ static int sLastSelectedTagId = 0;
 *******************************************************************************/
 NfcTag::NfcTag()
     : mNumTechList(0),
+      mNumRfDiscId(0),
       mTechnologyTimeoutsTable(MAX_NUM_TECHNOLOGY),
       mNativeData(NULL),
       mIsActivated(false),
@@ -103,6 +104,7 @@ void NfcTag::initialize(nfc_jni_native_data* native) {
   mIsActivated = false;
   mActivationState = Idle;
   mProtocol = NFC_PROTOCOL_UNKNOWN;
+  mNumRfDiscId = 0;
   mtT1tMaxMessageSize = 0;
   mReadCompletedStatus = NFA_STATUS_OK;
   resetTechnologies();
@@ -454,7 +456,7 @@ void NfcTag::discoverTechnologies(tNFA_DISC_RESULT& discoveryData) {
     }
   }
   LOG(DEBUG) << StringPrintf("%s; mNumDiscTechList=%x", fn, mNumDiscTechList);
-
+  mNumRfDiscId = discovery_ntf.rf_disc_id;
 TheEnd:
   LOG(DEBUG) << StringPrintf("%s: exit", fn);
 }
