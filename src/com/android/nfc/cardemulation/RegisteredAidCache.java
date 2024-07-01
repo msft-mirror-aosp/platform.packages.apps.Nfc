@@ -16,6 +16,7 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.NonNull;
 import android.annotation.TargetApi;
 import android.annotation.FlaggedApi;
 import android.app.ActivityManager;
@@ -28,6 +29,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.sysprop.NfcProperties;
 import android.util.Log;
+import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.nfc.NfcService;
@@ -1201,15 +1203,22 @@ public class RegisteredAidCache {
         }
     }
 
-    public ComponentName getPreferredService() {
+    @NonNull
+    public Pair<Integer, ComponentName> getPreferredService() {
         if (mPreferredForegroundService != null) {
             // return current foreground service
-            return mPreferredForegroundService;
+            return new Pair<>(mUserIdPreferredForegroundService, mPreferredForegroundService);
         } else {
             // return current preferred service
-            return mPreferredPaymentService;
+            return getPreferredPaymentService();
         }
     }
+
+    @NonNull
+    public Pair<Integer, ComponentName> getPreferredPaymentService() {
+         return new Pair<>(mUserIdPreferredPaymentService, mPreferredPaymentService);
+    }
+
     public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
         if (mPreferredForegroundService != null) {
             if (mPreferredForegroundService.getPackageName().equals(packageName) &&
