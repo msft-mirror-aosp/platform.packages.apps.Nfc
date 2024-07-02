@@ -73,6 +73,11 @@ android_app {
         "framework-res",
     ],
     jni_libs: ["libnfc_nci_jni"],
+    lint: {
+        warning_checks: [
+            "FlaggedApi",
+        ],
+    },
 }
 
 // NCI Configuration embedded in NFC apex.
