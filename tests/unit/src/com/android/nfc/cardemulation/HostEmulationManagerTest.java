@@ -70,6 +70,7 @@ import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -284,7 +285,8 @@ public class HostEmulationManagerTest {
         mHostEmulationManager.updatePollingLoopFilters(USER_ID, List.of(serviceWithFilter,
                 serviceWithPatternFilter, overlappingServiceWithFilter));
         when(mContext.getPackageManager()).thenReturn(mPackageManager);
-        when(mRegisteredAidCache.getPreferredService()).thenReturn(WALLET_PAYMENT_SERVICE);
+        when(mRegisteredAidCache.getPreferredService())
+                .thenReturn(new Pair<>(USER_ID, WALLET_PAYMENT_SERVICE));
         ApplicationInfo applicationInfo = new ApplicationInfo();
         applicationInfo.uid = USER_ID;
         mHostEmulationManager.mPaymentServiceName = WALLET_PAYMENT_SERVICE;
@@ -312,16 +314,6 @@ public class HostEmulationManagerTest {
         Assert.assertTrue(mHostEmulationManager.mEnableObserveModeAfterTransaction);
         Assert.assertTrue(frame1.getTriggeredAutoTransact());
         Assert.assertEquals(mHostEmulationManager.mState, HostEmulationManager.STATE_POLLING_LOOP);
-        verify(mMessanger).send(mMessageArgumentCaptor.capture());
-        Message message = mMessageArgumentCaptor.getValue();
-        Bundle bundle = message.getData();
-        Assert.assertEquals(message.what, HostApduService.MSG_POLLING_LOOP);
-        Assert.assertTrue(bundle.containsKey(HostApduService.KEY_POLLING_LOOP_FRAMES_BUNDLE));
-        ArrayList<PollingFrame> sentFrames = bundle
-                .getParcelableArrayList(HostApduService.KEY_POLLING_LOOP_FRAMES_BUNDLE);
-        Assert.assertTrue(sentFrames.contains(frame1));
-        Assert.assertTrue(sentFrames.contains(frame2));
-        Assert.assertNull(mHostEmulationManager.mPendingPollingLoopFrames);
     }
 
     @Test
@@ -335,7 +327,8 @@ public class HostEmulationManagerTest {
         when(serviceWithFilter.getUid()).thenReturn(USER_ID);
         mHostEmulationManager.updatePollingLoopFilters(USER_ID, List.of(serviceWithFilter));
         when(mContext.getPackageManager()).thenReturn(mPackageManager);
-        when(mRegisteredAidCache.getPreferredService()).thenReturn(WALLET_PAYMENT_SERVICE);
+        when(mRegisteredAidCache.getPreferredService())
+                .thenReturn(new Pair<>(USER_ID, WALLET_PAYMENT_SERVICE));
         ApplicationInfo applicationInfo = new ApplicationInfo();
         applicationInfo.uid = USER_ID;
         when(mPackageManager.getApplicationInfo(eq(WALLET_HOLDER_PACKAGE_NAME), eq(0)))
@@ -962,9 +955,7 @@ public class HostEmulationManagerTest {
         Assert.assertEquals(-1, mHostEmulationManager.mActiveServiceUserId);
         Assert.assertEquals(-1, mHostEmulationManager.mServiceUserId);
         Assert.assertEquals(HostEmulationManager.STATE_IDLE, mHostEmulationManager.getState());
-        Assert.assertFalse(mHostEmulationManager.mEnableObserveModeAfterTransaction);
         Assert.assertFalse(mHostEmulationManager.mServiceBound);
-        verify(mNfcAdapter).setObserveModeEnabled(eq(true));
         verify(mMessanger).send(mMessageArgumentCaptor.capture());
         Message message = mMessageArgumentCaptor.getValue();
         Assert.assertEquals(message.what, HostApduService.MSG_DEACTIVATED);
@@ -972,11 +963,16 @@ public class HostEmulationManagerTest {
         verify(mContext).getSystemService(eq(PowerManager.class));
         verify(mContext).getSystemService(eq(KeyguardManager.class));
         verify(mContext).unbindService(mServiceConnectionArgumentCaptor.capture());
-        verifyNoMoreInteractions(mMessanger);
         Assert.assertEquals(mHostEmulationManager.getServiceConnection(),
                 mServiceConnectionArgumentCaptor.getValue());
-        verifyNoMoreInteractions(mContext);
         verify(mStatsUtils).logCardEmulationDeactivatedEvent();
+
+        mTestableLooper.moveTimeForward(5000);
+        mTestableLooper.processAllMessages();
+        verify(mNfcAdapter).setObserveModeEnabled(eq(true));
+        Assert.assertFalse(mHostEmulationManager.mEnableObserveModeAfterTransaction);
+        verifyNoMoreInteractions(mMessanger);
+        verifyNoMoreInteractions(mContext);
     }
 
     @Test
@@ -1107,7 +1103,9 @@ public class HostEmulationManagerTest {
         IBinder service = mock(IBinder.class);
         mHostEmulationManager.mState = HostEmulationManager.STATE_W4_SELECT;
         mHostEmulationManager.mSelectApdu = null;
-        mHostEmulationManager.mPendingPollingLoopFrames = new ArrayList<>(List.of());
+        mHostEmulationManager.mPollingFramesToSend = new HashMap();
+        mHostEmulationManager.mPollingFramesToSend.put(WALLET_PAYMENT_SERVICE,
+                new ArrayList<>(List.of()));
 
         mHostEmulationManager.getServiceConnection().onServiceConnected(WALLET_PAYMENT_SERVICE,
                 service);
@@ -1116,7 +1114,7 @@ public class HostEmulationManagerTest {
         Assert.assertNotNull(mHostEmulationManager.mService);
         Assert.assertTrue(mHostEmulationManager.mServiceBound);
         Assert.assertEquals(HostEmulationManager.STATE_W4_SELECT, mHostEmulationManager.getState());
-        Assert.assertNull(mHostEmulationManager.mPendingPollingLoopFrames);
+        Assert.assertNull(mHostEmulationManager.mPollingFramesToSend.get(WALLET_PAYMENT_SERVICE));
         verify(service).transact(eq(1), any(), eq(null), eq(1));
     }
 
