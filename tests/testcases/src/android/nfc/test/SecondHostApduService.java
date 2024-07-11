@@ -24,7 +24,7 @@ import android.nfc.cardemulation.PollingFrame;
 import android.os.Bundle;
 import java.util.List;
 
-public class CustomHostApduService extends HostApduService {
+public class SecondHostApduService extends HostApduService {
   static final String POLLING_LOOP_RECEIVED_ACTION = "CTS_NFC_POLLING_LOOP";
   static final String SERVICE_NAME_EXTRA = "CTS_NFC_SERVICE_NAME_EXTRA";
   static final String POLLING_FRAMES_EXTRA = "CTS_NFC_POLLING_FRAMES_EXTRA";
