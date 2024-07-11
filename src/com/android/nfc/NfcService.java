@@ -1871,7 +1871,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     } catch (NoSuchElementException e) {
                         Log.e(TAG, "Change Tech Binder was never registered.");
                     }
-                } else {
+                } else if (!(pollTech == NfcAdapter.FLAG_USE_ALL_TECH && // Do not call for
+                                                                         // resetDiscoveryTech
+                        listenTech == NfcAdapter.FLAG_USE_ALL_TECH)) {
                     try {
                         mDeviceHost.setDiscoveryTech(pollTech, listenTech);
                         mDiscoveryTechParams = new DiscoveryTechParams();
@@ -1882,6 +1884,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         Log.e(TAG, "Remote binder has already died.");
                         return;
                     }
+                } else {
+                    return;
                 }
 
                 applyRouting(true);
