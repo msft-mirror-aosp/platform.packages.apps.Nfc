@@ -63,7 +63,7 @@ class PN532:
             },
         )
         self.log.debug("Serial port: %s", path)
-        self.device = serial.Serial(path, 115200, timeout=0.1)
+        self.device = serial.Serial(path, 115200, timeout=0.5)
 
         self.device.flush()
         self.device.write(LONG_PREAMBLE + bytearray.fromhex("0000ff00ff00"))
@@ -159,6 +159,29 @@ class PN532:
         if not rsp:
             raise RuntimeError("No response for send poll_b frame.")
 
+        if rsp[0] != IN_LIST_PASSIVE_TARGET + 1:
+            self.log.error("Got unexpected command code in response")
+        del rsp[0]
+
+        afi = rsp[0]
+
+        deselect_command = 0xC2
+        self.send_broadcast(bytearray(deselect_command))
+
+        wupb_command = [0x05, afi, 0x08]
+        self.send_frame(
+            self.construct_frame([WRITE_REGISTER, 0x63, 0x3D, 0x00])
+        )
+        rsp = self.send_frame(
+            self.construct_frame(
+                [IN_COMMUNICATE_THRU] + list(with_crc16a(wupb_command))
+            )
+        )
+        if not rsp:
+            raise RuntimeError("No response for WUPB command")
+
+        return tag.TypeBTag(self, 0x03, rsp)
+
     def send_broadcast(self, broadcast):
         """Emits broadcast frame with CRC. This should be called after poll_a()."""
         self.log.debug("Sending broadcast %s", hexlify(broadcast).decode())
@@ -219,7 +242,7 @@ class PN532:
 
         return bytearray(frame)
 
-    def send_frame(self, frame, timeout=0.1):
+    def send_frame(self, frame, timeout=0.5):
         """
         Writes a frame to the device and returns the response.
         """
@@ -277,7 +300,7 @@ class PN532:
                     "Unexpected postamble byte when performing read, got %02x", frame[4]
                 )
 
-        self.device.timeout = 0.1
+        self.device.timeout = 0.5
         self.device.write(
             bytearray.fromhex("0000ff00ff00")
         )  # send ACK frame, there is no response.
