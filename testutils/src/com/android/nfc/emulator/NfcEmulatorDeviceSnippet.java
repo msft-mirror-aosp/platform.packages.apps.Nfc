@@ -334,6 +334,19 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         return false;
     }
 
+    /** Open polling and off host emulator activity */
+    @Rpc(description = "Open polling and off host emulator activity")
+    public void startPollingAndOffHostEmulatorActivity() {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClassName(
+                instrumentation.getTargetContext(),
+                PollingAndOffHostEmulatorActivity.class.getName());
+        intent.putExtra(PollingLoopEmulatorActivity.NFC_TECH_KEY, NfcAdapter.FLAG_READER_NFC_A);
+        mActivity = (PollingAndOffHostEmulatorActivity) instrumentation.startActivitySync(intent);
+    }
+
     /** Open polling loop emulator activity for Type A */
     @Rpc(description = "Open polling loop emulator activity for polling loop A test")
     public void startPollingLoopAEmulatorActivity() {
@@ -388,10 +401,38 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity = (TwoPollingFrameEmulatorActivity) instrumentation.startActivitySync(intent);
     }
 
+    @Rpc(description = "Opens PN532 Activity\"")
+    public void startPN532Activity() {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClassName(
+                instrumentation.getTargetContext(),
+                PN532Activity.class.getName());
+
+        mActivity = (PN532Activity) instrumentation.startActivitySync(intent);
+    }
+
     /** Registers receiver that waits for RF field broadcast */
     @AsyncRpc(description = "Waits for RF field detected broadcast")
     public void asyncWaitForRfOnBroadcast(String callbackId, String eventName) {
         registerSnippetBroadcastReceiver(callbackId, eventName, sRfOnAction);
+    }
+
+    /** Registers receiver that waits for RF field broadcast */
+    @AsyncRpc(description = "Waits for RF field detected broadcast")
+    public void asyncWaitsForTagDiscovered(String callbackId, String eventName) {
+        registerSnippetBroadcastReceiver(
+                callbackId, eventName, PN532Activity.ACTION_TAG_DISCOVERED);
+    }
+
+    @Rpc(description = "Enable reader mode with given flags")
+    public void enableReaderMode(int flags) {
+        if (mActivity == null || !(mActivity instanceof PN532Activity)) {
+            return;
+        }
+        ((PN532Activity) mActivity).enableReaderMode(flags);
     }
 
     /** Registers receiver for polling loop action */
