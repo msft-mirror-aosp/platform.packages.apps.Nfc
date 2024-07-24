@@ -37,7 +37,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
-import android.nfc.cardemulation.HostApduService;
+import android.nfc.cardemulation.PollingFrame;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -94,6 +94,7 @@ public final class NfcCardEmulationOccurredTest {
     public void setUp() {
         mStaticMockSession = ExtendedMockito.mockitoSession()
                 .mockStatic(NfcStatsLog.class)
+                .mockStatic(Flags.class)
                 .mockStatic(NfcService.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
@@ -122,6 +123,7 @@ public final class NfcCardEmulationOccurredTest {
         aidResolveInfo.services.add(apduServiceInfo);
         when(mockAidCache.resolveAid(anyString())).thenReturn(aidResolveInfo);
         when(NfcService.getInstance()).thenReturn(mock(NfcService.class));
+        when(Flags.statsdCeEventsFlag()).thenReturn(false);
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> mHostEmulation = new HostEmulationManager(
@@ -163,8 +165,7 @@ public final class NfcCardEmulationOccurredTest {
         mStaticMockSession.finishMocking();
     }
 
-    // TODO: Remove after aosp/2902507
-    // @RequiresFlagsDisabled(Flags.FLAG_STATSD_CE_EVENTS_FLAG)
+    @RequiresFlagsDisabled(Flags.FLAG_STATSD_CE_EVENTS_FLAG)
     @Test
     public void testHCEOther() {
         if (!mNfcSupported) return;
@@ -212,10 +213,10 @@ public final class NfcCardEmulationOccurredTest {
 
         Bundle pollingLoopTypeOnFrame = mock(Bundle.class);
         Bundle pollingLoopTypeOffFrame = mock(Bundle.class);
-        when(pollingLoopTypeOnFrame.getChar(HostApduService.POLLING_LOOP_TYPE_KEY))
-                .thenReturn(HostApduService.POLLING_LOOP_TYPE_ON);
-        when(pollingLoopTypeOffFrame.getChar(HostApduService.POLLING_LOOP_TYPE_KEY))
-                .thenReturn(HostApduService.POLLING_LOOP_TYPE_OFF);
+        when(pollingLoopTypeOnFrame.getInt(PollingFrame.KEY_POLLING_LOOP_TYPE))
+                .thenReturn(PollingFrame.POLLING_LOOP_TYPE_ON);
+        when(pollingLoopTypeOffFrame.getInt(PollingFrame.KEY_POLLING_LOOP_TYPE))
+                .thenReturn(PollingFrame.POLLING_LOOP_TYPE_OFF);
         ComponentName componentName = mock(ComponentName.class);
         when(componentName.getPackageName()).thenReturn("com.android.nfc");
         when(mockAidCache.getPreferredService()).thenReturn(componentName);

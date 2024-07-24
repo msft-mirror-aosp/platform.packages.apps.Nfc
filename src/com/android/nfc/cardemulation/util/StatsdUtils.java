@@ -26,7 +26,7 @@ import com.android.nfc.flags.Flags;
 
 @FlaggedApi(Flags.FLAG_STATSD_CE_EVENTS_FLAG)
 public class StatsdUtils {
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
     private final String TAG = "StatsdUtils";
 
     public static final String SE_NAME_HCE = "HCE";
@@ -40,6 +40,12 @@ public class StatsdUtils {
             NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT;
     public static final int CE_HCE_OTHER =
             NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_OTHER;
+    public static final int CE_OFFHOST =
+            NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__OFFHOST;
+    public static final int CE_OFFHOST_PAYMENT =
+            NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__OFFHOST_PAYMENT;
+    public static final int CE_OFFHOST_OTHER =
+            NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__OFFHOST_OTHER;
     /** NO_ROUTING */
     public static final int CE_NO_ROUTING =
             NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__FAILED_NO_ROUTING;
@@ -224,6 +230,23 @@ public class StatsdUtils {
         }
         int statsdCategory =
                 getCardEmulationStatsdCategory(transactionResult, mTransactionCategory);
+        logCardEmulationEvent(statsdCategory);
+    }
+
+    public void logCardEmulationOffhostEvent(String seName) {
+        mSeName = seName;
+
+        int statsdCategory;
+        switch (mTransactionCategory) {
+            case CardEmulation.CATEGORY_PAYMENT:
+                statsdCategory = CE_OFFHOST_PAYMENT;
+                break;
+            case CardEmulation.CATEGORY_OTHER:
+                statsdCategory = CE_OFFHOST_OTHER;
+                break;
+            default:
+                statsdCategory = CE_OFFHOST;
+        };
         logCardEmulationEvent(statsdCategory);
     }
 }
