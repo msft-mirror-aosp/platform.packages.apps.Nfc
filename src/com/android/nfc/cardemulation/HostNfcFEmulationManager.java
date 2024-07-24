@@ -42,10 +42,11 @@ import com.android.nfc.flags.Flags;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import androidx.annotation.VisibleForTesting;
 
 public class HostNfcFEmulationManager {
     static final String TAG = "HostNfcFEmulationManager";
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
 
     static final int STATE_IDLE = 0;
     static final int STATE_W4_SERVICE = 1;
@@ -440,4 +441,34 @@ public class HostNfcFEmulationManager {
                     mServiceName, proto, HostNfcFEmulationManagerProto.SERVICE_NAME);
         }
     }
+    @VisibleForTesting
+    public String getEnabledFgServiceName() {
+        if (mEnabledFgServiceName != null) {
+            return mEnabledFgServiceName.getPackageName();
+        }
+        return null;
+    }
+
+    @VisibleForTesting
+    public boolean isUserSwitched() {
+        if (mEnabledFgServiceName == null && mActiveService == null && mState == STATE_IDLE)
+            return true;
+        return false;
+    }
+
+    @VisibleForTesting
+    public int getServiceUserId() {
+        return mServiceUserId;
+    }
+
+    @VisibleForTesting
+    public ServiceConnection getServiceConnection() {
+        return mConnection;
+    }
+
+    @VisibleForTesting
+    public ComponentName getServiceName() {
+        return mServiceName;
+    }
+
 }

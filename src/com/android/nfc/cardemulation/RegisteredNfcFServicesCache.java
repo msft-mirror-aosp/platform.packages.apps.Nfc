@@ -41,6 +41,7 @@ import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.nfc.Utils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -58,11 +59,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import androidx.annotation.VisibleForTesting;
 
 public class RegisteredNfcFServicesCache {
     static final String XML_INDENT_OUTPUT_FEATURE = "http://xmlpull.org/v1/doc/features.html#indent-output";
     static final String TAG = "RegisteredNfcFServicesCache";
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
+    private static final boolean VDBG = false; // turn on for local testing.
 
     final Context mContext;
     final AtomicReference<BroadcastReceiver> mReceiver;
@@ -288,14 +291,14 @@ public class RegisteredNfcFServicesCache {
             return;
         }
         ArrayList<NfcFServiceInfo> newServices = null;
+        ArrayList<NfcFServiceInfo> toBeAdded = new ArrayList<>();
+        ArrayList<NfcFServiceInfo> toBeRemoved = new ArrayList<>();
         synchronized (mLock) {
             UserServices userServices = findOrCreateUserLocked(userId);
 
             // Check update
             ArrayList<NfcFServiceInfo> cachedServices =
                     new ArrayList<NfcFServiceInfo>(userServices.services.values());
-            ArrayList<NfcFServiceInfo> toBeAdded = new ArrayList<NfcFServiceInfo>();
-            ArrayList<NfcFServiceInfo> toBeRemoved = new ArrayList<NfcFServiceInfo>();
             boolean matched = false;
             for (NfcFServiceInfo validService : validServices) {
                 for (NfcFServiceInfo cachedService : cachedServices) {
@@ -332,11 +335,9 @@ public class RegisteredNfcFServicesCache {
             // Update cache
             for (NfcFServiceInfo service : toBeAdded) {
                 userServices.services.put(service.getComponent(), service);
-                if (DBG) Log.d(TAG, "Added service: " + service.getComponent());
             }
             for (NfcFServiceInfo service : toBeRemoved) {
                 userServices.services.remove(service.getComponent());
-                if (DBG) Log.d(TAG, "Removed service: " + service.getComponent());
             }
             // Apply dynamic System Code mappings
             ArrayList<ComponentName> toBeRemovedDynamicSystemCode =
@@ -405,7 +406,16 @@ public class RegisteredNfcFServicesCache {
             newServices = new ArrayList<NfcFServiceInfo>(userServices.services.values());
         }
         mCallback.onNfcFServicesUpdated(userId, Collections.unmodifiableList(newServices));
-        if (DBG) dump(newServices);
+        if (VDBG) {
+            Log.i(TAG, "Services => ");
+            dump(newServices);
+        } else {
+            // dump only new services added or removed
+            Log.i(TAG, "New Services => ");
+            dump(toBeAdded);
+            Log.i(TAG, "Removed Services => ");
+            dump(toBeRemoved);
+        }
     }
 
     private void readDynamicSystemCodeNfcid2Locked() {
@@ -759,7 +769,7 @@ public class RegisteredNfcFServicesCache {
                 for (UserHandle uh : mUserHandles) {
                     UserManager um = mContext.createContextAsUser(
                             uh, /*flags=*/0).getSystemService(UserManager.class);
-                    pw.println("User " + um.getUserName() + " : ");
+                    pw.println("User " + Utils.maskSubstring(um.getUserName(), 3));
                     UserServices userServices = findOrCreateUserLocked(uh.getIdentifier());
                     for (NfcFServiceInfo service : userServices.services.values()) {
                         service.dump(pFd, pw, args);
@@ -792,6 +802,11 @@ public class RegisteredNfcFServicesCache {
                 proto.end(token);
             }
         }
+    }
+
+    @VisibleForTesting
+    public boolean isActivated() {
+        return mActivated;
     }
 
 }

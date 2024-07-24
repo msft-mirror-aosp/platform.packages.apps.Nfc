@@ -31,10 +31,11 @@ import com.android.nfc.ForegroundUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import androidx.annotation.VisibleForTesting;
 
 public class EnabledNfcFServices implements com.android.nfc.ForegroundUtils.Callback {
     static final String TAG = "EnabledNfcFCardEmulationServices";
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
 
     final Context mContext;
     final RegisteredNfcFServicesCache mNfcFServiceCache;
@@ -252,5 +253,20 @@ public class EnabledNfcFServices implements com.android.nfc.ForegroundUtils.Call
             proto.write(EnabledNfcFServicesProto.COMPUTE_FG_REQUESTED, mComputeFgRequested);
             proto.write(EnabledNfcFServicesProto.FOREGROUND_UID, mForegroundUid);
         }
+    }
+
+    @VisibleForTesting
+    public boolean isActivated() {
+        return mActivated;
+    }
+
+    @VisibleForTesting
+    public boolean isNfcDisabled() {
+        return !mActivated && mForegroundUid == -1;
+    }
+
+    @VisibleForTesting
+    public boolean isUserSwitched() {
+        return !mActivated && mForegroundUid == -1 && !mComputeFgRequested;
     }
 }

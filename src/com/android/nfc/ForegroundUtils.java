@@ -23,9 +23,10 @@ import android.util.SparseBooleanArray;
 
 import java.util.ArrayList;
 import java.util.List;
+import androidx.annotation.VisibleForTesting;
 
 public class ForegroundUtils implements ActivityManager.OnUidImportanceListener {
-    static final boolean DBG = NfcProperties.debug_enabled().orElse(false);
+    static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
     private final String TAG = "ForegroundUtils";
     private final ActivityManager mActivityManager;
 
@@ -44,7 +45,8 @@ public class ForegroundUtils implements ActivityManager.OnUidImportanceListener 
         private static ForegroundUtils sInstance = null;
     }
 
-    private ForegroundUtils(ActivityManager am) {
+    @VisibleForTesting
+    public ForegroundUtils(ActivityManager am) {
         mActivityManager = am;
         try {
             mActivityManager.addOnUidImportanceListener(this,
@@ -183,5 +185,14 @@ public class ForegroundUtils implements ActivityManager.OnUidImportanceListener 
                 }
             }
         }
+    }
+    @VisibleForTesting
+    public SparseArray<List<Callback>> getBackgroundCallbacks() {
+        return mBackgroundCallbacks;
+    }
+
+    @VisibleForTesting
+    public void clearForegroundlist() {
+        mForegroundUids.clear();
     }
 }
