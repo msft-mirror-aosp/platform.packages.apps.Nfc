@@ -18,10 +18,12 @@ package com.android.nfc;
 
 import android.annotation.Nullable;
 import android.nfc.NdefMessage;
+import android.nfc.cardemulation.PollingFrame;
 import android.os.Bundle;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.util.List;
 
 public interface DeviceHost {
     public interface DeviceHostListener {
@@ -43,7 +45,7 @@ public interface DeviceHost {
 
         public void onHwErrorReported();
 
-        public void onPollingLoopDetected(Bundle pollingFrame);
+        public void onPollingLoopDetected(List<PollingFrame> pollingFrames);
 
         public void onWlcStopped(int wpt_end_condition);
 
@@ -236,4 +238,6 @@ public interface DeviceHost {
      * Sends Vendor NCI command
      */
     NfcVendorNciResponse sendRawVendorCmd(int mt, int gid, int oid, byte[] payload);
+
+    void enableVendorNciNotifications(boolean enabled);
 }
