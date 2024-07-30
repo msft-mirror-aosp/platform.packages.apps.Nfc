@@ -393,11 +393,19 @@ public class RegisteredAidCache {
                     && componentName.getPackageName().equals(
                     mDefaultWalletHolderPackageName)) {
                     if (VDBG) Log.d(TAG, "Prioritizing default wallet services.");
-                    resolveInfo.services.add(serviceAidInfo.service);
-                    if (serviceClaimsPaymentAid) {
-                        resolveInfo.category = CardEmulation.CATEGORY_PAYMENT;
+
+                    if (serviceClaimsPaymentAid ||
+                            serviceAidInfo.service.isCategoryOtherServiceEnabled()) {
+                        resolveInfo.services.add(serviceAidInfo.service);
+                        if (serviceClaimsPaymentAid) {
+                            resolveInfo.category = CardEmulation.CATEGORY_PAYMENT;
+                        }
+                        defaultWalletServices.add(serviceAidInfo.service);
+                    } else {
+                        if (VDBG) Log.d(TAG, "Service disabled in default wallet, " +
+                                "resolving against other applications");
+                        nonDefaultResolution(serviceClaimsPaymentAid, serviceAidInfo, resolveInfo);
                     }
-                    defaultWalletServices.add(serviceAidInfo.service);
                 } else {
                     nonDefaultResolution(serviceClaimsPaymentAid, serviceAidInfo, resolveInfo);
                 }
@@ -1203,13 +1211,14 @@ public class RegisteredAidCache {
         }
     }
 
-    public ComponentName getPreferredService() {
+    @NonNull
+    public Pair<Integer, ComponentName> getPreferredService() {
         if (mPreferredForegroundService != null) {
             // return current foreground service
-            return mPreferredForegroundService;
+            return new Pair<>(mUserIdPreferredForegroundService, mPreferredForegroundService);
         } else {
             // return current preferred service
-            return mPreferredPaymentService;
+            return getPreferredPaymentService();
         }
     }
 
