@@ -1935,6 +1935,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mIsSecureNfcEnabled = enable;
                 mBackupManager.dataChanged();
                 mDeviceHost.setNfcSecure(enable);
+                if (android.nfc.Flags.nfcPersistLog()) {
+                    mNfcEventLog.logEvent(
+                            NfcEventProto.EventType.newBuilder()
+                                    .setSecureChange(
+                                            NfcEventProto.NfcSecureChange.newBuilder()
+                                                    .setEnable(enable)
+                                                    .build())
+                                    .build());
+                }
                 if (mIsHceCapable) {
                     // update HCE/HCEF routing and commitRouting if Nfc is enabled
                     mCardEmulationManager.onSecureNfcToggled();
@@ -2104,6 +2113,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if ((pollTech & NfcAdapter.FLAG_READER_KEEP) == 0 &&
                         (pollTech & NfcAdapter.FLAG_USE_ALL_TECH)
                             != NfcAdapter.FLAG_USE_ALL_TECH) {
+                        pollTech = getReaderModeTechMask(pollTech);
                         saveNfcPollTech(pollTech & ~NfcAdapter.FLAG_SET_DEFAULT_TECH);
                         Log.i(TAG, "Default pollTech is set to 0x" +
                             Integer.toHexString(pollTech));
@@ -2149,7 +2159,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     } catch (NoSuchElementException e) {
                         Log.e(TAG, "Change Tech Binder was never registered.");
                     }
-                } else {
+                } else if (!(pollTech == NfcAdapter.FLAG_USE_ALL_TECH && // Do not call for
+                                                                         // resetDiscoveryTech
+                        listenTech == NfcAdapter.FLAG_USE_ALL_TECH)) {
+                        pollTech = getReaderModeTechMask(pollTech);
                     try {
                         mDeviceHost.setDiscoveryTech(pollTech, listenTech);
                         mDiscoveryTechParams = new DiscoveryTechParams();
@@ -2175,6 +2188,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         Log.e(TAG, "Remote binder has already died.");
                         return;
                     }
+                } else {
+                    return;
                 }
 
                 applyRouting(true);
@@ -2360,6 +2375,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mIsWlcEnabled = enable;
                 mBackupManager.dataChanged();
             }
+            if (android.nfc.Flags.nfcPersistLog()) {
+                mNfcEventLog.logEvent(
+                        NfcEventProto.EventType.newBuilder()
+                                .setWlcStateChange(
+                                        NfcEventProto.NfcWlcStateChange.newBuilder()
+                                                .setEnable(enable)
+                                                .build())
+                                .build());
+            }
             return true;
         }
 
@@ -2541,6 +2565,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mBackupManager.dataChanged();
             }
             applyRouting(true);
+            if (android.nfc.Flags.nfcPersistLog()) {
+                mNfcEventLog.logEvent(
+                        NfcEventProto.EventType.newBuilder()
+                                .setReaderOptionChange(
+                                        NfcEventProto.NfcReaderOptionChange.newBuilder()
+                                                .setEnable(enable)
+                                                .build())
+                                .build());
+            }
             return true;
         }
 
@@ -2620,10 +2653,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         + " 03 " + type_str
                         + " 00 " + String.format("%02x", 5 + frame_data_length) + " "
                         + timestampBytes + " " + String.format("%02x", gain) + frame_data_str);
-                ((NativeNfcManager) mDeviceHost).notifyPollingLoopFrame(data.length, data);
+                ((NativeNfcManager) mDeviceHost).injectNtf(data);
             } catch (Exception ex) {
                 Log.e(TAG, "error when notifying polling loop", ex);
             }
+        }
+
+        @Override
+        public void notifyTestHceData(int technology, byte[] data) {
+            onHostCardEmulationData(technology, data);
         }
 
         @Override
@@ -2726,6 +2764,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void clearPreference() throws RemoteException {
             if (DBG) Log.i(TAG, "clearPreference");
             NfcPermissions.enforceAdminPermissions(mContext);
+            if (android.nfc.Flags.nfcPersistLog()) {
+                mNfcEventLog.logEvent(NfcEventProto.EventType.newBuilder()
+                                .setClearPreference(
+                                        NfcEventProto.NfcClearPreference.newBuilder()
+                                                .build())
+                                .build());
+            }
             // TODO: Implement this.
         }
 
@@ -3781,6 +3826,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
 
                 case MSG_NDEF_TAG:
+                    if (!isNfcEnabled())
+                        break;
                     if (DBG) Log.d(TAG, "Tag detected, notifying applications");
                     TagEndpoint tag = (TagEndpoint) msg.obj;
                     byte[] debounceTagUid;
