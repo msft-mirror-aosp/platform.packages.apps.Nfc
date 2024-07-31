@@ -169,6 +169,13 @@ public class NativeNfcManager implements DeviceHost {
 
     public native int doRegisterT3tIdentifier(byte[] t3tIdentifier);
 
+    /**
+     * Injects a NTF to the HAL.
+     *
+     * This is only used for testing.
+     */
+    public native void injectNtf(byte[] data);
+
     @Override
     public boolean isObserveModeSupported() {
         if (!android.nfc.Flags.nfcObserveMode()) {
@@ -414,6 +421,12 @@ public class NativeNfcManager implements DeviceHost {
         final int TLV_gain_offset = 7;
         final int TLV_data_offset = 8;
         ArrayList<PollingFrame> frames = new ArrayList<PollingFrame>();
+        if (data_len >= TLV_header_len) {
+            int tlv_len = Byte.toUnsignedInt(p_data[TLV_len_offset]) + TLV_header_len;
+            if (tlv_len < data_len) {
+                data_len = tlv_len;
+            }
+        }
         while (pos + TLV_len_offset < data_len) {
             @PollingFrame.PollingFrameType int frameType;
             Bundle frame = new Bundle();
