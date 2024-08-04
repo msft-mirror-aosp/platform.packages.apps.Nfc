@@ -17,42 +17,43 @@ package com.android.nfc.emulator;
 
 import android.content.ComponentName;
 import android.os.Bundle;
-import android.util.Log;
 
-import com.android.nfc.service.TransportService1;
-import com.android.nfc.service.TransportService2;
+import com.android.nfc.service.AccessServiceTurnObserveModeOnProcessApdu;
 
-public class ConflictingNonPaymentEmulatorActivity extends BaseEmulatorActivity {
-    protected static final String TAG = "ConflictingNonPayment";
-
+public class AccessServiceTurnObserveModeOnProcessApduEmulatorActivity
+        extends BaseEmulatorActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        Log.d(TAG, "onCreate");
         super.onCreate(savedInstanceState);
-        setupServices(TransportService1.COMPONENT, TransportService2.COMPONENT);
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        Log.d(TAG, "onResume");
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        Log.d(TAG, "onPause");
-    }
-
-    @Override
-    protected void onApduSequenceComplete(ComponentName component, long duration) {
-        if (component.equals(TransportService2.COMPONENT)) {
+    public void onApduSequenceComplete(ComponentName component, long duration) {
+        if (component.equals(AccessServiceTurnObserveModeOnProcessApdu.COMPONENT)) {
             setTestPassed();
         }
     }
 
     @Override
-    public ComponentName getPreferredServiceComponent(){
-        return TransportService2.COMPONENT;
+    protected void onResume() {
+        super.onResume();
+        setupServices(AccessServiceTurnObserveModeOnProcessApdu.COMPONENT);
+    }
+
+    @Override
+    protected void onServicesSetup() {
+        mCardEmulation.setPreferredService(
+                this, AccessServiceTurnObserveModeOnProcessApdu.COMPONENT);
+    }
+
+    @Override
+    public ComponentName getPreferredServiceComponent() {
+        return AccessServiceTurnObserveModeOnProcessApdu.COMPONENT;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mCardEmulation.unsetPreferredService(this);
     }
 }
