@@ -2897,11 +2897,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             mAlwaysOnListeners.remove(listener);
         }
+
         @Override
         public boolean isTagIntentAppPreferenceSupported() throws RemoteException {
-            NfcPermissions.enforceAdminPermissions(mContext);
             return mIsTagAppPrefSupported;
         }
+
         @Override
         public Map getTagIntentAppPreferenceForUser(int userId) throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
@@ -2910,6 +2911,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return mTagAppPrefList.getOrDefault(userId, new HashMap<>());
             }
         }
+
         @Override
         public int setTagIntentAppPreferenceForUser(int userId,
                 String pkg, boolean allow) throws RemoteException {
@@ -2919,6 +2921,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
+        public boolean isTagIntentAllowed(String pkg, int userId) throws RemoteException {
+            if (!android.nfc.Flags.nfcCheckTagIntentPreference()) {
+                return true;
+            }
+            if (!mIsTagAppPrefSupported) {
+                return true;
+            }
+            HashMap<String, Boolean> map;
+            synchronized (NfcService.this) {
+                map = mTagAppPrefList.getOrDefault(userId, new HashMap<>());
+            }
+            return map.getOrDefault(pkg, true);
+        }
+
         public boolean enableReaderOption(boolean enable, String pkg) {
             Log.d(TAG, "enableReaderOption enabled = " + enable + " calling uid = "
                     + Binder.getCallingUid());
