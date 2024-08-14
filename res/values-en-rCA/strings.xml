@@ -9,7 +9,7 @@
     <string name="beam_outgoing" msgid="4679536649779123495">"Beaming..."</string>
     <string name="beam_complete" msgid="477026736424637435">"Beam complete"</string>
     <string name="beam_failed" msgid="5116241718189888630">"Beam did not complete"</string>
-    <string name="beam_canceled" msgid="5425192751826544741">"Beam cancelled"</string>
+    <string name="beam_canceled" msgid="5425192751826544741">"Beam canceled"</string>
     <string name="cancel" msgid="61873902552555096">"Cancel"</string>
     <string name="beam_tap_to_view" msgid="7430394753262448349">"Tap to view"</string>
     <string name="beam_handover_not_supported" msgid="4083165921751489015">"The receiver\'s device doesn\'t support large file transfer via beam."</string>
@@ -33,7 +33,7 @@
     <string name="appchooser_description" msgid="2554187931814833244">"Choose app to scan"</string>
     <string name="transaction_failure" msgid="7828102078637936513">"This transaction couldn\'t be completed with <xliff:g id="APP">%1$s</xliff:g>."</string>
     <string name="could_not_use_app" msgid="8137587876138569083">"Couldn\'t use <xliff:g id="APP">%1$s</xliff:g>."</string>
-    <string name="pay_with" msgid="5531545488795798945">"Pay with:"</string>
+    <string name="pay_with" msgid="5531545488795798945">"Pay with"</string>
     <string name="complete_with" msgid="6797459104103012992">"Complete with"</string>
     <string name="default_pay_app_removed" msgid="4108250545457437360">"Your preferred service for tap &amp; pay was removed. Choose another?"</string>
     <string name="ask_nfc_tap" msgid="2925239870458286340">"Tap another device to complete"</string>
