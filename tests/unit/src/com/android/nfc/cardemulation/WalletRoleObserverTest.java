@@ -29,6 +29,8 @@ import android.os.UserHandle;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.google.common.collect.ImmutableList;
+import com.android.nfc.NfcEventLog;
+import com.android.nfc.NfcInjector;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -61,6 +63,10 @@ public class WalletRoleObserverTest {
     WalletRoleObserver.Callback mCallback;
     @Mock
     Executor mExecutor;
+    @Mock
+    NfcInjector mNfcInjector;
+    @Mock
+    NfcEventLog mNfcEventLog;
     @Captor
     ArgumentCaptor<String> mRoleNameCaptor;
     @Captor
@@ -73,7 +79,9 @@ public class WalletRoleObserverTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         when(mContext.getMainExecutor()).thenReturn(mExecutor);
-        mWalletRoleObserver = new WalletRoleObserver(mContext, mRoleManager, mCallback);
+        when(mNfcInjector.getNfcEventLog()).thenReturn(mNfcEventLog);
+        mWalletRoleObserver =
+            new WalletRoleObserver(mContext, mRoleManager, mCallback, mNfcInjector);
     }
 
     @Test
@@ -114,11 +122,12 @@ public class WalletRoleObserverTest {
     @Test
     public void testCallbackFiringOnRoleChange_roleWallet() {
         List<String> roleHolders = ImmutableList.of(WALLET_ROLE_HOLDER);
-        when(mRoleManager.getRoleHolders(eq(RoleManager.ROLE_WALLET))).thenReturn(roleHolders);
+        when(mRoleManager.getRoleHoldersAsUser(eq(RoleManager.ROLE_WALLET), eq(USER_HANDLE)))
+                .thenReturn(roleHolders);
         mWalletRoleObserver.mOnRoleHoldersChangedListener
                 .onRoleHoldersChanged(RoleManager.ROLE_WALLET, USER_HANDLE);
 
-        verify(mRoleManager).getRoleHolders(mRoleNameCaptor.capture());
+        verify(mRoleManager).getRoleHoldersAsUser(mRoleNameCaptor.capture(), eq(USER_HANDLE));
         verify(mCallback).onWalletRoleHolderChanged(mRoleHolderCaptor.capture(), eq(USER_ID));
         Assert.assertEquals(RoleManager.ROLE_WALLET, mRoleNameCaptor.getValue());
         Assert.assertEquals(WALLET_ROLE_HOLDER, mRoleHolderCaptor.getValue());

@@ -33,6 +33,7 @@
 #endif /* DTA_ENABLED */
 #include "NfcJniUtil.h"
 #include "NfcTag.h"
+#include "NfceeManager.h"
 #include "PowerSwitch.h"
 #include "RoutingManager.h"
 #include "SyncEvent.h"
@@ -84,7 +85,8 @@ bool gActivated = false;
 SyncEvent gDeactivatedEvent;
 SyncEvent sNfaSetPowerSubState;
 int recovery_option = 0;
-int nfcee_power_and_link_conf = 0;
+int always_on_nfcee_power_and_link_conf = 0;
+int disable_always_on_nfcee_power_and_link_conf = 0;
 
 namespace android {
 jmethodID gCachedNfcManagerNotifyNdefMessageListeners;
@@ -100,6 +102,7 @@ jmethodID gCachedNfcManagerNotifyPollingLoopFrame;
 jmethodID gCachedNfcManagerNotifyWlcStopped;
 jmethodID gCachedNfcManagerNotifyVendorSpecificEvent;
 jmethodID gCachedNfcManagerNotifyCommandTimeout;
+jmethodID gCachedNfcManagerNotifyObserveModeChanged;
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
@@ -150,6 +153,7 @@ static bool sEnableVendorNciNotifications = false;
    NFA_TECHNOLOGY_MASK_KOVIO)
 #define DEFAULT_DISCOVERY_DURATION 500
 #define READER_MODE_DISCOVERY_DURATION 200
+#define FLAG_SET_DEFAULT_TECH 0x40000000
 
 static void nfaConnectionCallback(uint8_t event, tNFA_CONN_EVT_DATA* eventData);
 static void nfaDeviceManagementCallback(uint8_t event,
@@ -194,11 +198,19 @@ void initializeRecoveryOption() {
 }
 
 void initializeNfceePowerAndLinkConf() {
-  nfcee_power_and_link_conf =
+  always_on_nfcee_power_and_link_conf =
       NfcConfig::getUnsigned(NAME_ALWAYS_ON_SET_EE_POWER_AND_LINK_CONF, 0);
 
   LOG(DEBUG) << __func__ << ": Always on set NFCEE_POWER_AND_LINK_CONF="
-             << nfcee_power_and_link_conf;
+             << always_on_nfcee_power_and_link_conf;
+}
+
+void initializeDisableAlwaysOnNfceePowerAndLinkConf() {
+  disable_always_on_nfcee_power_and_link_conf = NfcConfig::getUnsigned(
+      NAME_DISABLE_ALWAYS_ON_SET_EE_POWER_AND_LINK_CONF, 0);
+
+  LOG(DEBUG) << __func__ << ": Always on set NFCEE_POWER_AND_LINK_CONF="
+             << disable_always_on_nfcee_power_and_link_conf;
 }
 
 }  // namespace
@@ -571,6 +583,7 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   initializeGlobalDebugEnabledFlag();
   initializeRecoveryOption();
   initializeNfceePowerAndLinkConf();
+  initializeDisableAlwaysOnNfceePowerAndLinkConf();
   LOG(DEBUG) << StringPrintf("%s: enter", __func__);
 
   nfc_jni_native_data* nat =
@@ -628,6 +641,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyCommandTimeout =
       e->GetMethodID(cls.get(), "notifyCommandTimeout", "()V");
+
+  gCachedNfcManagerNotifyObserveModeChanged =
+      e->GetMethodID(cls.get(), "notifyObserveModeChanged", "(Z)V");
 
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
@@ -973,9 +989,7 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
         case NCI_ANDROID_GET_CAPS: {
           gVSCmdStatus = p_param[4];
           SyncEventGuard guard(gNfaVsCommand);
-          u_int16_t android_version = *(u_int16_t*)&p_param[5];
-          u_int8_t len = p_param[7];
-          gCaps.assign(p_param + 8, p_param + 8 + len);
+          gCaps.assign(p_param + 8, p_param + param_len);
           gNfaVsCommand.notifyOne();
         } break;
         case NCI_ANDROID_POLLING_FRAME_NTF: {
@@ -1042,6 +1056,22 @@ void static nfaVSCallback(uint8_t event, uint16_t param_len, uint8_t* p_param) {
                           (jint)event, (jint)param_len, dataJavaArray.get());
       }
     } break;
+  }
+}
+
+static void nfcManager_injectNtf(JNIEnv* e, jobject, jbyteArray data) {
+  ScopedByteArrayRO bytes(e, data);
+  size_t bufLen = bytes.size();
+  tNFC_HAL_EVT_MSG* p_msg;
+  p_msg = (tNFC_HAL_EVT_MSG*)GKI_getbuf(sizeof(tNFC_HAL_EVT_MSG) + bufLen + 1);
+  if (p_msg != NULL) {
+    p_msg->hdr.len = bufLen + 3;
+    p_msg->hdr.event = BT_EVT_TO_NFC_NCI;
+    p_msg->hdr.offset = sizeof(tNFC_HAL_EVT_MSG) - 7;
+    p_msg->hdr.layer_specific = 0;
+    memcpy(((uint8_t*)p_msg) + sizeof(tNFC_HAL_EVT_MSG) + 1, bytes.get(),
+           bufLen);
+    GKI_send_msg(NFC_TASK, NFC_MBOX_ID, p_msg);
   }
 }
 
@@ -1146,7 +1176,13 @@ static jboolean nfcManager_setObserveMode(JNIEnv* e, jobject o,
       "%s: Set observe mode to %s with result %x, observe mode is now %s.",
       __FUNCTION__, (enable != JNI_FALSE ? "TRUE" : "FALSE"), gVSCmdStatus,
       (gObserveModeEnabled ? "enabled" : "disabled"));
-  return gObserveModeEnabled == enable;
+  if (gObserveModeEnabled == enable) {
+    e->CallVoidMethod(o, android::gCachedNfcManagerNotifyObserveModeChanged,
+                      enable);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 /*******************************************************************************
@@ -1602,10 +1638,6 @@ static bool isListenMode(tNFA_ACTIVATED& activated) {
        activated.activate_ntf.rf_tech_param.mode) ||
       (NFC_DISCOVERY_TYPE_LISTEN_F ==
        activated.activate_ntf.rf_tech_param.mode) ||
-      (NFC_DISCOVERY_TYPE_LISTEN_A_ACTIVE ==
-       activated.activate_ntf.rf_tech_param.mode) ||
-      (NFC_DISCOVERY_TYPE_LISTEN_F_ACTIVE ==
-       activated.activate_ntf.rf_tech_param.mode) ||
       (NFC_DISCOVERY_TYPE_LISTEN_ISO15693 ==
        activated.activate_ntf.rf_tech_param.mode) ||
       (NFC_DISCOVERY_TYPE_LISTEN_B_PRIME ==
@@ -1947,9 +1979,11 @@ static void nfcManager_doSetNfceePowerAndLinkCtrl(JNIEnv* e, jobject o,
                                                   jboolean enable) {
   RoutingManager& routingManager = RoutingManager::getInstance();
   if (enable) {
-    routingManager.eeSetPwrAndLinkCtrl((uint8_t)nfcee_power_and_link_conf);
+    routingManager.eeSetPwrAndLinkCtrl(
+        (uint8_t)always_on_nfcee_power_and_link_conf);
   } else {
-    routingManager.eeSetPwrAndLinkCtrl(0);
+    routingManager.eeSetPwrAndLinkCtrl(
+        (uint8_t)disable_always_on_nfcee_power_and_link_conf);
   }
 }
 
@@ -2026,17 +2060,24 @@ static void nfcManager_setDiscoveryTech(JNIEnv* e, jobject o, jint pollTech,
   tNFA_STATUS nfaStat;
   bool isRevertPoll = false;
   bool isRevertListen = false;
+  bool changeDefaultTech = false;
   LOG(DEBUG) << StringPrintf("%s  pollTech = 0x%x, listenTech = 0x%x", __func__,
                              pollTech, listenTech);
 
   if (pollTech < 0) isRevertPoll = true;
   if (listenTech < 0) isRevertListen = true;
+  if (pollTech & FLAG_SET_DEFAULT_TECH || listenTech & FLAG_SET_DEFAULT_TECH)
+    changeDefaultTech = true;
+
+  // Need listen tech routing update in routing table
+  // for addition of blocking bit
+  RoutingManager::getInstance().setEeTechRouteUpdateRequired();
 
   nativeNfcTag_acquireRfInterfaceMutexLock();
   SyncEventGuard guard(sNfaEnableDisablePollingEvent);
 
   nfaStat = NFA_ChangeDiscoveryTech(pollTech, listenTech, isRevertPoll,
-                                    isRevertListen);
+                                    isRevertListen, changeDefaultTech);
 
   if (nfaStat == NFA_STATUS_OK) {
     // wait for NFA_LISTEN_DISABLED_EVT
@@ -2062,10 +2103,14 @@ static void nfcManager_resetDiscoveryTech(JNIEnv* e, jobject o) {
   tNFA_STATUS nfaStat;
   LOG(DEBUG) << StringPrintf("%s : enter", __func__);
 
+  // Need listen tech routing update in routing table
+  // for addition of blocking bit
+  RoutingManager::getInstance().setEeTechRouteUpdateRequired();
+
   nativeNfcTag_acquireRfInterfaceMutexLock();
   SyncEventGuard guard(sNfaEnableDisablePollingEvent);
 
-  nfaStat = NFA_ChangeDiscoveryTech(0xFF, 0xFF, true, true);
+  nfaStat = NFA_ChangeDiscoveryTech(0xFF, 0xFF, true, true, false);
 
   if (nfaStat == NFA_STATUS_OK) {
     // wait for NFA_LISTEN_DISABLED_EVT
@@ -2081,6 +2126,11 @@ static void ncfManager_nativeEnableVendorNciNotifications(JNIEnv* env,
                                                           jobject o,
                                                           jboolean enable) {
   sEnableVendorNciNotifications = (enable == JNI_TRUE);
+}
+
+static jobject nfcManager_dofetchActiveNfceeList(JNIEnv* e, jobject o) {
+  (void)o;
+  return NfceeManager::getInstance().getActiveNfceeList(e);
 }
 
 static jobject nfcManager_nativeSendRawVendorCmd(JNIEnv* env, jobject o,
@@ -2103,13 +2153,10 @@ static jobject nfcManager_nativeSendRawVendorCmd(JNIEnv* env, jobject o,
   std::vector<uint8_t> command;
   command.push_back((uint8_t)((mt << NCI_MT_SHIFT) | gid));
   command.push_back((uint8_t)oid);
+  command.push_back((uint8_t)payloaBytes.size());
   if (payloaBytes.size() > 0) {
-    command.push_back((uint8_t)payloaBytes.size());
     command.insert(command.end(), &payloaBytes[0],
                    &payloaBytes[payloaBytes.size()]);
-  } else {
-    return env->NewObject(cls.get(), responseConstructor, mStatus, resGid,
-                          resOid, resPayload);
   }
 
   SyncEventGuard guard(gSendRawVsCmdEvent);
@@ -2244,9 +2291,13 @@ static JNINativeMethod gMethods[] = {
     {"nativeSendRawVendorCmd", "(III[B)Lcom/android/nfc/NfcVendorNciResponse;",
      (void*)nfcManager_nativeSendRawVendorCmd},
 
+    {"dofetchActiveNfceeList", "()Ljava/util/List;",
+     (void*)nfcManager_dofetchActiveNfceeList},
+
     {"getProprietaryCaps", "()[B", (void*)nfcManager_getProprietaryCaps},
     {"enableVendorNciNotifications", "(Z)V",
      (void*)ncfManager_nativeEnableVendorNciNotifications},
+    {"injectNtf", "([B)V", (void*)nfcManager_injectNtf},
 };
 
 /*******************************************************************************
