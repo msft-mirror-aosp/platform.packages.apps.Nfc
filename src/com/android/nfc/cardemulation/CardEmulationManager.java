@@ -208,6 +208,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mHostEmulationManager.onPollingLoopDetected(pollingFrames);
     }
 
+    public void onObserveModeStateChanged(boolean enable) {
+        mHostEmulationManager.onObserveModeStateChange(enable);
+    }
+
     public void onFieldChangeDetected(boolean fieldOn) {
         mHostEmulationManager.onFieldChangeDetected(fieldOn);
     }
@@ -634,17 +638,24 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         @Override
         public boolean setShouldDefaultToObserveModeForService(int userId,
-            ComponentName service, boolean enable) {
+                ComponentName service, boolean enable) {
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             if (!isServiceRegistered(userId, service)) {
                 return false;
             }
-            if (!mServiceCache.setShouldDefaultToObserveModeForService(userId, Binder.getCallingUid(),
-                service, enable)) {
-                return false;
+            Log.d(TAG, "Set should default to observe mode for service (" + service + ") to "
+                    + enable);
+            boolean currentStatus = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
+                    service);
+
+            if (currentStatus != enable) {
+                if (!mServiceCache.setShouldDefaultToObserveModeForService(userId,
+                        Binder.getCallingUid(), service, enable)) {
+                    return false;
+                }
+                updateForShouldDefaultToObserveMode(userId);
             }
-            updateForShouldDefaultToObserveMode(userId);
             return true;
         }
 
@@ -820,7 +831,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             NfcPermissions.enforcePreferredPaymentInfoPermissions(mContext);
-            return mServiceCache.getService(userId, mAidCache.getPreferredService());
+            return mServiceCache.getService(userId, mAidCache.getPreferredService().second);
         }
 
         @Override
@@ -846,15 +857,23 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        public boolean overrideRoutingTable(int userHandle, String protocol, String technology) {
+        public void overrideRoutingTable(int userHandle, String protocol, String technology,
+                String pkg) {
             Log.d(TAG, "overrideRoutingTable. userHandle " + userHandle + ", protocol " + protocol +
                     ", technology " + technology);
 
             int callingUid = Binder.getCallingUid();
+            if (android.nfc.Flags.nfcOverrideRecoverRoutingTable()) {
+                if (!isPreferredServicePackageNameForUser(pkg,
+                        UserHandle.getUserHandleForUid(callingUid).getIdentifier())) {
+                    Log.e(TAG, "overrideRoutingTable: Caller not preferred NFC service.");
+                    throw new SecurityException("Caller not preferred NFC service");
+                }
+            }
             if (!mForegroundUtils
                     .registerUidToBackgroundCallback(mForegroundCallback, callingUid)) {
                 Log.e(TAG, "overrideRoutingTable: Caller is not in foreground.");
-                return false;
+                throw new IllegalArgumentException("Caller is not in foreground.");
             }
             mForegroundUid = callingUid;
 
@@ -868,25 +887,21 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             mRoutingOptionManager.overrideDefaultOffHostRoute(technologyRoute);
             mAidCache.onRoutingOverridedOrRecovered();
 //            NfcService.getInstance().commitRouting();
-
-            return true;
         }
 
         @Override
-        public boolean recoverRoutingTable(int userHandle) {
+        public void recoverRoutingTable(int userHandle) {
             Log.d(TAG, "recoverRoutingTable. userHandle " + userHandle);
 
             if (!mForegroundUtils.isInForeground(Binder.getCallingUid())) {
                 if (DBG) Log.d(TAG, "recoverRoutingTable : not in foreground.");
-                return false;
+                throw new IllegalArgumentException("Caller is not in foreground.");
             }
             mForegroundUid = Process.INVALID_UID;
 
             mRoutingOptionManager.recoverOverridedRoutingTable();
             mAidCache.onRoutingOverridedOrRecovered();
 //            NfcService.getInstance().commitRouting();
-
-            return true;
         }
     }
 
@@ -1042,10 +1057,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Override
     public void onPreferredPaymentServiceChanged(int userId, ComponentName service) {
         Log.i(TAG, "onPreferredPaymentServiceChanged");
-        ComponentName oldPreferredService = mAidCache.getPreferredService();
+        ComponentName oldPreferredService = mAidCache.getPreferredService().second;
         mAidCache.onPreferredPaymentServiceChanged(userId, service);
         mHostEmulationManager.onPreferredPaymentServiceChanged(userId, service);
-        ComponentName newPreferredService = mAidCache.getPreferredService();
+        ComponentName newPreferredService = mAidCache.getPreferredService().second;
 
         NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_CHANGED);
@@ -1057,10 +1072,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Override
     public void onPreferredForegroundServiceChanged(int userId, ComponentName service) {
         Log.i(TAG, "onPreferredForegroundServiceChanged");
-        ComponentName oldPreferredService = mAidCache.getPreferredService();
-        mAidCache.onPreferredForegroundServiceChanged(userId, service);
+        ComponentName oldPreferredService = mAidCache.getPreferredService().second;
         mHostEmulationManager.onPreferredForegroundServiceChanged(userId, service);
-        ComponentName newPreferredService = mAidCache.getPreferredService();
+        ComponentName newPreferredService = mAidCache.getPreferredService().second;
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
@@ -1069,7 +1083,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
     }
 
-    private void updateForShouldDefaultToObserveMode(int userId) {
+    public void updateForShouldDefaultToObserveMode(int userId) {
         long token = Binder.clearCallingIdentity();
         try {
             if (!android.nfc.Flags.nfcObserveMode()) {
@@ -1082,13 +1096,17 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "adapter is null, returning");
                 return;
             }
-            ComponentName preferredService = mAidCache.getPreferredService();
+            ComponentName preferredService = mAidCache.getPreferredService().second;
             boolean enableObserveMode = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
                     preferredService);
             mHostEmulationManager.updateForShouldDefaultToObserveMode(enableObserveMode);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+    }
+
+    public void onObserveModeStateChange(boolean enabled) {
+        mHostEmulationManager.onObserveModeStateChange(enabled);
     }
 
     @Override
@@ -1117,5 +1135,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
     public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
         return mAidCache.isPreferredServicePackageNameForUser(packageName, userId);
+    }
+
+    public boolean isHostCardEmulationActivated() {
+        return mHostEmulationManager.isHostCardEmulationActivated();
     }
 }

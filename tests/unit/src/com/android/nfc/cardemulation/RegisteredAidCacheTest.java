@@ -30,6 +30,7 @@ import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.util.Pair;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -210,7 +211,8 @@ public class RegisteredAidCacheTest {
         verify(mAidRoutingManager).supportsAidPrefixRouting();
         verify(mAidRoutingManager).supportsAidSubsetRouting();
         Assert.assertEquals(resolveInfo.defaultService.getComponent(), FOREGROUND_SERVICE);
-        Assert.assertEquals(mRegisteredAidCache.getPreferredService(), FOREGROUND_SERVICE);
+        Assert.assertEquals(mRegisteredAidCache.getPreferredService(),
+                new Pair<>(USER_ID, FOREGROUND_SERVICE));
         Assert.assertEquals(resolveInfo.services.size(), 1);
         Assert.assertEquals(resolveInfo.category, CardEmulation.CATEGORY_PAYMENT);
         verifyNoMoreInteractions(mAidRoutingManager);
@@ -381,6 +383,69 @@ public class RegisteredAidCacheTest {
         Assert.assertEquals(resolveInfo.defaultService.getComponent(), WALLET_PAYMENT_SERVICE);
         Assert.assertEquals(resolveInfo.services.size(), 2);
         Assert.assertEquals(resolveInfo.category, CardEmulation.CATEGORY_PAYMENT);
+    }
+
+    @Test
+    public void testAidConflictResolution_walletOtherServiceDisabled_nonDefaultServiceWins() {
+        setWalletRoleFlag(true);
+        supportPrefixAndSubset(false);
+        mRegisteredAidCache = new RegisteredAidCache(mContext, mWalletRoleObserver,
+                mAidRoutingManager);
+
+        List<ApduServiceInfo> apduServiceInfos = new ArrayList<>();
+        apduServiceInfos.add(createServiceInfoForAidRouting(
+                WALLET_PAYMENT_SERVICE,
+                true,
+                List.of(PAYMENT_AID_1, NON_PAYMENT_AID_1),
+                List.of(CardEmulation.CATEGORY_PAYMENT, CardEmulation.CATEGORY_OTHER),
+                false,
+                false,
+                USER_ID,
+                false));
+        apduServiceInfos.add(createServiceInfoForAidRouting(
+                PAYMENT_SERVICE,
+                true,
+                List.of(PAYMENT_AID_1, NON_PAYMENT_AID_1),
+                List.of(CardEmulation.CATEGORY_PAYMENT, CardEmulation.CATEGORY_OTHER),
+                false,
+                false,
+                USER_ID,
+                true));
+
+        mRegisteredAidCache.generateUserApduServiceInfoLocked(USER_ID, apduServiceInfos);
+        mRegisteredAidCache.generateServiceMapLocked(apduServiceInfos);
+        mRegisteredAidCache.onWalletRoleHolderChanged(WALLET_HOLDER_PACKAGE_NAME, USER_ID);
+        RegisteredAidCache.AidResolveInfo resolveInfo
+                = mRegisteredAidCache.resolveAid(NON_PAYMENT_AID_1);
+        Assert.assertEquals(resolveInfo.defaultService.getComponent(), PAYMENT_SERVICE);
+        Assert.assertEquals(resolveInfo.services.size(), 1);
+    }
+
+    @Test
+    public void testAidConflictResolution_walletOtherServiceDisabled_emptyServices() {
+        setWalletRoleFlag(true);
+        supportPrefixAndSubset(false);
+        mRegisteredAidCache = new RegisteredAidCache(mContext, mWalletRoleObserver,
+                mAidRoutingManager);
+
+        List<ApduServiceInfo> apduServiceInfos = new ArrayList<>();
+        apduServiceInfos.add(createServiceInfoForAidRouting(
+                WALLET_PAYMENT_SERVICE,
+                true,
+                List.of(PAYMENT_AID_1, NON_PAYMENT_AID_1),
+                List.of(CardEmulation.CATEGORY_PAYMENT, CardEmulation.CATEGORY_OTHER),
+                false,
+                false,
+                USER_ID,
+                false));
+
+        mRegisteredAidCache.generateUserApduServiceInfoLocked(USER_ID, apduServiceInfos);
+        mRegisteredAidCache.generateServiceMapLocked(apduServiceInfos);
+        mRegisteredAidCache.onWalletRoleHolderChanged(WALLET_HOLDER_PACKAGE_NAME, USER_ID);
+        RegisteredAidCache.AidResolveInfo resolveInfo
+                = mRegisteredAidCache.resolveAid(NON_PAYMENT_AID_1);
+        Assert.assertNull(resolveInfo.defaultService);
+        Assert.assertTrue(resolveInfo.services.isEmpty());
     }
 
     @Test
