@@ -122,6 +122,7 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -2113,6 +2114,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             } else if (((pollTech & NfcAdapter.FLAG_SET_DEFAULT_TECH) != 0
                         || (listenTech & NfcAdapter.FLAG_SET_DEFAULT_TECH) != 0)) {
 
+                if (!isNfcEnabled()) {
+                    Log.d(TAG, "updateDiscoveryTechnology: NFC is not enabled.");
+                    return;
+                }
                 if ((pollTech & NfcAdapter.FLAG_SET_DEFAULT_TECH) != 0) {
                     if ((pollTech & NfcAdapter.FLAG_READER_KEEP) == 0 &&
                         (pollTech & NfcAdapter.FLAG_USE_ALL_TECH)
@@ -2767,6 +2772,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "Unregister the oem extension callback");
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcOemExtensionCallback = null;
+        }
+        @Override
+        public List<String> fetchActiveNfceeList() throws RemoteException {
+            List<String> list = new ArrayList<String>();
+            if (isNfcEnabled()) {
+                list = mDeviceHost.dofetchActiveNfceeList();
+            }
+            return list;
         }
 
         @Override
@@ -4663,7 +4676,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             fos = new FileOutputStream(file, true);
-            mDeviceHost.dump(fos.getFD());
+            mDeviceHost.dump(new PrintWriter(new StringWriter()), fos.getFD());
             fos.flush();
         } catch (IOException e) {
             Log.e(TAG, "Exception in storeNativeCrashLogs " + e);
@@ -4747,6 +4760,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             pw.println("SnoopLogMode=" + NFC_SNOOP_LOG_MODE);
             pw.println("VendorDebugEnabled=" + NFC_VENDOR_DEBUG_ENABLED);
             pw.println("mIsPowerSavingModeEnabled=" + mIsPowerSavingModeEnabled);
+            pw.println("mIsObserveModeSupported=" + mNfcAdapter.isObserveModeSupported());
+            pw.println("mIsObserveModeEnabled=" + mNfcAdapter.isObserveModeEnabled());
             pw.println(mCurrentDiscoveryParameters);
             if (mIsHceCapable) {
                 mCardEmulationManager.dump(fd, pw, args);
@@ -4759,7 +4774,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             mNfcInjector.getNfcEventLog().dump(fd, pw, args);
             copyNativeCrashLogsIfAny(pw);
             pw.flush();
-            mDeviceHost.dump(fd);
+            mDeviceHost.dump(pw,fd);
         }
     }
 
