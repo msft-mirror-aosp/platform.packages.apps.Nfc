@@ -132,6 +132,7 @@ public class RegisteredAidCache {
         String category = null;
         boolean mustRoute = true; // Whether this AID should be routed at all
         ResolvedPrefixConflictAid prefixInfo = null;
+        List<String> unCheckedOffHostSecureElement = new ArrayList<>();
         @Override
         public String toString() {
             return "AidResolveInfo{" +
@@ -328,7 +329,19 @@ public class RegisteredAidCache {
                 if (VDBG) Log.d(TAG, "resolveAidLocked: " + serviceAidInfo.service.getComponent() +
                         " is selected other service");
                 resolveInfo.services.add(serviceAidInfo.service);
+            } else {
+                if (DBG) Log.d(TAG, "resolveAidLocked: " + serviceAidInfo.service.getComponent() +
+                        " is unselected other service");
+                if(!serviceAidInfo.service.isOnHost()) {
+                    String offHostName = serviceAidInfo.service.getOffHostSecureElement();
+                    if (offHostName != null &&
+                            !resolveInfo.unCheckedOffHostSecureElement.contains(offHostName)) {
+                        if (DBG) Log.d(TAG, "add " + offHostName + " to disabled offHosts");
+                        resolveInfo.unCheckedOffHostSecureElement.add(offHostName);
+                    }
+                }
             }
+
         }
     }
 
@@ -393,11 +406,19 @@ public class RegisteredAidCache {
                     && componentName.getPackageName().equals(
                     mDefaultWalletHolderPackageName)) {
                     if (VDBG) Log.d(TAG, "Prioritizing default wallet services.");
-                    resolveInfo.services.add(serviceAidInfo.service);
-                    if (serviceClaimsPaymentAid) {
-                        resolveInfo.category = CardEmulation.CATEGORY_PAYMENT;
+
+                    if (serviceClaimsPaymentAid ||
+                            serviceAidInfo.service.isCategoryOtherServiceEnabled()) {
+                        resolveInfo.services.add(serviceAidInfo.service);
+                        if (serviceClaimsPaymentAid) {
+                            resolveInfo.category = CardEmulation.CATEGORY_PAYMENT;
+                        }
+                        defaultWalletServices.add(serviceAidInfo.service);
+                    } else {
+                        if (VDBG) Log.d(TAG, "Service disabled in default wallet, " +
+                                "resolving against other applications");
+                        nonDefaultResolution(serviceClaimsPaymentAid, serviceAidInfo, resolveInfo);
                     }
-                    defaultWalletServices.add(serviceAidInfo.service);
                 } else {
                     nonDefaultResolution(serviceClaimsPaymentAid, serviceAidInfo, resolveInfo);
                 }
@@ -1076,6 +1097,14 @@ public class RegisteredAidCache {
             }
             if (resolveInfo.services.size() == 0) {
                 // No interested services
+                // prevent unchecked offhost aids route to offhostSE
+		if (!resolveInfo.unCheckedOffHostSecureElement.isEmpty()) {
+                    aidType.unCheckedOffHostSE.addAll(resolveInfo.unCheckedOffHostSecureElement);
+                    aidType.isOnHost = true;
+                    aidType.power = POWER_STATE_SWITCH_ON;
+                    routingEntries.put(aid, aidType);
+                    force = true;
+		}
             } else if (resolveInfo.defaultService != null) {
                 // There is a default service set, route to where that service resides -
                 // either on the host (HCE) or on an SE.
@@ -1203,13 +1232,14 @@ public class RegisteredAidCache {
         }
     }
 
-    public ComponentName getPreferredService() {
+    @NonNull
+    public Pair<Integer, ComponentName> getPreferredService() {
         if (mPreferredForegroundService != null) {
             // return current foreground service
-            return mPreferredForegroundService;
+            return new Pair<>(mUserIdPreferredForegroundService, mPreferredForegroundService);
         } else {
             // return current preferred service
-            return mPreferredPaymentService;
+            return getPreferredPaymentService();
         }
     }
 
