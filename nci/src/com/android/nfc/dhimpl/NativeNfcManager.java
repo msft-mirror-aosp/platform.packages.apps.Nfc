@@ -35,12 +35,14 @@ import com.android.nfc.NfcStatsLog;
 import com.android.nfc.NfcVendorNciResponse;
 import com.android.nfc.NfcProprietaryCaps;
 import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 
 /** Native interface to the NFC Manager functions */
 public class NativeNfcManager implements DeviceHost {
@@ -328,7 +330,8 @@ public class NativeNfcManager implements DeviceHost {
     private native void doDump(FileDescriptor fd);
 
     @Override
-    public void dump(FileDescriptor fd) {
+    public void dump(PrintWriter pw, FileDescriptor fd) {
+        pw.println("Native Proprietary Caps=" + mProprietaryCaps);
         doDump(fd);
     }
 
@@ -360,6 +363,9 @@ public class NativeNfcManager implements DeviceHost {
     public native int getMaxRoutingTableSize();
 
     public native boolean isMultiTag();
+
+    @Override
+    public native List<String> dofetchActiveNfceeList();
 
     private native NfcVendorNciResponse nativeSendRawVendorCmd(
             int mt, int gid, int oid, byte[] payload);
@@ -559,5 +565,9 @@ public class NativeNfcManager implements DeviceHost {
                 proprietaryCaps.isPollingFrameNotificationSupported(),
                 proprietaryCaps.isPowerSavingModeSupported(),
                 proprietaryCaps.isAutotransactPollingLoopFilterSupported());
+    }
+
+    public void notifyObserveModeChanged(boolean enabled) {
+        mListener.onObserveModeStateChanged(enabled);
     }
 }

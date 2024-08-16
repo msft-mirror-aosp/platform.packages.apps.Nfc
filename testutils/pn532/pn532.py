@@ -29,7 +29,7 @@ IN_COMMUNICATE_THRU = 0x42
 IN_LIST_PASSIVE_TARGET = 0x4A
 WRITE_REGISTER = 0x08
 LONG_PREAMBLE = bytearray(20)
-
+TG_INIT_AS_TARGET = 0x8C
 
 def crc16a(data):
     w_crc = 0x6363
@@ -150,6 +150,50 @@ class PN532:
 
         return tag.TypeATag(self, target_id, sense_res, sel_res, nfcid, ats)
 
+    def initialize_target_mode(self):
+        """Configures the PN532 as target."""
+        self.log.debug("Initializing target mode")
+        self.send_frame(
+            self.construct_frame([TG_INIT_AS_TARGET,
+                                  0x05, #Mode
+                                  0x04, #SENS_RES (2 bytes)
+                                  0x00,
+                                  0x12, #nfcid1T (3 BYTES)
+                                  0x34,
+                                  0x56,
+                                  0x20, #SEL_RES
+                                  0x00, #FeliCAParams[] (18 bytes)
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,#NFCID3T[] (10 bytes)
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00,
+                                  0x00, #LEN Gt
+                                  0x00, #LEN Tk
+                                  ]))
+
     def poll_b(self):
         """Attempts to detect target for NFC type B."""
         self.log.debug("Polling B")
@@ -225,8 +269,8 @@ class PN532:
             0x00,
             0x00,
             0xFF,
-            len(data) + 1,
-            (~(len(data) + 1) & 0xFF) + 0x01,
+            (len(data) + 1) & 0xFF,
+            ((~(len(data) + 1) & 0xFF) + 0x01) & 0xFF,
             0xD4,
             ]
         data_sum = 0xD4
@@ -235,9 +279,9 @@ class PN532:
         for b in data:
             data_sum += b
             frame.append(b)
-        frame.append((~data_sum & 0xFF) + 0x01)  # Data checksum
-        frame.append(0x00)  # Postamble
+        frame.append(((~data_sum & 0xFF) + 0x01) & 0xFF)  # Data checksum
 
+        frame.append(0x00)  # Postamble
         self.log.debug("Constructed frame " + hexlify(bytearray(frame)).decode())
 
         return bytearray(frame)
@@ -248,6 +292,10 @@ class PN532:
         """
         self.device.write(frame)
         return self.get_device_response(timeout)
+
+    def reset_buffers(self):
+        self.device.reset_input_buffer()
+        self.device.reset_output_buffer()
 
     def get_device_response(self, timeout=0.5):
         """
