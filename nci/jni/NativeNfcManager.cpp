@@ -33,6 +33,7 @@
 #endif /* DTA_ENABLED */
 #include "NfcJniUtil.h"
 #include "NfcTag.h"
+#include "NfceeManager.h"
 #include "PowerSwitch.h"
 #include "RoutingManager.h"
 #include "SyncEvent.h"
@@ -2037,10 +2038,10 @@ static void nfcManager_updateIsoDepProtocolRoute(JNIEnv* e, jobject o,
   RoutingManager::getInstance().updateIsoDepProtocolRoute(route);
 }
 
-static void nfcManager_updateTechnologyABRoute(JNIEnv* e, jobject o,
-                                               jint route) {
+static void nfcManager_updateTechnologyABFRoute(JNIEnv* e, jobject o,
+                                                jint route) {
   LOG(DEBUG) << StringPrintf("%s: clearFlags=0x%X", __func__, route);
-  RoutingManager::getInstance().updateTechnologyABRoute(route);
+  RoutingManager::getInstance().updateTechnologyABFRoute(route);
 }
 
 /*******************************************************************************
@@ -2125,6 +2126,11 @@ static void ncfManager_nativeEnableVendorNciNotifications(JNIEnv* env,
                                                           jobject o,
                                                           jboolean enable) {
   sEnableVendorNciNotifications = (enable == JNI_TRUE);
+}
+
+static jobject nfcManager_dofetchActiveNfceeList(JNIEnv* e, jobject o) {
+  (void)o;
+  return NfceeManager::getInstance().getActiveNfceeList(e);
 }
 
 static jobject nfcManager_nativeSendRawVendorCmd(JNIEnv* env, jobject o,
@@ -2277,13 +2283,17 @@ static JNINativeMethod gMethods[] = {
     {"setIsoDepProtocolRoute", "(I)V",
      (void*)nfcManager_updateIsoDepProtocolRoute},
 
-    {"setTechnologyABRoute", "(I)V", (void*)nfcManager_updateTechnologyABRoute},
+    {"setTechnologyABFRoute", "(I)V",
+     (void*)nfcManager_updateTechnologyABFRoute},
 
     {"setDiscoveryTech", "(II)V", (void*)nfcManager_setDiscoveryTech},
 
     {"resetDiscoveryTech", "()V", (void*)nfcManager_resetDiscoveryTech},
     {"nativeSendRawVendorCmd", "(III[B)Lcom/android/nfc/NfcVendorNciResponse;",
      (void*)nfcManager_nativeSendRawVendorCmd},
+
+    {"dofetchActiveNfceeList", "()Ljava/util/List;",
+     (void*)nfcManager_dofetchActiveNfceeList},
 
     {"getProprietaryCaps", "()[B", (void*)nfcManager_getProprietaryCaps},
     {"enableVendorNciNotifications", "(Z)V",
