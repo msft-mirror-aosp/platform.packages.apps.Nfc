@@ -55,6 +55,7 @@
             <item name="reader_option_default" type="bool"/>
             <!-- Secure NFC default value-->
             <item name="secure_nfc_default" type="bool"/>
+            <item name="tag_intent_blocked_app_list" type="array" />
           <!-- Params from config.xml that can be overlaid -->
 
           <!-- Params from strings.xml that can be overlaid -->
