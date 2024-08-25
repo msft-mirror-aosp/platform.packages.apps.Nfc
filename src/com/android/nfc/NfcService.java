@@ -207,7 +207,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_DELAY_POLLING = 20;
     static final int MSG_CLEAR_ROUTING_TABLE = 21;
     static final int MSG_UPDATE_ISODEP_PROTOCOL_ROUTE = 22;
-    static final int MSG_UPDATE_TECHNOLOGY_AB_ROUTE = 23;
+    static final int MSG_UPDATE_TECHNOLOGY_ABF_ROUTE = 23;
 
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
 
@@ -2347,11 +2347,25 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     R.array.antenna_x);
             int positionY[] = mContext.getResources().getIntArray(
                     R.array.antenna_y);
+            int width = mContext.getResources().getInteger(R.integer.device_width);
+            int height = mContext.getResources().getInteger(R.integer.device_height);
+            boolean isFoldable = mContext.getResources().getBoolean(R.bool.device_foldable);
+
+            // If overlays are not set, try reading properties.
+            if (positionX.length == 0 || positionY.length == 0) {
+                positionX = NfcProperties.info_antpos_X().stream()
+                        .mapToInt(Integer::intValue)
+                        .toArray();
+                positionY = NfcProperties.info_antpos_Y().stream()
+                        .mapToInt(Integer::intValue)
+                        .toArray();
+                width = NfcProperties.info_antpos_device_width().orElse(0);
+                height = NfcProperties.info_antpos_device_height().orElse(0);
+                isFoldable = NfcProperties.info_antpos_device_foldable().orElse(false);
+            }
             if(positionX.length != positionY.length){
                 return null;
             }
-            int width = mContext.getResources().getInteger(R.integer.device_width);
-            int height = mContext.getResources().getInteger(R.integer.device_height);
             List<AvailableNfcAntenna> availableNfcAntennas = new ArrayList<>();
             for(int i = 0; i < positionX.length; i++){
                 if(positionX[i] >= width | positionY[i] >= height){
@@ -2362,7 +2376,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             return new NfcAntennaInfo(
                     width,
                     height,
-                    mContext.getResources().getBoolean(R.bool.device_foldable),
+                    isFoldable,
                     availableNfcAntennas);
         }
 
@@ -2800,7 +2814,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void setScreenState() throws RemoteException {
             if (DBG) Log.i(TAG, "setScreenState");
             NfcPermissions.enforceAdminPermissions(mContext);
-            applyScreenState(mScreenStateHelper.checkScreenState());
+            applyScreenState(mScreenStateHelper.checkScreenState(true /* checkDisplayState */));
         }
 
         @Override
@@ -3463,7 +3477,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (!isNfcEnabledOrShuttingDown()) {
                 return;
             }
-            WatchDogThread watchDog = new WatchDogThread("applyRouting", ROUTING_WATCHDOG_MS);
             if (mInProvisionMode) {
                 mInProvisionMode = Settings.Global.getInt(mContentResolver,
                         Settings.Global.DEVICE_PROVISIONED, 0) == 0;
@@ -3472,6 +3485,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     // and allow handover transfers.
                     mNfcDispatcher.disableProvisioningMode();
                 }
+            }
+            if (mPollingPaused) {
+                Log.d(TAG, "Not updating discovery parameters, polling paused.");
+                return;
             }
             // Special case: if we're transitioning to unlocked state while
             // still talking to a tag, postpone re-configuration.
@@ -3482,6 +3499,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return;
             }
 
+            WatchDogThread watchDog = new WatchDogThread("applyRouting", ROUTING_WATCHDOG_MS);
             try {
                 watchDog.start();
                 // Compute new polling parameters
@@ -3730,8 +3748,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         sendMessage(MSG_UPDATE_ISODEP_PROTOCOL_ROUTE, route);
     }
 
-    public void setTechnologyABRoute(int route) {
-        sendMessage(MSG_UPDATE_TECHNOLOGY_AB_ROUTE, route);
+    public void setTechnologyABFRoute(int route) {
+        sendMessage(MSG_UPDATE_TECHNOLOGY_ABF_ROUTE, route);
     }
 
     void sendMessage(int what, Object obj) {
@@ -4089,9 +4107,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (DBG) Log.d(TAG, "Update IsoDep Protocol Route");
                     mDeviceHost.setIsoDepProtocolRoute((Integer)msg.obj);
                     break;
-                case MSG_UPDATE_TECHNOLOGY_AB_ROUTE:
-                    if (DBG) Log.d(TAG, "Update technology A&B route");
-                    mDeviceHost.setTechnologyABRoute((Integer)msg.obj);
+                case MSG_UPDATE_TECHNOLOGY_ABF_ROUTE:
+                    if (DBG) Log.d(TAG, "Update technology A,B&F route");
+                    mDeviceHost.setTechnologyABFRoute((Integer)msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Unknown message received");
@@ -4837,5 +4855,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             executor.shutdownNow();
             throw e;
         }
+    }
+
+    @VisibleForTesting
+    public Handler getHandler() {
+        return mHandler;
     }
 }
