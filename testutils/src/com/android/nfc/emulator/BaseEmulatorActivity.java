@@ -155,11 +155,17 @@ public abstract class BaseEmulatorActivity extends Activity {
     void ensurePreferredService(String serviceDesc, Context context, CardEmulation cardEmulation) {
         Log.d(TAG, "ensurePreferredService: " + serviceDesc);
         try {
-            CommonTestUtils.waitUntil("Default service hasn't updated", 6,
-                    () -> serviceDesc.equals(
-                            cardEmulation.getDescriptionForPreferredPaymentService().toString()));
-        } catch (InterruptedException ie) {
-            Log.w(TAG, "Default service not updated. This may cause tests to fail");
+            CommonTestUtils.waitUntil(
+                    "Default service hasn't updated",
+                    6,
+                    () ->
+                            cardEmulation.getDescriptionForPreferredPaymentService() != null
+                                    && serviceDesc.equals(
+                                            cardEmulation
+                                                    .getDescriptionForPreferredPaymentService()
+                                                    .toString()));
+        } catch (Exception e) {
+            Log.e(TAG, "Default service not updated. This may cause tests to fail", e);
         }
     }
 
@@ -191,8 +197,8 @@ public abstract class BaseEmulatorActivity extends Activity {
         try {
             CommonTestUtils.waitUntil("Observe mode has not been set", 6,
                     () -> mAdapter.isObserveModeEnabled() == enabled);
-        } catch (InterruptedException ie) {
-            Log.w(TAG, "Observe mode not set to " + enabled + ". This may cause tests to fail");
+        } catch (Exception e) {
+            Log.e(TAG, "Observe mode not set to " + enabled + ". This may cause tests to fail", e);
         }
     }
 
