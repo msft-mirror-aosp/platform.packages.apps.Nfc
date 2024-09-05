@@ -70,10 +70,12 @@ extern void nativeNfcTag_resetPresenceCheck();
 extern void nativeNfcTag_doReadCompleted(tNFA_STATUS status);
 extern void nativeNfcTag_setRfInterface(tNFA_INTF_TYPE rfInterface);
 extern void nativeNfcTag_setActivatedRfProtocol(tNFA_INTF_TYPE rfProtocol);
+extern void nativeNfcTag_setActivatedRfMode(uint8_t rfMode);
 extern void nativeNfcTag_abortWaits();
 extern void nativeNfcTag_registerNdefTypeHandler();
 extern void nativeNfcTag_acquireRfInterfaceMutexLock();
 extern void nativeNfcTag_releaseRfInterfaceMutexLock();
+extern void updateNfcID0Param(uint8_t* nfcID0);
 }  // namespace android
 
 /*****************************************************************************
@@ -409,6 +411,8 @@ static void nfaConnectionCallback(uint8_t connEvent,
           __func__, gIsSelectingRfInterface, sIsDisabling);
       uint8_t activatedProtocol =
           (tNFA_INTF_TYPE)eventData->activated.activate_ntf.protocol;
+      uint8_t activatedMode =
+          eventData->activated.activate_ntf.rf_tech_param.mode;
       if (NFC_PROTOCOL_T5T == activatedProtocol &&
           NfcTag::getInstance().getNumDiscNtf()) {
         /* T5T doesn't support multiproto detection logic */
@@ -420,11 +424,14 @@ static void nfaConnectionCallback(uint8_t connEvent,
         nativeNfcTag_setRfInterface(
             (tNFA_INTF_TYPE)eventData->activated.activate_ntf.intf_param.type);
         nativeNfcTag_setActivatedRfProtocol(activatedProtocol);
+        nativeNfcTag_setActivatedRfMode(activatedMode);
       }
       NfcTag::getInstance().setActive(true);
       if (sIsDisabling || !sIsNfaEnabled) break;
       gActivated = true;
 
+      updateNfcID0Param(
+          eventData->activated.activate_ntf.rf_tech_param.param.pb.nfcid0);
       NfcTag::getInstance().setActivationState();
       if (gIsSelectingRfInterface) {
         nativeNfcTag_doConnectStatus(true);
