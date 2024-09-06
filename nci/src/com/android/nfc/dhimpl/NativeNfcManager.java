@@ -26,6 +26,7 @@ import android.nfc.tech.Ndef;
 import android.nfc.tech.TagTechnology;
 import android.os.Bundle;
 import android.os.Trace;
+import android.sysprop.NfcProperties;
 import android.util.Log;
 
 import com.android.nfc.DeviceHost;
@@ -99,8 +100,7 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public boolean initialize() {
         boolean ret = doInitialize();
-        if (mContext.getResources().getBoolean(
-                com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)) {
+        if (isProprietaryGetCapsSupported()) {
             mProprietaryCaps = NfcProprietaryCaps.createFromByteArray(getProprietaryCaps());
             Log.i(TAG, "mProprietaryCaps: " + mProprietaryCaps);
             logProprietaryCaps(mProprietaryCaps);
@@ -178,6 +178,12 @@ public class NativeNfcManager implements DeviceHost {
      */
     public native void injectNtf(byte[] data);
 
+    public boolean isProprietaryGetCapsSupported() {
+        return mContext.getResources()
+                .getBoolean(com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)
+                && NfcProperties.get_caps_supported().orElse(true);
+    }
+
     @Override
     public boolean isObserveModeSupported() {
         if (!android.nfc.Flags.nfcObserveMode()) {
@@ -189,8 +195,10 @@ public class NativeNfcManager implements DeviceHost {
                 com.android.nfc.R.bool.nfc_observe_mode_supported)) {
             return false;
         }
-        if (mContext.getResources().getBoolean(
-                com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)) {
+        if (!NfcProperties.observe_mode_supported().orElse(true)) {
+            return false;
+        }
+        if (isProprietaryGetCapsSupported()) {
             return isObserveModeSupportedCaps(mProprietaryCaps);
         }
         return true;
@@ -508,6 +516,10 @@ public class NativeNfcManager implements DeviceHost {
         }
     }
 
+    private void notifyRFDiscoveryEvent(boolean isDiscoveryStarted) {
+        mListener.onRfDiscoveryEvent(isDiscoveryStarted);
+    }
+
     @Override
     public native void setDiscoveryTech(int pollTech, int listenTech);
 
@@ -521,7 +533,7 @@ public class NativeNfcManager implements DeviceHost {
     public native void setIsoDepProtocolRoute(int route);
 
     @Override
-    public native void setTechnologyABRoute(int route);
+    public native void setTechnologyABFRoute(int route);
 
     private native byte[] getProprietaryCaps();
 
