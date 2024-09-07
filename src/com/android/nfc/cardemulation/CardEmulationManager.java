@@ -903,11 +903,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             mAidCache.onRoutingOverridedOrRecovered();
 //            NfcService.getInstance().commitRouting();
         }
-
-        @Override
-        public boolean isEuiccSupported() {
-            return mContext.getResources().getBoolean(R.bool.enable_euicc_support);
-        }
     }
 
     final ForegroundUtils.Callback mForegroundCallback = new ForegroundCallbackImpl();

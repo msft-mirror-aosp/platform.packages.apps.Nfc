@@ -100,7 +100,8 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public boolean initialize() {
         boolean ret = doInitialize();
-        if (isProprietaryGetCapsSupported()) {
+        if (mContext.getResources().getBoolean(
+                com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)) {
             mProprietaryCaps = NfcProprietaryCaps.createFromByteArray(getProprietaryCaps());
             Log.i(TAG, "mProprietaryCaps: " + mProprietaryCaps);
             logProprietaryCaps(mProprietaryCaps);
@@ -178,12 +179,6 @@ public class NativeNfcManager implements DeviceHost {
      */
     public native void injectNtf(byte[] data);
 
-    public boolean isProprietaryGetCapsSupported() {
-        return mContext.getResources()
-                .getBoolean(com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)
-                && NfcProperties.get_caps_supported().orElse(true);
-    }
-
     @Override
     public boolean isObserveModeSupported() {
         if (!android.nfc.Flags.nfcObserveMode()) {
@@ -195,10 +190,11 @@ public class NativeNfcManager implements DeviceHost {
                 com.android.nfc.R.bool.nfc_observe_mode_supported)) {
             return false;
         }
-        if (!NfcProperties.observe_mode_supported().orElse(true)) {
+        if (!NfcProperties.info_observe_mode_supported().orElse(true)) {
             return false;
         }
-        if (isProprietaryGetCapsSupported()) {
+        if (mContext.getResources().getBoolean(
+                com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)) {
             return isObserveModeSupportedCaps(mProprietaryCaps);
         }
         return true;
