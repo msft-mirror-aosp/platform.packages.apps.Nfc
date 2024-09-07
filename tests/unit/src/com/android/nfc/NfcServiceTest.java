@@ -15,12 +15,17 @@
  */
 package com.android.nfc;
 
+import static com.android.nfc.NfcService.INVALID_NATIVE_HANDLE;
 import static com.android.nfc.NfcService.PREF_NFC_ON;
+import static com.android.nfc.NfcService.SOUND_END;
+import static com.android.nfc.NfcService.SOUND_ERROR;
+import static com.android.nfc.NfcService.SOUND_END;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -28,8 +33,8 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -46,10 +51,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
+import android.media.SoundPool;
+import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
 import android.nfc.NfcServiceManager;
-import android.nfc.tech.Ndef;
+import android.nfc.cardemulation.CardEmulation;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
@@ -57,14 +64,17 @@ import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.PowerManager;
+import android.os.RemoteException;
 import android.os.UserManager;
 import android.os.test.TestLooper;
+import android.se.omapi.ISecureElementService;
 import android.sysprop.NfcProperties;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
+import com.android.nfc.cardemulation.CardEmulationManager;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -78,6 +88,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -112,10 +123,12 @@ public final class NfcServiceTest {
     @Mock Bundle mUserRestrictions;
     @Mock BackupManager mBackupManager;
     @Mock AlarmManager mAlarmManager;
+    @Mock SoundPool mSoundPool;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
-    @Captor ArgumentCaptor<AlarmManager.OnAlarmListener> mAlarmListener;
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
+    @Captor ArgumentCaptor<Integer> mSoundCaptor;
+    @Captor ArgumentCaptor<Intent> mIntentArgumentCaptor;
     TestLooper mLooper;
     NfcService mNfcService;
     private MockitoSession mStaticMockSession;
@@ -125,6 +138,7 @@ public final class NfcServiceTest {
         mLooper = new TestLooper();
         mStaticMockSession = ExtendedMockito.mockitoSession()
                 .mockStatic(NfcProperties.class)
+                .mockStatic(NfcStatsLog.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         MockitoAnnotations.initMocks(this);
@@ -159,6 +173,7 @@ public final class NfcServiceTest {
         when(mResources.getIntArray(R.array.antenna_y)).thenReturn(new int[0]);
         when(NfcProperties.info_antpos_X()).thenReturn(List.of());
         when(NfcProperties.info_antpos_Y()).thenReturn(List.of());
+        when(NfcProperties.initialized()).thenReturn(Optional.of(Boolean.TRUE));
         createNfcService();
     }
 
@@ -211,6 +226,21 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void testEnable_WheOemExtensionEnabledAndNotInitialized() throws Exception {
+        when(mResources.getBoolean(R.bool.enable_oem_extension)).thenReturn(true);
+        when(NfcProperties.initialized()).thenReturn(Optional.of(Boolean.FALSE));
+
+        createNfcService();
+
+        when(mDeviceHost.initialize()).thenReturn(true);
+        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        mNfcService.mNfcAdapter.enable(PKG_NAME);
+        verify(mPreferencesEditor, never()).putBoolean(PREF_NFC_ON, true);
+        mLooper.dispatchAll();
+        verify(mDeviceHost, never()).initialize();
+    }
+
+    @Test
     public void testBootupWithNfcOn() throws Exception {
         when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
         mNfcService = new NfcService(mApplication, mNfcInjector);
@@ -236,20 +266,7 @@ public final class NfcServiceTest {
         when(mResources.getBoolean(R.bool.enable_oem_extension)).thenReturn(true);
         createNfcService();
 
-        mNfcService.mNfcAdapter.allowBoot();
-        mLooper.dispatchAll();
-        verify(mDeviceHost).initialize();
-    }
-
-    @Test
-    public void testBootupWithNfcOn_WhenOemExtensionEnabled_ThenTimeout() throws Exception {
-        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
-        when(mResources.getBoolean(R.bool.enable_oem_extension)).thenReturn(true);
-        createNfcService();
-        verify(mAlarmManager).setExact(
-                anyInt(), anyLong(), anyString(), mAlarmListener.capture(), any());
-
-        mAlarmListener.getValue().onAlarm();
+        mNfcService.mNfcAdapter.triggerInitialization();
         mLooper.dispatchAll();
         verify(mDeviceHost).initialize();
     }
@@ -379,5 +396,195 @@ public final class NfcServiceTest {
                 .isEqualTo(ANTENNA_POS_X[0]);
         assertThat(nfcAntennaInfo.getAvailableNfcAntennas().get(0).getLocationY())
                 .isEqualTo(ANTENNA_POS_Y[0]);
+    }
+
+    @Test
+    public void testHandlerMsgRegisterT3tIdentifier() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_REGISTER_T3T_IDENTIFIER);
+        msg.obj = "test".getBytes();
+        handler.handleMessage(msg);
+        verify(mDeviceHost).disableDiscovery();
+        verify(mDeviceHost).registerT3tIdentifier(any());
+        verify(mDeviceHost).enableDiscovery(any(), anyBoolean());
+        Message msgDeregister = handler.obtainMessage(NfcService.MSG_DEREGISTER_T3T_IDENTIFIER);
+        msgDeregister.obj = "test".getBytes();
+        handler.handleMessage(msgDeregister);
+        verify(mDeviceHost, times(2)).disableDiscovery();
+        verify(mDeviceHost, times(2)).enableDiscovery(any(), anyBoolean());
+    }
+
+    @Test
+    public void testHandlerMsgCommitRouting() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_COMMIT_ROUTING);
+        mNfcService.mState = NfcAdapter.STATE_OFF;
+        handler.handleMessage(msg);
+        verify(mDeviceHost, never()).commitRouting();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        NfcDiscoveryParameters nfcDiscoveryParameters = mock(NfcDiscoveryParameters.class);
+        when(nfcDiscoveryParameters.shouldEnableDiscovery()).thenReturn(true);
+        mNfcService.mCurrentDiscoveryParameters = nfcDiscoveryParameters;
+        handler.handleMessage(msg);
+        verify(mDeviceHost).commitRouting();
+    }
+
+    @Test
+    public void testHandlerMsgMockNdef() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_MOCK_NDEF);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        msg.obj = ndefMessage;
+        handler.handleMessage(msg);
+        verify(mNfcDispatcher).dispatchTag(any());
+    }
+
+    @Test
+    public void testInitSoundPool_Start() {
+        mNfcService.playSound(SOUND_END);
+
+        verify(mSoundPool, never()).play(mSoundCaptor.capture(),
+                anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+        mNfcService.mSoundPool = mSoundPool;
+        mNfcService.playSound(SOUND_END);
+        verify(mSoundPool, atLeastOnce()).play(mSoundCaptor.capture(),
+                anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+        Integer value = mSoundCaptor.getValue();
+        Assert.assertEquals(mNfcService.mEndSound, (int) value);
+    }
+
+    @Test
+    public void testInitSoundPool_End() {
+        mNfcService.playSound(SOUND_END);
+
+        verify(mSoundPool, never()).play(mSoundCaptor.capture(),
+                anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+        mNfcService.mSoundPool = mSoundPool;
+        mNfcService.playSound(SOUND_END);
+        verify(mSoundPool, atLeastOnce()).play(mSoundCaptor.capture(),
+                anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+        Integer value = mSoundCaptor.getValue();
+        Assert.assertEquals(mNfcService.mEndSound, (int) value);
+    }
+
+    @Test
+    public void testInitSoundPool_Error() {
+        mNfcService.playSound(SOUND_ERROR);
+
+        verify(mSoundPool, never()).play(mSoundCaptor.capture(),
+                anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+        mNfcService.mSoundPool = mSoundPool;
+        mNfcService.playSound(SOUND_ERROR);
+        verify(mSoundPool, atLeastOnce()).play(mSoundCaptor.capture(),
+                anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+        Integer value = mSoundCaptor.getValue();
+        Assert.assertEquals(mNfcService.mErrorSound, (int) value);
+    }
+
+    @Test
+    public void testMsg_Rf_Field_Activated() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_RF_FIELD_ACTIVATED);
+        List<String> userlist = new ArrayList<>();
+        userlist.add("com.android.nfc");
+        mNfcService.mNfcEventInstalledPackages.put(1, userlist);
+        mNfcService.mIsSecureNfcEnabled = true;
+        mNfcService.mIsRequestUnlockShowed = false;
+        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        handler.handleMessage(msg);
+        verify(mApplication).sendBroadcastAsUser(mIntentArgumentCaptor.capture(), any());
+        Intent intent = mIntentArgumentCaptor.getValue();
+        Assert.assertNotNull(intent);
+        Assert.assertEquals(NfcService.ACTION_RF_FIELD_ON_DETECTED, intent.getAction());
+        verify(mApplication).sendBroadcast(mIntentArgumentCaptor.capture());
+        intent = mIntentArgumentCaptor.getValue();
+        Assert.assertEquals(NfcAdapter.ACTION_REQUIRE_UNLOCK_FOR_NFC, intent.getAction());
+    }
+
+    @Test
+    public void testMsg_Rf_Field_Deactivated() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_RF_FIELD_DEACTIVATED);
+        List<String> userlist = new ArrayList<>();
+        userlist.add("com.android.nfc");
+        mNfcService.mNfcEventInstalledPackages.put(1, userlist);
+        handler.handleMessage(msg);
+        verify(mApplication).sendBroadcastAsUser(mIntentArgumentCaptor.capture(), any());
+        Intent intent = mIntentArgumentCaptor.getValue();
+        Assert.assertNotNull(intent);
+        Assert.assertEquals(NfcService.ACTION_RF_FIELD_OFF_DETECTED, intent.getAction());
+    }
+
+    @Test
+    public void testMsg_Tag_Debounce() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_TAG_DEBOUNCE);
+        handler.handleMessage(msg);
+        Assert.assertEquals(INVALID_NATIVE_HANDLE, mNfcService.mDebounceTagNativeHandle);
+    }
+
+    @Test
+    public void testMsg_Apply_Screen_State() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_APPLY_SCREEN_STATE);
+        msg.obj = ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
+        handler.handleMessage(msg);
+        verify(mDeviceHost).doSetScreenState(anyInt(), anyBoolean());
+    }
+
+    @Test
+    public void testMsg_Transaction_Event_Cardemulation_Occurred() {
+        CardEmulationManager cardEmulationManager = mock(CardEmulationManager.class);
+        when(cardEmulationManager.getRegisteredAidCategory(anyString())).
+                thenReturn(CardEmulation.CATEGORY_PAYMENT);
+        mNfcService.mCardEmulationManager = cardEmulationManager;
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_TRANSACTION_EVENT);
+        byte[][] data = {NfcService.hexStringToBytes("F00102030405"),
+                NfcService.hexStringToBytes("02FE00010002"),
+                NfcService.hexStringToBytes("03000000")};
+        msg.obj = data;
+        handler.handleMessage(msg);
+        ExtendedMockito.verify(() -> NfcStatsLog.write(NfcStatsLog.NFC_CARDEMULATION_OCCURRED,
+                NfcStatsLog
+                        .NFC_CARDEMULATION_OCCURRED__CATEGORY__OFFHOST_PAYMENT,
+                new String(NfcService.hexStringToBytes("03000000"), "UTF-8"),
+                -1));
+    }
+
+    @Test
+    public void testMsg_Transaction_Event() throws RemoteException {
+        CardEmulationManager cardEmulationManager = mock(CardEmulationManager.class);
+        when(cardEmulationManager.getRegisteredAidCategory(anyString())).
+                thenReturn(CardEmulation.CATEGORY_PAYMENT);
+        mNfcService.mCardEmulationManager = cardEmulationManager;
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_TRANSACTION_EVENT);
+        byte[][] data = {NfcService.hexStringToBytes("F00102030405"),
+                NfcService.hexStringToBytes("02FE00010002"),
+                NfcService.hexStringToBytes("03000000")};
+        msg.obj = data;
+        List<String> userlist = new ArrayList<>();
+        userlist.add("com.android.nfc");
+        mNfcService.mNfcEventInstalledPackages.put(1, userlist);
+        ISecureElementService iSecureElementService = mock(ISecureElementService.class);
+        IBinder iBinder = mock(IBinder.class);
+        when(iSecureElementService.asBinder()).thenReturn(iBinder);
+        boolean[] nfcAccess = {true};
+        when(iSecureElementService.isNfcEventAllowed(anyString(), any(), any(), anyInt()))
+                .thenReturn(nfcAccess);
+        when(mNfcInjector.connectToSeService()).thenReturn(iSecureElementService);
+        handler.handleMessage(msg);
+        verify(mApplication).sendBroadcastAsUser(mIntentArgumentCaptor.capture(),
+                any(), any(), any());
     }
 }
