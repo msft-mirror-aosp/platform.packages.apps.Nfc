@@ -906,7 +906,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         @Override
         public boolean isEuiccSupported() {
-            return mContext.getResources().getBoolean(R.bool.enable_euicc_support);
+            return mContext.getResources().getBoolean(R.bool.enable_euicc_support)
+                    && NfcInjector.NfcProperties.isEuiccSupported();
         }
     }
 
