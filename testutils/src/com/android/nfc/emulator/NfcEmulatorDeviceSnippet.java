@@ -28,6 +28,8 @@ import androidx.test.uiautomator.UiObjectNotFoundException;
 import androidx.test.uiautomator.UiScrollable;
 import androidx.test.uiautomator.UiSelector;
 
+import com.android.nfc.service.AccessServiceTurnObserveModeOnProcessApdu;
+import com.android.nfc.utils.CommandApdu;
 import com.android.nfc.utils.HceUtils;
 import com.android.nfc.utils.NfcSnippet;
 
@@ -47,6 +49,7 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
 
     /**
      * Starts emulator activity for simple multidevice tests
+     *
      * @param serviceClassNames - service class names to enable
      * @param testPassClassName - class name of service that should handle the APDUs
      * @param isPaymentActivity - whether or not it is a payment activity
@@ -64,6 +67,7 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
 
     /**
      * Starts emulator activity for simple multidevice tests
+     *
      * @param serviceClassNames - services to enable
      * @param testPassClassName - service that should handle the APDU
      * @param preferredServiceClassName - preferred service to set
@@ -84,6 +88,21 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity =
                 (SimpleEmulatorActivity)
                         InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
+    }
+
+    @Rpc(description = "Opens emulator activity with Access Service that turns on observe mode")
+    public void startAccessServiceObserveModeEmulatorActivity() {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClassName(
+                instrumentation.getTargetContext(),
+                AccessServiceTurnObserveModeOnProcessApduEmulatorActivity.class.getName());
+
+        mActivity =
+                (AccessServiceTurnObserveModeOnProcessApduEmulatorActivity)
+                        instrumentation.startActivitySync(intent);
     }
 
     /** Opens dynamic AID emulator activity */
@@ -408,6 +427,14 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         registerSnippetBroadcastReceiver(callbackId, eventName, Intent.ACTION_SCREEN_ON);
     }
 
+    @AsyncRpc(description = "Waits for Observe Mode False")
+    public void asyncWaitForObserveModeFalse(String callbackId, String eventName) {
+        registerSnippetBroadcastReceiver(
+                callbackId,
+                eventName,
+                AccessServiceTurnObserveModeOnProcessApdu.OBSERVE_MODE_FALSE);
+    }
+
     /** Sets the listen tech for the active emulator activity */
     @Rpc(description = "Set the listen tech for the emulator")
     public void setListenTech(Integer listenTech) {
@@ -479,6 +506,19 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         }
     }
 
+    @Rpc(description = "Gets command apdus")
+    public String[] getCommandApdus(String serviceClassName) {
+        CommandApdu[] commandApdus = HceUtils.COMMAND_APDUS_BY_SERVICE.get(serviceClassName);
+        return Arrays.stream(commandApdus)
+                .map(commandApdu -> new String(commandApdu.getApdu()))
+                .toArray(String[]::new);
+    }
+
+    @Rpc(description = "Gets response apdus")
+    public String[] getResponseApdus(String serviceClassName) {
+        return HceUtils.RESPONSE_APDUS_BY_SERVICE.get(serviceClassName);
+    }
+
     /** Builds intent to launch polling loop emulators */
     private Intent buildPollingLoopEmulatorIntent(Instrumentation instrumentation, int nfcTech) {
         Intent intent = new Intent(Intent.ACTION_MAIN);
@@ -489,10 +529,10 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         return intent;
     }
 
-
+    /** Builds intent to launch simple emulator activity */
     private Intent buildSimpleEmulatorActivityIntent(
             String[] serviceClassNames,
-            String testPassClassName,
+            String expectedServiceClassName,
             String preferredServiceClassName,
             boolean isPaymentActivity) {
 
@@ -510,10 +550,10 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
             intent.putExtra(SimpleEmulatorActivity.EXTRA_SERVICES, new ArrayList<>(services));
         }
 
-        if (testPassClassName != null) {
+        if (expectedServiceClassName != null) {
             intent.putExtra(
-                    SimpleEmulatorActivity.EXTRA_SERVICE_TEST_PASS,
-                    new ComponentName(HceUtils.EMULATOR_PACKAGE_NAME, testPassClassName));
+                    SimpleEmulatorActivity.EXTRA_EXPECTED_SERVICE,
+                    new ComponentName(HceUtils.EMULATOR_PACKAGE_NAME, expectedServiceClassName));
         }
 
         if (preferredServiceClassName != null) {
