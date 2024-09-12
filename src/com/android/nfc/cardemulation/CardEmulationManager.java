@@ -1098,10 +1098,6 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
     }
 
-    public void onObserveModeStateChange(boolean enabled) {
-        mHostEmulationManager.onObserveModeStateChange(enabled);
-    }
-
     @Override
     public void onWalletRoleHolderChanged(String holder, int userId) {
         mPreferredServices.onWalletRoleHolderChanged(holder, userId);
