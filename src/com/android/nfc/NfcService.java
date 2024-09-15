@@ -212,6 +212,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_CLEAR_ROUTING_TABLE = 21;
     static final int MSG_UPDATE_ISODEP_PROTOCOL_ROUTE = 22;
     static final int MSG_UPDATE_TECHNOLOGY_ABF_ROUTE = 23;
+    static final int MSG_WATCHDOG_PING = 24;
 
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
 
@@ -1037,7 +1038,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsHceFCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF);
         if (mIsHceCapable) {
-            mCardEmulationManager = new CardEmulationManager(mContext, mNfcInjector);
+            mCardEmulationManager =
+                new CardEmulationManager(mContext, mNfcInjector, mDeviceConfigFacade);
         }
         mForegroundUtils = mNfcInjector.getForegroundUtils();
         mIsSecureNfcCapable = mDeviceConfigFacade.isSecureNfcCapable();
@@ -1171,9 +1173,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private List<Integer> getEnabledUserIds() {
         List<Integer> userIds = new ArrayList<Integer>();
-        UserManager um = mContext.createContextAsUser(
-                UserHandle.of(ActivityManager.getCurrentUser()), 0)
-                .getSystemService(UserManager.class);
+        UserManager um =
+                mContext.createContextAsUser(UserHandle.of(ActivityManager.getCurrentUser()), 0)
+                        .getSystemService(UserManager.class);
         List<UserHandle> luh = um.getEnabledProfiles();
         for (UserHandle uh : luh) {
             userIds.add(uh.getIdentifier());
@@ -2916,7 +2918,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         (byte) (timestamp >>> 8),
                         (byte) timestamp });
                 int frame_data_length = frame_data == null ? 0 : frame_data.length;
-                String frame_data_str = frame_data_length == 0 ? "" : " " + format.formatHex(frame_data);
+                String frame_data_str =
+                        frame_data_length == 0 ? "" : " " + format.formatHex(frame_data);
                 String type_str = "FF";
                 switch (type) {
                     case PollingFrame.POLLING_LOOP_TYPE_ON:
@@ -3683,8 +3686,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
         byte[] data = new byte[len / 2];
         for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
-                    + Character.digit(s.charAt(i + 1), 16));
+            int high = Character.digit(s.charAt(i), 16);
+            int low = Character.digit(s.charAt(i + 1), 16);
+            if (high == -1 || low == -1) {
+                Log.e(TAG, "Invalid hex character found.");
+                return null;
+            }
+            data[i / 2] = (byte) ((high << 4) + low);
         }
         return data;
     }
@@ -4392,6 +4400,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
                 case MSG_CLEAR_ROUTING_TABLE:
+                    if (!isNfcEnabled()) break;
                     if (DBG) Log.d(TAG, "Clear routing table");
                     int clearFlags = (Integer)msg.obj;
                     mDeviceHost.clearRoutingEntry(clearFlags);
@@ -4403,6 +4412,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 case MSG_UPDATE_TECHNOLOGY_ABF_ROUTE:
                     if (DBG) Log.d(TAG, "Update technology A,B&F route");
                     mDeviceHost.setTechnologyABFRoute((Integer)msg.obj);
+                    break;
+                case MSG_WATCHDOG_PING:
+                    NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
+                    watchdog.notifyHasReturned();
                     break;
                 default:
                     Log.e(TAG, "Unknown message received");
@@ -5082,6 +5095,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             pw.println("mIsPowerSavingModeEnabled=" + mIsPowerSavingModeEnabled);
             pw.println("mIsObserveModeSupported=" + mNfcAdapter.isObserveModeSupported());
             pw.println("mIsObserveModeEnabled=" + mNfcAdapter.isObserveModeEnabled());
+            pw.println("listenTech=" + getNfcListenTech());
+            pw.println("pollTech=" + getNfcPollTech());
             pw.println(mCurrentDiscoveryParameters);
             if (mIsHceCapable) {
                 mCardEmulationManager.dump(fd, pw, args);
