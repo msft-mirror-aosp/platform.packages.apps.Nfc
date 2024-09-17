@@ -175,6 +175,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final String PREF_NFC_CHARGING_ON = "nfc_charging_on";
     static final boolean NFC_CHARGING_ON_DEFAULT = true;
 
+    static final String PREF_MIGRATE_TO_DE_COMPLETE = "migrate_to_de_complete";
     static final String PREF_SECURE_NFC_ON = "secure_nfc_on";
     static final String PREF_FIRST_BOOT = "first_boot";
 
@@ -212,6 +213,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_CLEAR_ROUTING_TABLE = 21;
     static final int MSG_UPDATE_ISODEP_PROTOCOL_ROUTE = 22;
     static final int MSG_UPDATE_TECHNOLOGY_ABF_ROUTE = 23;
+    static final int MSG_WATCHDOG_PING = 24;
 
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
 
@@ -911,6 +913,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         filter.addAction(Intent.ACTION_USER_PRESENT);
         filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(Intent.ACTION_USER_ADDED);
+        if (mFeatureFlags.enableDirectBootAware()) filter.addAction(Intent.ACTION_USER_UNLOCKED);
         mContext.registerReceiverForAllUsers(mReceiver, filter, null, null);
     }
 
@@ -1037,7 +1040,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsHceFCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF);
         if (mIsHceCapable) {
-            mCardEmulationManager = new CardEmulationManager(mContext, mNfcInjector);
+            mCardEmulationManager =
+                new CardEmulationManager(mContext, mNfcInjector, mDeviceConfigFacade);
         }
         mForegroundUtils = mNfcInjector.getForegroundUtils();
         mIsSecureNfcCapable = mDeviceConfigFacade.isSecureNfcCapable();
@@ -1171,9 +1175,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private List<Integer> getEnabledUserIds() {
         List<Integer> userIds = new ArrayList<Integer>();
-        UserManager um = mContext.createContextAsUser(
-                UserHandle.of(ActivityManager.getCurrentUser()), 0)
-                .getSystemService(UserManager.class);
+        UserManager um =
+                mContext.createContextAsUser(UserHandle.of(ActivityManager.getCurrentUser()), 0)
+                        .getSystemService(UserManager.class);
         List<UserHandle> luh = um.getEnabledProfiles();
         for (UserHandle uh : luh) {
             userIds.add(uh.getIdentifier());
@@ -2916,7 +2920,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         (byte) (timestamp >>> 8),
                         (byte) timestamp });
                 int frame_data_length = frame_data == null ? 0 : frame_data.length;
-                String frame_data_str = frame_data_length == 0 ? "" : " " + format.formatHex(frame_data);
+                String frame_data_str =
+                        frame_data_length == 0 ? "" : " " + format.formatHex(frame_data);
                 String type_str = "FF";
                 switch (type) {
                     case PollingFrame.POLLING_LOOP_TYPE_ON:
@@ -4397,6 +4402,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
                 case MSG_CLEAR_ROUTING_TABLE:
+                    if (!isNfcEnabled()) break;
                     if (DBG) Log.d(TAG, "Clear routing table");
                     int clearFlags = (Integer)msg.obj;
                     mDeviceHost.clearRoutingEntry(clearFlags);
@@ -4408,6 +4414,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 case MSG_UPDATE_TECHNOLOGY_ABF_ROUTE:
                     if (DBG) Log.d(TAG, "Update technology A,B&F route");
                     mDeviceHost.setTechnologyABFRoute((Integer)msg.obj);
+                    break;
+                case MSG_WATCHDOG_PING:
+                    NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
+                    watchdog.notifyHasReturned();
                     break;
                 default:
                     Log.e(TAG, "Unknown message received");
@@ -4846,6 +4856,27 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             UserHandle.of(ActivityManager.getCurrentUser()), /*flags=*/0))
                             .startNotification();
                 }
+            } else if (action.equals(Intent.ACTION_USER_UNLOCKED)
+                    && mFeatureFlags.enableDirectBootAware()) {
+                // If this is first unlock after upgrading to NFC stack that is direct boot aware,
+                // migrate over the data from CE directory to DE directory for access before user
+                // unlock in subsequent bootups.
+                if (!mPrefs.getBoolean(PREF_MIGRATE_TO_DE_COMPLETE, false)) {
+                    Log.i(TAG, "Migrating shared prefs to DE directory from CE directory");
+                    Context ceContext = mContext.createCredentialProtectedStorageContext();
+                    SharedPreferences cePreferences =
+                        ceContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+                    Log.i(TAG, "CE Shared Pref values: " + cePreferences.getAll());
+                    if (!mContext.moveSharedPreferencesFrom(ceContext, PREF)) {
+                        Log.e(TAG, "Failed to migrate NFC Shared preferences to DE directory");
+                        return;
+                    }
+                    // If the move is completed, refresh our reference to the shared preferences.
+                    mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+                    mPrefsEditor = mPrefs.edit();
+                    mPrefsEditor.putBoolean(PREF_MIGRATE_TO_DE_COMPLETE, true);
+                    mPrefsEditor.apply();
+                }
             }
         }
     };
@@ -5087,6 +5118,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             pw.println("mIsPowerSavingModeEnabled=" + mIsPowerSavingModeEnabled);
             pw.println("mIsObserveModeSupported=" + mNfcAdapter.isObserveModeSupported());
             pw.println("mIsObserveModeEnabled=" + mNfcAdapter.isObserveModeEnabled());
+            pw.println("listenTech=" + getNfcListenTech());
+            pw.println("pollTech=" + getNfcPollTech());
             pw.println(mCurrentDiscoveryParameters);
             if (mIsHceCapable) {
                 mCardEmulationManager.dump(fd, pw, args);
