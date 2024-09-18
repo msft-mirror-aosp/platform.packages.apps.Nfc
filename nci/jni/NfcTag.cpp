@@ -50,6 +50,7 @@ static int sLastSelectedTagId = 0;
 NfcTag::NfcTag()
     : mNumTechList(0),
       mNumRfDiscId(0),
+      mIsReselecting(false),
       mTechnologyTimeoutsTable(MAX_NUM_TECHNOLOGY),
       mNativeData(NULL),
       mIsActivated(false),
@@ -1112,8 +1113,8 @@ void NfcTag::selectNextTagIfExists() {
   LOG(DEBUG) << StringPrintf("%s: enter, mNumDiscTechList=%x", fn,
                              mNumDiscTechList);
   for (int i = 0; i < mNumDiscTechList; i++) {
-    LOG(DEBUG) << StringPrintf("%s: nfa target idx=%dh=0x%X; protocol=0x%X", fn,
-                               i, mTechHandlesDiscData[i],
+    LOG(DEBUG) << StringPrintf("%s: nfa target idx=%d h=0x%X; protocol=0x%X",
+                               fn, i, mTechHandlesDiscData[i],
                                mTechLibNfcTypesDiscData[i]);
     if (((mTechHandlesDiscData[sLastSelectedTagId] !=
           mTechHandlesDiscData[i]) ||
@@ -1350,7 +1351,9 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
         mIsActivated = true;
         mProtocol = activated.activate_ntf.protocol;
         calculateT1tMaxMessageSize(activated);
-        discoverTechnologies(activated);
+        if (!mIsReselecting) {
+          discoverTechnologies(activated);
+        }
         createNativeNfcTag(activated);
       }
       break;
@@ -1358,7 +1361,9 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
     case NFA_DEACTIVATED_EVT:
       mIsActivated = false;
       mProtocol = NFC_PROTOCOL_UNKNOWN;
-      resetTechnologies();
+      if (!mIsReselecting) {
+        resetTechnologies();
+      }
       break;
 
     case NFA_READ_CPLT_EVT: {
@@ -1574,3 +1579,25 @@ void NfcTag::setNumDiscNtf(int numDiscNtfValue) {
 **
 *******************************************************************************/
 int NfcTag::getNumDiscNtf() { return mNumDiscNtf; }
+
+/*******************************************************************************
+**
+** Function:        isReselecting
+**
+** Description:     used to check if a reSelect() procedure is ongoing
+**
+** Returns:         value of mIsReselecting variable
+**
+*******************************************************************************/
+bool NfcTag::isReselecting() { return mIsReselecting; }
+
+/*******************************************************************************
+**
+** Function:        setReselect
+**
+** Description:     Called by JNI to indicate status of reSelect() procedure
+**
+** Returns:
+**
+*******************************************************************************/
+void NfcTag::setReselect(bool isReselecting) { mIsReselecting = isReselecting; }

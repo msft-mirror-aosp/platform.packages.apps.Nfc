@@ -109,7 +109,6 @@ static jboolean sWriteWaitingForComplete = JNI_FALSE;
 static bool sFormatOk = false;
 static jboolean sConnectOk = JNI_FALSE;
 static jboolean sConnectWaitingForComplete = JNI_FALSE;
-static bool sGotDeactivate = false;
 static uint32_t sCheckNdefMaxSize = 0;
 static bool sCheckNdefCardReadOnly = false;
 static jboolean sCheckNdefWaitingForComplete = JNI_FALSE;
@@ -122,6 +121,7 @@ static int sCurrentConnectedTargetIdx = 0;
 static int sIsoDepPresCheckCnt = 0;
 static bool sIsoDepPresCheckAlternate = false;
 static int sPresCheckErrCnt = 0;
+static bool sReselectTagIdle = false;
 
 static int sPresCheckStatus = 0;
 static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded);
@@ -161,8 +161,10 @@ void nativeNfcTag_abortWaits() {
   sem_post(&sMakeReadonlySem);
   sCurrentRfInterface = NFA_INTERFACE_ISO_DEP;
   sCurrentActivatedProtocl = NFA_INTERFACE_ISO_DEP;
-  sCurrentConnectedTargetType = TARGET_TYPE_UNKNOWN;
-  sCurrentConnectedTargetProtocol = NFC_PROTOCOL_UNKNOWN;
+  if (!gIsTagDeactivating) {
+    sCurrentConnectedTargetType = TARGET_TYPE_UNKNOWN;
+    sCurrentConnectedTargetProtocol = NFC_PROTOCOL_UNKNOWN;
+  }
 
   sIsoDepPresCheckCnt = 0;
   sPresCheckErrCnt = 0;
@@ -478,8 +480,6 @@ void nativeNfcTag_doConnectStatus(jboolean isConnectOk) {
 **
 *******************************************************************************/
 void nativeNfcTag_doDeactivateStatus(int status) {
-  sGotDeactivate = (status == 0);
-
   SyncEventGuard g(sReconnectEvent);
   sReconnectEvent.notifyOne();
 }
@@ -549,6 +549,25 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetIdx) {
 
   retCode = reSelect(intfType, true);
 
+  // Check we are connected to requested protocol/tech
+  if ((retCode == NFCSTATUS_SUCCESS) &&
+      ((sCurrentConnectedTargetProtocol != sCurrentActivatedProtocl) ||
+       (intfType != sCurrentRfInterface))) {
+    LOG(ERROR) << StringPrintf("%s: not connected to requested idx 0x%X",
+                               __func__, targetIdx);
+    retCode = NFCSTATUS_FAILED;
+
+    // We are still connected to something, update variables
+    for (int i = 0; i < natTag.mNumTechList; i++) {
+      if (sCurrentActivatedProtocl == natTag.mTechLibNfcTypes[i]) {
+        sCurrentConnectedTargetIdx = i;
+        sCurrentConnectedTargetType = natTag.mTechList[i];
+        sCurrentConnectedTargetProtocol = natTag.mTechLibNfcTypes[i];
+        break;
+      }
+    }
+  }
+
 TheEnd:
   LOG(DEBUG) << StringPrintf("%s: exit 0x%X", __func__, retCode);
   return retCode;
@@ -586,7 +605,7 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
     LOG(DEBUG) << StringPrintf("%s: DTA; bypass flag not set", __func__);
 
   NfcTag& natTag = NfcTag::getInstance();
-
+  natTag.setReselect(TRUE);
   tNFA_STATUS status = NFA_STATUS_OK;
   int rVal = 1;
 
@@ -619,7 +638,6 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
     {
       SyncEventGuard g(sReconnectEvent);
       gIsTagDeactivating = true;
-      sGotDeactivate = false;
       LOG(DEBUG) << StringPrintf("%s: deactivate to sleep", __func__);
       if (NFA_STATUS_OK !=
           (status = NFA_Deactivate(TRUE)))  // deactivate to sleep state
@@ -636,15 +654,9 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
       }
     }
 
-    if (!sGotDeactivate) {
-      rVal = STATUS_CODE_TARGET_LOST;
-      break;
-    }
-
-    if (NfcTag::getInstance().getActivationState() != NfcTag::Sleep) {
-      LOG(ERROR) << StringPrintf("%s: tag is not in sleep", __func__);
-      rVal = STATUS_CODE_TARGET_LOST;
-      break;
+    if (NfcTag::getInstance().getActivationState() == NfcTag::Idle) {
+      LOG(ERROR) << StringPrintf("%s: tag is in Idle state", __func__);
+      sReselectTagIdle = true;
     }
 
     gIsTagDeactivating = false;
@@ -653,19 +665,21 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
       SyncEventGuard g2(sReconnectEvent);
 
       sConnectWaitingForComplete = JNI_TRUE;
-      LOG(DEBUG) << StringPrintf("%s: select interface 0x%x", __func__,
-                                 rfInterface);
       gIsSelectingRfInterface = true;
-      if (NFA_STATUS_OK !=
-          (status =
-               NFA_Select(natTag.mTechHandles[sCurrentConnectedTargetIdx],
-                          natTag.mTechLibNfcTypes[sCurrentConnectedTargetIdx],
-                          rfInterface))) {
-        LOG(ERROR) << StringPrintf("%s: NFA_Select failed, status = %d",
-                                   __func__, status);
-        break;
-      }
 
+      if (!sReselectTagIdle) {
+        LOG(DEBUG) << StringPrintf("%s: select interface 0x%x", __func__,
+                                   rfInterface);
+        if (NFA_STATUS_OK !=
+            (status =
+                 NFA_Select(natTag.mTechHandles[sCurrentConnectedTargetIdx],
+                            natTag.mTechLibNfcTypes[sCurrentConnectedTargetIdx],
+                            rfInterface))) {
+          LOG(ERROR) << StringPrintf("%s: NFA_Select failed, status = %d",
+                                     __func__, status);
+          break;
+        }
+      }
       sConnectOk = false;
       if (sReconnectEvent.wait(1000) == false)  // if timeout occurred
       {
@@ -698,9 +712,9 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
       rVal = STATUS_CODE_TARGET_LOST;
       break;
     }
+    // Check if we are connected to the requested interface
     if (sConnectOk) {
       rVal = 0;  // success
-      sCurrentRfInterface = rfInterface;
     } else {
       rVal = 1;
     }
@@ -709,7 +723,9 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
   sConnectWaitingForComplete = JNI_FALSE;
   gIsTagDeactivating = false;
   gIsSelectingRfInterface = false;
+  sReselectTagIdle = false;
   sRfInterfaceMutex.unlock();
+  natTag.setReselect(FALSE);
   LOG(DEBUG) << StringPrintf("%s: exit; status=%d", __func__, rVal);
   return rVal;
 }
@@ -726,7 +742,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
 **
 *******************************************************************************/
 static jint nativeNfcTag_doReconnect(JNIEnv*, jobject) {
-  LOG(DEBUG) << StringPrintf("%s: enter", __func__);
+  LOG(DEBUG) << StringPrintf("%s(enter): sCurrentConnectedTargetIdx: 0x%x",
+                             __func__, sCurrentConnectedTargetIdx);
   int retCode = NFCSTATUS_SUCCESS;
   NfcTag& natTag = NfcTag::getInstance();
 
@@ -754,16 +771,22 @@ static jint nativeNfcTag_doReconnect(JNIEnv*, jobject) {
     retCode = reSelect(NFA_INTERFACE_MIFARE, false);
   }
 
-  for (int i = 0; i < natTag.mNumTechList; i++) {
-    if (sCurrentConnectedTargetProtocol == natTag.mTechLibNfcTypes[i]) {
-      sCurrentConnectedTargetIdx = i;
-      LOG(DEBUG) << StringPrintf("%s: targetIdx: %d", __func__, i);
-      break;
+  // Check what we are connected to
+  if (retCode == NFCSTATUS_SUCCESS) {
+    for (int i = 0; i < natTag.mNumTechList; i++) {
+      if (sCurrentActivatedProtocl == natTag.mTechLibNfcTypes[i]) {
+        sCurrentConnectedTargetIdx = i;
+        sCurrentConnectedTargetType = natTag.mTechList[i];
+        sCurrentConnectedTargetProtocol = natTag.mTechLibNfcTypes[i];
+        break;
+      }
     }
   }
 
 TheEnd:
-  LOG(DEBUG) << StringPrintf("%s: exit 0x%X", __func__, retCode);
+  LOG(DEBUG) << StringPrintf(
+      "%s(exit): sCurrentConnectedTargetIdx = 0x%X, retCode: 0x%x", __func__,
+      sCurrentConnectedTargetIdx, retCode);
   return retCode;
 }
 
