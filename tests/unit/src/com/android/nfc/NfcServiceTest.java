@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -57,6 +58,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.media.SoundPool;
 import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
@@ -74,10 +76,12 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.UserManager;
 import android.os.test.TestLooper;
 import android.se.omapi.ISecureElementService;
 import android.sysprop.NfcProperties;
+import android.nfc.INfcOemExtensionCallback;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -97,7 +101,9 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.quality.Strictness;
+import org.mockito.stubbing.Answer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -141,9 +147,11 @@ public final class NfcServiceTest {
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
     @Captor ArgumentCaptor<Integer> mSoundCaptor;
     @Captor ArgumentCaptor<Intent> mIntentArgumentCaptor;
+    @Captor ArgumentCaptor<ContentObserver> mContentObserverArgumentCaptor;
     TestLooper mLooper;
     NfcService mNfcService;
     private MockitoSession mStaticMockSession;
+    private ContentObserver mContentObserver;
 
     @Before
     public void setUp() {
@@ -168,6 +176,7 @@ public final class NfcServiceTest {
         when(mNfcInjector.getNfcDispatcher()).thenReturn(mNfcDispatcher);
         when(mNfcInjector.getNfcUnlockManager()).thenReturn(mNfcUnlockManager);
         when(mNfcInjector.getFeatureFlags()).thenReturn(mFeatureFlags);
+        when(mNfcInjector.isSatelliteModeSensitive()).thenReturn(true);
         when(mApplication.getSharedPreferences(anyString(), anyInt())).thenReturn(mPreferences);
         when(mApplication.getSystemService(PowerManager.class)).thenReturn(mPowerManager);
         when(mApplication.getSystemService(UserManager.class)).thenReturn(mUserManager);
@@ -202,6 +211,10 @@ public final class NfcServiceTest {
                 .thenReturn(true);
         mNfcService = new NfcService(mApplication, mNfcInjector);
         mLooper.dispatchAll();
+        verify(mContentResolver, atLeastOnce()).registerContentObserver(any(),
+                anyBoolean(), mContentObserverArgumentCaptor.capture());
+        mContentObserver = mContentObserverArgumentCaptor.getValue();
+        Assert.assertNotNull(mContentObserver);
         verify(mNfcInjector).makeDeviceHost(mDeviceHostListener.capture());
         verify(mApplication).registerReceiverForAllUsers(
                 mGlobalReceiver.capture(),
@@ -744,5 +757,51 @@ public final class NfcServiceTest {
         verify(mPreferences).edit();
         verify(mPreferencesEditor).putBoolean(NfcService.PREF_MIGRATE_TO_DE_COMPLETE, true);
         verify(mPreferencesEditor).apply();
+    }
+
+    @Test
+    public void testAllowOemOnTagDispatchCallback() throws Exception {
+        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        INfcOemExtensionCallback callback = mock(INfcOemExtensionCallback.class);
+        mNfcService.mNfcAdapter.registerOemExtensionCallback(callback);
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.NDEF);
+        when(tagEndpoint.getUid()).thenReturn(NfcService
+                .hexStringToBytes("0x040000010100000000000000"));
+        when(tagEndpoint.getTechList()).thenReturn(new int[]{Ndef.NDEF});
+        when(tagEndpoint.getTechExtras()).thenReturn(new Bundle[]{});
+        when(tagEndpoint.getHandle()).thenReturn(1);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        when(tagEndpoint.findAndReadNdef()).thenReturn(ndefMessage);
+        msg.obj = tagEndpoint;
+        mNfcService.mIsWlcEnabled = true;
+        mNfcService.mIsRWCapable = true;
+        handler.handleMessage(msg);
+        verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(), any());
+        ArgumentCaptor<Tag> tagCaptor = ArgumentCaptor
+                .forClass(Tag.class);
+        verify(mNfcDispatcher).dispatchTag(tagCaptor.capture());
+        Tag tag = tagCaptor.getValue();
+        Assert.assertNotNull(tag);
+        Assert.assertEquals("android.nfc.tech.Ndef", tag.getTechList()[0]);
+
+        doAnswer(new Answer() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                ResultReceiver r = invocation.getArgument(0);
+                r.send(1, null);
+                return null;
+            }
+        }).when(callback).onTagDispatch(any(ResultReceiver.class));
+        mContentObserver.onChange(true);
+        ArgumentCaptor<ResultReceiver> receiverArgumentCaptor = ArgumentCaptor
+                .forClass(ResultReceiver.class);
+        verify(callback).onTagDispatch(receiverArgumentCaptor.capture());
+        ResultReceiver resultReceiver = receiverArgumentCaptor.getValue();
+        Assert.assertNotNull(resultReceiver);
     }
 }
