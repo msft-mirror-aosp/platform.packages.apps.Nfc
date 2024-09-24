@@ -2018,7 +2018,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     Arrays.asList(mContext.getResources().getStringArray(R.array.nfc_allow_list)));
             if (!allowlist.isEmpty() && !allowlist.contains(pkg)) {
                 Intent allowUsingNfcIntent = new Intent()
-                        .putExtra(APP_NAME_ENABLING_NFC, getAppName(pkg, mUserId))
+                        .putExtra(APP_NAME_ENABLING_NFC, getAppName(pkg, getUserId()))
                         .setClass(mContext, NfcEnableAllowlistActivity.class);
 
                 mContext.startActivityAsUser(allowUsingNfcIntent, UserHandle.CURRENT);
@@ -3073,7 +3073,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcOemExtensionCallback = callbacks;
             updateNfCState();
-            mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+            if (mCardEmulationManager != null) {
+                mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+            }
         }
 
         @Override
@@ -4897,6 +4899,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (!mContext.moveSharedPreferencesFrom(ceContext, PREF)) {
                         Log.e(TAG, "Failed to migrate NFC Shared preferences to DE directory");
                         return;
+                    }
+                    if (mIsHceCapable) {
+                        mCardEmulationManager.migrateSettingsFilesFromCe(ceContext);
                     }
                     // If the move is completed, refresh our reference to the shared preferences.
                     mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
