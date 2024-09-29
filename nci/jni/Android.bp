@@ -29,7 +29,7 @@ cc_defaults {
     ],
 
     srcs: ["**/*.cpp"],
-    exclude_srcs: ["NfcTagTest.cpp"],
+    exclude_srcs: ["**/*Test.cpp"],
 
     include_dirs: [
         "system/nfc/src/nfa/include",
@@ -101,7 +101,7 @@ cc_defaults {
 cc_test {
     name: "nfc.nci.jni.tests",
 
-    srcs: ["NfcTagTest.cpp"],
+    srcs: ["**/*Test.cpp"],
 
     shared_libs: [
         "libnativehelper",
