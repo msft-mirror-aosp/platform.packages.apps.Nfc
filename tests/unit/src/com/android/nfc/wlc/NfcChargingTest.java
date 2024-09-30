@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -261,6 +262,29 @@ public class NfcChargingTest {
         mNfcCharging.HandleWLCState();
         Assert.assertTrue(mNfcCharging.mNwcc_retry > 0);
         Assert.assertFalse(mNfcCharging.WLCL_Presence);
+    }
+
+    @Test
+    public void testHandleWlcCap_ModeReq_State16() {
+        mNfcCharging.WLCState = 5;
+        mNfcCharging.HandleWLCState();
+        ArgumentCaptor<byte[]> captor = ArgumentCaptor.forClass(byte[].class);
+        verify(mNfcCharging.TagHandler).writeNdef(captor.capture());
+        Assert.assertNotNull(captor.getValue());
+        Assert.assertEquals(6, mNfcCharging.WLCState);
+    }
+
+    @Test
+    public void testHandleWlcCap_ModeReq_State17() {
+        mNfcCharging.WLCState = 6;
+        mNfcCharging.WlcCtl_WptReq = 0x0;
+        mNfcCharging.TWptDuration = 5000;
+        mNfcCharging.HandleWLCState();
+        Assert.assertEquals(9, mNfcCharging.WLCState);
+        ArgumentCaptor<DeviceHost.TagDisconnectedCallback> captor = ArgumentCaptor
+                .forClass(DeviceHost.TagDisconnectedCallback.class);
+        verify(mNfcCharging.TagHandler).startPresenceChecking(anyInt(), captor.capture());
+        Assert.assertNotNull(captor.getValue());
     }
 }
 
