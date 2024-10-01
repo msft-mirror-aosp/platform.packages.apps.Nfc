@@ -116,9 +116,11 @@ import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.flags.FeatureFlags;
+import com.android.nfc.flags.Flags;
 import com.android.nfc.handover.HandoverDataParser;
 import com.android.nfc.proto.NfcEventProto;
 import com.android.nfc.wlc.NfcCharging;
+
 import com.google.protobuf.ByteString;
 
 import org.json.JSONException;
@@ -677,8 +679,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onPollingLoopDetected(List<PollingFrame> frames) {
-        if (mCardEmulationManager != null && android.nfc.Flags.nfcReadPollingLoop()) {
-            mCardEmulationManager.onPollingLoopDetected(frames);
+        if (mCardEmulationManager != null
+                && android.nfc.Flags.nfcReadPollingLoop()) {
+            if (Flags.postCallbacks()) {
+                mHandler.post(() -> {
+                    if (mCardEmulationManager != null) {
+                        mCardEmulationManager.onPollingLoopDetected(frames);
+                    }
+                });
+            } else {
+                mCardEmulationManager.onPollingLoopDetected((frames));
+            }
         }
     }
 
@@ -716,8 +727,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onObserveModeStateChanged(boolean enable) {
-        if (mCardEmulationManager != null) {
-            mCardEmulationManager.onObserveModeStateChange(enable);
+        if (Flags.postCallbacks()) {
+            mHandler.post(() -> {
+                if (mCardEmulationManager != null) {
+                    mCardEmulationManager.onObserveModeStateChange(enable);
+                }
+            });
+        } else {
+            if (mCardEmulationManager != null) {
+                mCardEmulationManager.onObserveModeStateChange(enable);
+            }
         }
     }
 
@@ -3122,11 +3141,25 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             mDeviceHost.checkFirmware();
         }
 
-        // TODO(b/321304762): Add the OEM extension API.
+        @Override
         public void triggerInitialization() throws RemoteException {
             if (DBG) Log.i(TAG, "triggerInitialization");
             NfcPermissions.enforceAdminPermissions(mContext);
             new EnableDisableTask().execute(TASK_BOOT);
+        }
+
+        @Override
+        public boolean getSettingStatus() throws RemoteException {
+            if (DBG) Log.i(TAG, "getSettingStatus");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return getNfcOnSetting();
+        }
+
+        @Override
+        public boolean isTagPresent() throws RemoteException {
+            if (DBG) Log.i(TAG, "isTagPresent");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return NfcService.this.isTagPresent();
         }
 
         private void updateNfCState() {
