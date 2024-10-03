@@ -525,9 +525,10 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetHandle) {
   sCurrentConnectedHandle = targetHandle;
 
   if (sCurrentConnectedTargetProtocol != NFC_PROTOCOL_ISO_DEP &&
-      sCurrentConnectedTargetProtocol != NFC_PROTOCOL_MIFARE) {
+      sCurrentConnectedTargetProtocol != NFC_PROTOCOL_MIFARE &&
+      sCurrentConnectedTargetProtocol == sCurrentActivatedProtocl) {
     LOG(DEBUG) << StringPrintf(
-        "%s() Nfc type = %d, do nothing for non ISO_DEP and non Mifare ",
+        "%s() Nfc type = 0x%x, do nothing for non ISO_DEP and non Mifare ",
         __func__, sCurrentConnectedTargetProtocol);
     retCode = NFCSTATUS_SUCCESS;
     goto TheEnd;
@@ -603,7 +604,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         (NFC_GetNCIVersion() >= NCI_VERSION_2_0)) {
       {
         SyncEventGuard g3(sReconnectEvent);
-        if (sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) {
+        if ((sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) ||
+            (sCurrentActivatedProtocl == NFC_PROTOCOL_MIFARE)) {
           status = NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
         } else if (sCurrentActivatedProtocl == NFA_PROTOCOL_ISO_DEP) {
           status = NFA_SendRawFrame(RW_DESELECT_REQ,
