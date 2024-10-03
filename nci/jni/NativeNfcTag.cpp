@@ -604,7 +604,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         (NFC_GetNCIVersion() >= NCI_VERSION_2_0)) {
       {
         SyncEventGuard g3(sReconnectEvent);
-        if (sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) {
+        if ((sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) ||
+            (sCurrentActivatedProtocl == NFC_PROTOCOL_MIFARE)) {
           status = NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
         } else if (sCurrentActivatedProtocl == NFA_PROTOCOL_ISO_DEP) {
           status = NFA_SendRawFrame(RW_DESELECT_REQ,
