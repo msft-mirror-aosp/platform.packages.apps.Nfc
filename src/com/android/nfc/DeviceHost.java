@@ -55,6 +55,8 @@ public interface DeviceHost {
         public void onObserveModeStateChanged(boolean enable);
 
         public void onRfDiscoveryEvent(boolean isDiscoveryStarted);
+
+        public void onSeSelected();
     }
 
     public interface TagEndpoint {
