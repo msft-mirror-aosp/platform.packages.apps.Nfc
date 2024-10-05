@@ -57,6 +57,7 @@ import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.flags.Flags;
 import com.android.nfc.NfcService;
 import com.android.nfc.cardemulation.RegisteredAidCache.AidResolveInfo;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcStatsLog;
 
 import java.util.ArrayList;
@@ -95,6 +96,7 @@ public final class NfcCardEmulationOccurredTest {
                 .mockStatic(NfcStatsLog.class)
                 .mockStatic(Flags.class)
                 .mockStatic(NfcService.class)
+                .mockStatic(NfcInjector.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         initMockContext(context);
@@ -115,6 +117,7 @@ public final class NfcCardEmulationOccurredTest {
         when(mockAidCache.getPreferredPaymentService()).thenReturn(new Pair<>(null, null));
         when(NfcService.getInstance()).thenReturn(mock(NfcService.class));
         when(Flags.statsdCeEventsFlag()).thenReturn(false);
+	when(NfcInjector.getInstance()).thenReturn(mock(NfcInjector.class));
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> mHostEmulation = new HostEmulationManager(
