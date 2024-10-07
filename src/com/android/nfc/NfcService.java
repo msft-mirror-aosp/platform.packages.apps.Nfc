@@ -51,6 +51,7 @@ import android.media.SoundPool.OnLoadCompleteListener;
 import android.net.Uri;
 import android.nfc.AvailableNfcAntenna;
 import android.nfc.Constants;
+import android.nfc.Entry;
 import android.nfc.ErrorCodes;
 import android.nfc.FormatException;
 import android.nfc.IAppCallback;
@@ -3160,6 +3161,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "isTagPresent");
             NfcPermissions.enforceAdminPermissions(mContext);
             return NfcService.this.isTagPresent();
+        }
+
+        @Override
+        public List<Entry> getRoutingTableEntryList() throws RemoteException {
+            if (DBG) Log.i(TAG, "getRoutingTableEntry");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return mRoutingTableParser.getRoutingTableEntryList(mDeviceHost);
         }
 
         private void updateNfCState() {
