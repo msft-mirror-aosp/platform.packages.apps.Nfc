@@ -104,6 +104,9 @@ jmethodID gCachedNfcManagerNotifyVendorSpecificEvent;
 jmethodID gCachedNfcManagerNotifyCommandTimeout;
 jmethodID gCachedNfcManagerNotifyObserveModeChanged;
 jmethodID gCachedNfcManagerNotifyRfDiscoveryEvent;
+jmethodID gCachedNfcManagerNotifyEeAidSelected;
+jmethodID gCachedNfcManagerNotifyEeProtocolSelected;
+jmethodID gCachedNfcManagerNotifyEeTechSelected;
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
@@ -713,6 +716,15 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyRfDiscoveryEvent =
       e->GetMethodID(cls.get(), "notifyRFDiscoveryEvent", "(Z)V");
+
+  gCachedNfcManagerNotifyEeAidSelected = e->GetMethodID(
+      cls.get(), "notifyEeAidSelected", "([BLjava/lang/String;)V");
+
+  gCachedNfcManagerNotifyEeProtocolSelected = e->GetMethodID(
+      cls.get(), "notifyEeProtocolSelected", "(ILjava/lang/String;)V");
+
+  gCachedNfcManagerNotifyEeTechSelected = e->GetMethodID(
+      cls.get(), "notifyEeTechSelected", "(ILjava/lang/String;)V");
 
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
