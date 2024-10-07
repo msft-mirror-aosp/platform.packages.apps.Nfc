@@ -104,7 +104,6 @@ public class HostEmulationManager {
             NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_PAYMENT;
     static final int CE_HCE_OTHER =
             NfcStatsLog.NFC_CARDEMULATION_OCCURRED__CATEGORY__HCE_OTHER;
-    static final String NFC_PACKAGE = "com.android.nfc";
     static final String DATA_KEY = "data";
     static final int FIELD_OFF_IDLE_DELAY_MS = 2000;
     static final int RE_ENABLE_OBSERVE_MODE_DELAY_MS = 2000;
@@ -189,9 +188,13 @@ public class HostEmulationManager {
               Log.d(TAG, "re-enabling observe mode after transaction.");
               mEnableObserveModeAfterTransaction = false;
               mEnableObserveModeOnFieldOff = false;
-              NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
-              adapter.setObserveModeEnabled(true);
             }
+            NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
+            if (adapter == null) {
+                Log.e(TAG, "adapter is null, returning");
+                return;
+            }
+            adapter.setObserveModeEnabled(true);
         }
     };
 
@@ -262,13 +265,13 @@ public class HostEmulationManager {
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_OBSERVE_MODE)
     public void updateForShouldDefaultToObserveMode(boolean enabled) {
         synchronized (mLock) {
-            if (!isHostCardEmulationActivated()) {
-                NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
-                adapter.setObserveModeEnabled(enabled);
-            } else {
+            if (isHostCardEmulationActivated()) {
                 mEnableObserveModeAfterTransaction = enabled;
+                return;
             }
         }
+        NfcAdapter adapter = NfcAdapter.getDefaultAdapter(mContext);
+        adapter.setObserveModeEnabled(enabled);
     }
 
 
@@ -633,7 +636,7 @@ public class HostEmulationManager {
             // Regardless of what happens, if we're having a tap again
             // activity up, close it
             Intent intent = new Intent(TapAgainDialog.ACTION_CLOSE);
-            intent.setPackage(NFC_PACKAGE);
+            intent.setPackage(NfcInjector.getInstance().getNfcPackageName());
             mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
             if (mState != STATE_IDLE && mState != STATE_POLLING_LOOP) {
                 Log.e(TAG, "Got activation event in non-idle state");
@@ -908,7 +911,7 @@ public class HostEmulationManager {
 
             //close the TapAgainDialog
             Intent intent = new Intent(TapAgainDialog.ACTION_CLOSE);
-            intent.setPackage(NFC_PACKAGE);
+            intent.setPackage(NfcInjector.getInstance().getNfcPackageName());
             mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
         }
     }

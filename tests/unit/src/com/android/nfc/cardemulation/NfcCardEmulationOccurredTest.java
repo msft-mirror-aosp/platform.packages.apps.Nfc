@@ -57,13 +57,13 @@ import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.flags.Flags;
 import com.android.nfc.NfcService;
 import com.android.nfc.cardemulation.RegisteredAidCache.AidResolveInfo;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcStatsLog;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -96,6 +96,7 @@ public final class NfcCardEmulationOccurredTest {
                 .mockStatic(NfcStatsLog.class)
                 .mockStatic(Flags.class)
                 .mockStatic(NfcService.class)
+                .mockStatic(NfcInjector.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         initMockContext(context);
@@ -116,6 +117,7 @@ public final class NfcCardEmulationOccurredTest {
         when(mockAidCache.getPreferredPaymentService()).thenReturn(new Pair<>(null, null));
         when(NfcService.getInstance()).thenReturn(mock(NfcService.class));
         when(Flags.statsdCeEventsFlag()).thenReturn(false);
+	when(NfcInjector.getInstance()).thenReturn(mock(NfcInjector.class));
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
                 () -> mHostEmulation = new HostEmulationManager(
@@ -179,7 +181,7 @@ public final class NfcCardEmulationOccurredTest {
     public void testOnHostEmulationActivated() {
         mHostEmulation.onHostEmulationActivated();
         int value = mHostEmulation.getState();
-        Assert.assertEquals(value, STATE_W4_SELECT);
+        assertEquals(STATE_W4_SELECT, value);
     }
 
     @Test
@@ -193,7 +195,7 @@ public final class NfcCardEmulationOccurredTest {
                 .thenReturn(new Pair<>(0, componentName));
         mHostEmulation.onPollingLoopDetected(pollingFrames);
         PollingFrame resultPollingFrame = mHostEmulation.mPendingPollingLoopFrames.get(0);
-        Assert.assertEquals(pollingFrame, resultPollingFrame);
+        assertEquals(pollingFrame, resultPollingFrame);
     }
 
     @Test
@@ -220,8 +222,8 @@ public final class NfcCardEmulationOccurredTest {
         mHostEmulation.onPollingLoopDetected(pollingLoopTypeOffFrames);
         mHostEmulation.onPollingLoopDetected(pollingLoopTypeOffFrames);
         IBinder mActiveService = mHostEmulation.getMessenger();
-        Assert.assertNotNull(mActiveService);
-        Assert.assertEquals(iBinder, mActiveService);
+        assertNotNull(mActiveService);
+        assertEquals(iBinder, mActiveService);
     }
 
     @Test
@@ -243,14 +245,14 @@ public final class NfcCardEmulationOccurredTest {
         };
         mHostEmulation.onHostEmulationData(aidBytes);
         state = mHostEmulation.getState();
-        assertEquals(state, STATE_W4_SERVICE);
+        assertEquals(STATE_W4_SERVICE, state);
     }
 
     @Test
     public void testOnOffHostAidSelected() {
         mHostEmulation.onOffHostAidSelected();
         int state = mHostEmulation.getState();
-        assertEquals(state, STATE_W4_SELECT);
+        assertEquals(STATE_W4_SELECT, state);
     }
 
     @Test

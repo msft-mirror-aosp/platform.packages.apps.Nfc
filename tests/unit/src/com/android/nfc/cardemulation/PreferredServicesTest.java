@@ -17,6 +17,7 @@
 package com.android.nfc.cardemulation;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -39,6 +40,7 @@ import android.content.ContentResolver;
 import android.content.ContextWrapper;
 import android.database.ContentObserver;
 import android.nfc.Constants;
+import android.os.Process;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.net.Uri;
@@ -58,7 +60,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -115,6 +116,7 @@ public class PreferredServicesTest {
             = new ComponentName(WALLET_HOLDER_PACKAGE_NAME,
             "com.android.test.walletroleholder.WalletRoleHolderApduService");
     private static final int USER_ID = 1;
+    private static final int USER_ID_2 = 2;
     private static final int FOREGROUND_UID = 7;
 
     @Before
@@ -227,6 +229,8 @@ public class PreferredServicesTest {
     @Test
     public void testOnWalletRoleHolderChangedWithNullPackageName() {
         services = new PreferredServices(mContext, mServicesCache, mAidCache, mObserver, mCallback);
+        services.mUserIdDefaultWalletHolder = 42;
+        services.mDefaultWalletHolderPaymentService = TEST_COMPONENT;
 
         services.onWalletRoleHolderChanged(null, USER_ID);
 
@@ -240,6 +244,7 @@ public class PreferredServicesTest {
         assertThat(candidates.get(0)).isNull();
         assertThat(candidates.get(1)).isNull();
         assertThat(services.mDefaultWalletHolderPaymentService).isNull();
+        assertThat(services.mUserIdDefaultWalletHolder).isEqualTo(USER_ID);
     }
 
     @Test
@@ -285,6 +290,32 @@ public class PreferredServicesTest {
         assertThat(services.mUserIdDefaultWalletHolder).isEqualTo(USER_ID);
         verify(mCallback).onPreferredPaymentServiceChanged(anyInt(), any());
         assertThat(services.mDefaultWalletHolderPaymentService).isNull();
+    }
+
+    @Test
+    public void testOnWalletRoleHolderChangedSamePackageDifferentUser() {
+        when(mServicesCache.getInstalledServices(eq(USER_ID))).thenReturn(getPaymentServices());
+        when(mServicesCache.getInstalledServices(eq(USER_ID_2))).thenReturn(getPaymentServices());
+
+        services = new PreferredServices(mContext, mServicesCache, mAidCache, mObserver, mCallback);
+
+        services.onWalletRoleHolderChanged(WALLET_HOLDER_PACKAGE_NAME, USER_ID);
+        services.onWalletRoleHolderChanged(WALLET_HOLDER_PACKAGE_NAME, USER_ID_2);
+
+        assertThat(services.mUserIdDefaultWalletHolder).isEqualTo(USER_ID_2);
+
+        verify(mCallback, times(3))
+                .onPreferredPaymentServiceChanged(userIdCaptor.capture(),
+                        candidateCaptor.capture());
+        List<Integer> userIds = userIdCaptor.getAllValues();
+        assertThat(userIds.get(0)).isEqualTo(USER_ID);
+        assertThat(userIds.get(1)).isEqualTo(USER_ID);
+        assertThat(userIds.get(2)).isEqualTo(USER_ID_2);
+        List<ComponentName> candidates = candidateCaptor.getAllValues();
+        assertThat(candidates.get(0)).isNull();
+        assertThat(candidates.get(1)).isEqualTo(TEST_COMPONENT);
+        assertThat(candidates.get(2)).isEqualTo(TEST_COMPONENT);
+        assertThat(services.mDefaultWalletHolderPaymentService).isEqualTo(TEST_COMPONENT);
     }
 
     @Test
@@ -388,8 +419,8 @@ public class PreferredServicesTest {
         services.onServicesUpdated();
 
         assertThat(services.mForegroundRequested).isNull();
-        assertThat(services.mForegroundUid).isEqualTo(-1);
-        assertThat(services.mForegroundCurrentUid).isEqualTo(-1);
+        assertThat(services.mForegroundUid).isEqualTo(Process.INVALID_UID);
+        assertThat(services.mForegroundCurrentUid).isEqualTo(Process.INVALID_UID);
         assertWalletRoleHolderUpdated();
     }
 
@@ -413,8 +444,8 @@ public class PreferredServicesTest {
         services.onServicesUpdated();
 
         assertThat(services.mForegroundRequested).isNull();
-        assertThat(services.mForegroundUid).isEqualTo(-1);
-        assertThat(services.mForegroundCurrentUid).isEqualTo(-1);
+        assertThat(services.mForegroundUid).isEqualTo(Process.INVALID_UID);
+        assertThat(services.mForegroundCurrentUid).isEqualTo(Process.INVALID_UID);
         assertWalletRoleHolderUpdated();
     }
 
@@ -479,7 +510,7 @@ public class PreferredServicesTest {
 
         assertThat(result).isTrue();
         assertThat(services.mForegroundRequested).isNull();
-        assertThat(services.mForegroundUid).isEqualTo(-1);
+        assertThat(services.mForegroundUid).isEqualTo(Process.INVALID_UID);
     }
 
     @Test
@@ -514,7 +545,7 @@ public class PreferredServicesTest {
 
         services.onUidToBackground(FOREGROUND_UID);
 
-        assertThat(services.mForegroundUid).isEqualTo(-1);
+        assertThat(services.mForegroundUid).isEqualTo(Process.INVALID_UID);
     }
 
     @Test
@@ -678,7 +709,7 @@ public class PreferredServicesTest {
                 Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
         mSettingsObserverCaptor.getValue().onChange(true, uri);
         verify(mObserver, atLeast(1)).isWalletRoleFeatureEnabled();
-        Assert.assertTrue(services.mPaymentDefaults.preferForeground);
+        assertTrue(services.mPaymentDefaults.preferForeground);
     }
 
     @Test
@@ -694,7 +725,7 @@ public class PreferredServicesTest {
                 Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
         mSettingsObserverCaptor.getValue().onChange(true, uri);
         verify(mObserver, atLeast(1)).isWalletRoleFeatureEnabled();
-        Assert.assertTrue(services.mPaymentDefaults.preferForeground);
+        assertTrue(services.mPaymentDefaults.preferForeground);
         verify(mCallback).onPreferredForegroundServiceChanged(anyInt(), any());
     }
 }

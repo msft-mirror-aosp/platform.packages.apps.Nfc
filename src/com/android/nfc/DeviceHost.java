@@ -53,6 +53,8 @@ public interface DeviceHost {
         public void onVendorSpecificEvent(int gid, int oid, byte[] payload);
 
         public void onObserveModeStateChanged(boolean enable);
+
+        public void onRfDiscoveryEvent(boolean isDiscoveryStarted);
     }
 
     public interface TagEndpoint {
@@ -138,6 +140,8 @@ public interface DeviceHost {
     public boolean checkFirmware();
 
     public boolean initialize();
+
+    public void setPartialInitMode(int mode);
 
     public boolean deinitialize();
 
@@ -229,7 +233,7 @@ public interface DeviceHost {
     boolean isMultiTag();
 
     void setIsoDepProtocolRoute(int route);
-    void setTechnologyABRoute(int route);
+    void setTechnologyABFRoute(int route);
     void clearRoutingEntry(int clearFlags);
 
     /**
