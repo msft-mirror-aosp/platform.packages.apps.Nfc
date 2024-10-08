@@ -31,6 +31,7 @@ import android.app.KeyguardManager;
 import android.app.KeyguardManager.KeyguardLockedStateListener;
 import android.app.PendingIntent;
 import android.app.VrManager;
+import android.app.admin.SecurityLog;
 import android.app.backup.BackupManager;
 import android.app.role.RoleManager;
 import android.content.BroadcastReceiver;
@@ -217,6 +218,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_UPDATE_ISODEP_PROTOCOL_ROUTE = 22;
     static final int MSG_UPDATE_TECHNOLOGY_ABF_ROUTE = 23;
     static final int MSG_WATCHDOG_PING = 24;
+    static final int MSG_SE_SELECTED_EVENT = 25;
 
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
 
@@ -750,6 +752,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send onRfDiscoveryStarted", e);
         }
+    }
+
+    @Override
+    public void onSeSelected() {
+        sendMessage(NfcService.MSG_SE_SELECTED_EVENT, null);
     }
 
     /**
@@ -2053,6 +2060,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                     .setEnabled(true)
                                     .build())
                             .build());
+            if (android.nfc.Flags.nfcStateChangeSecurityLogEventEnabled()) {
+                SecurityLog.writeEvent(SecurityLog.TAG_NFC_ENABLED);
+            }
             enableNfc();
             return true;
         }
@@ -2084,6 +2094,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                     .setEnabled(false)
                                     .build())
                             .build());
+            if (android.nfc.Flags.nfcStateChangeSecurityLogEventEnabled()) {
+                SecurityLog.writeEvent(SecurityLog.TAG_NFC_DISABLED);
+            }
             new EnableDisableTask().execute(TASK_DISABLE);
 
             return true;
@@ -2123,6 +2136,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return false;
             }
             int callingUid = Binder.getCallingUid();
+            UserHandle callingUser = Binder.getCallingUserHandle();
             int triggerSource =
                     NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
             if (!isPrivileged(callingUid)) {
@@ -2131,11 +2145,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     Log.e(TAG, "no package name associated with non-privileged calling UID");
                 }
                 if (mCardEmulationManager.isPreferredServicePackageNameForUser(packageName,
-                        UserHandle.getUserHandleForUid(callingUid).getIdentifier())) {
+                        callingUser.getIdentifier())) {
                     if (android.permission.flags.Flags.walletRoleEnabled()) {
-                        UserHandle user = Binder.getCallingUserHandle();
                         if (packageName != null) {
-                            triggerSource = packageName.equals(getWalletRoleHolder(user))
+                            triggerSource = packageName.equals(getWalletRoleHolder(callingUser))
                                 ? NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__WALLET_ROLE_HOLDER
                                 : NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
                         }
@@ -4441,6 +4454,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     sendOffHostTransactionEvent(data[0], data[1], data[2]);
                     break;
 
+                case MSG_SE_SELECTED_EVENT:
+                    if (mCardEmulationManager != null) {
+                        mCardEmulationManager.onOffHostAidSelected();
+                    }
+                    break;
                 case MSG_PREFERRED_PAYMENT_CHANGED:
                     Intent preferredPaymentChangedIntent =
                             new Intent(NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED);
