@@ -42,6 +42,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.List;
 
@@ -435,6 +436,27 @@ public class NativeNfcManager implements DeviceHost {
 
     private void notifyHwErrorReported() {
         mListener.onHwErrorReported();
+    }
+
+    private void notifyEeAidSelected(byte[] aid, String eventSrc) {
+        Log.i(TAG, "AID: " + HexFormat.of().formatHex(aid) + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
+    private void notifyEeProtocolSelected(int protocol, String eventSrc) {
+        Log.i(TAG, "Protocol: " + protocol + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
+    private void notifyEeTechSelected(int tech, String eventSrc) {
+        Log.i(TAG, "Tech: " + tech + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
     }
 
     public void notifyPollingLoopFrame(int data_len, byte[] p_data) {
