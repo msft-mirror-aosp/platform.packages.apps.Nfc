@@ -958,25 +958,29 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 
         @Override
         public void overwriteRoutingTable(int userHandle, String aids,
-            String protocol, String technology) {
-            Log.d(TAG, "overwriteRoutingTable. userHandle " + userHandle
-                + ", emptyAid " + aids + ", protocol " + protocol
-                + ", technology " + technology);
+            String protocol, String technology, String sc) {
+            Log.d(TAG, "overwriteRoutingTable() - userHandle: " + userHandle
+                + ", emptyAid: " + aids + ", protocol: " + protocol
+                + ", technology: " + technology + ", systemCode: " + sc);
 
             NfcPermissions.enforceAdminPermissions(mContext);
 
             int aidRoute = mRoutingOptionManager.getRouteForSecureElement(aids);
             int protocolRoute = mRoutingOptionManager.getRouteForSecureElement(protocol);
             int technologyRoute = mRoutingOptionManager.getRouteForSecureElement(technology);
+            int scRoute = mRoutingOptionManager.getRouteForSecureElement(sc);
 
             if (DBG) {
-                Log.d(TAG, "aidRoute " + aidRoute + ", protocolRoute "
-                    + protocolRoute + ", technologyRoute " + technologyRoute);
+                Log.d(TAG, "overwriteRoutingTable() - aidRoute: " + Integer.toHexString(aidRoute)
+                        + ", protocolRoute: " + Integer.toHexString(protocolRoute)
+                        + ", technologyRoute: " + Integer.toHexString(technologyRoute)
+                        + ", scRoute: " + Integer.toHexString(scRoute));
             }
             if (aids != null) {
                 mRoutingOptionManager.overrideDefaultRoute(aidRoute);
                 mRoutingOptionManager.overrideDefaultIsoDepRoute(protocolRoute);
                 mRoutingOptionManager.overrideDefaultOffHostRoute(technologyRoute);
+                mRoutingOptionManager.overrideDefaultScRoute(scRoute);
                 mRoutingOptionManager.overwriteRoutingTable();
             }
             mAidCache.onRoutingOverridedOrRecovered();
@@ -1172,31 +1176,31 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     @Override
-    public void onPreferredPaymentServiceChanged(int userId, ComponentName service) {
+    public void onPreferredPaymentServiceChanged(ComponentNameAndUser service) {
         Log.i(TAG, "onPreferredPaymentServiceChanged");
         ComponentName oldPreferredService = mAidCache.getPreferredService().second;
-        mAidCache.onPreferredPaymentServiceChanged(userId, service);
-        mHostEmulationManager.onPreferredPaymentServiceChanged(userId, service);
+        mAidCache.onPreferredPaymentServiceChanged(service);
+        mHostEmulationManager.onPreferredPaymentServiceChanged(service);
         ComponentName newPreferredService = mAidCache.getPreferredService().second;
 
         NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_CHANGED);
         if (!Objects.equals(oldPreferredService, newPreferredService)) {
-            updateForShouldDefaultToObserveMode(userId);
+            updateForShouldDefaultToObserveMode(service.getUserId());
         }
     }
 
     @Override
-    public void onPreferredForegroundServiceChanged(int userId, ComponentName service) {
+    public void onPreferredForegroundServiceChanged(ComponentNameAndUser service) {
         Log.i(TAG, "onPreferredForegroundServiceChanged");
         ComponentName oldPreferredService = mAidCache.getPreferredService().second;
-        mHostEmulationManager.onPreferredForegroundServiceChanged(userId, service);
+        mHostEmulationManager.onPreferredForegroundServiceChanged(service);
         ComponentName newPreferredService = mAidCache.getPreferredService().second;
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
         if (!Objects.equals(oldPreferredService, newPreferredService)) {
-            updateForShouldDefaultToObserveMode(userId);
+            updateForShouldDefaultToObserveMode(service.getUserId());
         }
     }
 
