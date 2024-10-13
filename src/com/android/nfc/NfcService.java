@@ -218,6 +218,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_UPDATE_ISODEP_PROTOCOL_ROUTE = 22;
     static final int MSG_UPDATE_TECHNOLOGY_ABF_ROUTE = 23;
     static final int MSG_WATCHDOG_PING = 24;
+    static final int MSG_SE_SELECTED_EVENT = 25;
+    static final int MSG_UPDATE_SYSTEM_CODE_ROUTE = 26;
 
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
 
@@ -753,6 +755,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    @Override
+    public void onSeSelected() {
+        sendMessage(NfcService.MSG_SE_SELECTED_EVENT, null);
+    }
+
     /**
      * Enable or Disable PowerSaving Mode based on flag
      */
@@ -1063,8 +1070,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsHceFCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF);
         if (mIsHceCapable) {
-            mCardEmulationManager =
-                new CardEmulationManager(mContext, mNfcInjector, mDeviceConfigFacade);
+            mCardEmulationManager = mNfcInjector.getCardEmulationManager();
         }
         mForegroundUtils = mNfcInjector.getForegroundUtils();
         mIsSecureNfcCapable = mDeviceConfigFacade.isSecureNfcCapable();
@@ -2009,12 +2015,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     final class NfcAdapterService extends INfcAdapter.Stub {
-        private boolean isPrivileged(int callingUid) {
-            // Check for root uid to help invoking privileged APIs from rooted shell only.
-            return callingUid == Process.SYSTEM_UID
-                    || callingUid == Process.NFC_UID
-                    || callingUid == Process.ROOT_UID;
-        }
 
         @Override
         public boolean enable(String pkg) throws RemoteException {
@@ -2133,7 +2133,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             UserHandle callingUser = Binder.getCallingUserHandle();
             int triggerSource =
                     NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
-            if (!isPrivileged(callingUid)) {
+            if (!NfcInjector.isPrivileged(callingUid)) {
                 NfcPermissions.enforceUserPermissions(mContext);
                 if (packageName == null) {
                     Log.e(TAG, "no package name associated with non-privileged calling UID");
@@ -2407,7 +2407,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throws RemoteException {
             NfcPermissions.enforceUserPermissions(mContext);
             int callingUid = Binder.getCallingUid();
-            boolean privilegedCaller = isPrivileged(callingUid)
+            boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
                     || NfcPermissions.checkAdminPermissions(mContext);
             // Allow non-foreground callers with system uid or systemui
             privilegedCaller |= packageName.equals(SYSTEM_UI);
@@ -2522,7 +2522,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 throws RemoteException {
             int callingUid = Binder.getCallingUid();
             int callingPid = Binder.getCallingPid();
-            boolean privilegedCaller = isPrivileged(callingUid)
+            boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
                     || NfcPermissions.checkAdminPermissions(mContext);
             // Allow non-foreground callers with system uid or systemui
             privilegedCaller |= packageName.equals(SYSTEM_UI);
@@ -4116,6 +4116,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         sendMessage(MSG_UPDATE_TECHNOLOGY_ABF_ROUTE, route);
     }
 
+    public void setSystemCodeRoute(int route) {
+        sendMessage(MSG_UPDATE_SYSTEM_CODE_ROUTE, route);
+    }
+
     void sendMessage(int what, Object obj) {
         Message msg = mHandler.obtainMessage();
         msg.what = what;
@@ -4448,6 +4452,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     sendOffHostTransactionEvent(data[0], data[1], data[2]);
                     break;
 
+                case MSG_SE_SELECTED_EVENT:
+                    if (mCardEmulationManager != null) {
+                        mCardEmulationManager.onOffHostAidSelected();
+                    }
+                    break;
                 case MSG_PREFERRED_PAYMENT_CHANGED:
                     Intent preferredPaymentChangedIntent =
                             new Intent(NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED);
@@ -4487,6 +4496,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 case MSG_WATCHDOG_PING:
                     NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
                     watchdog.notifyHasReturned();
+                    break;
+                case MSG_UPDATE_SYSTEM_CODE_ROUTE:
+                    if (DBG) Log.d(TAG, "Update system code");
+                    mDeviceHost.setSystemCodeRoute((Integer) msg.obj);
                     break;
                 default:
                     Log.e(TAG, "Unknown message received");

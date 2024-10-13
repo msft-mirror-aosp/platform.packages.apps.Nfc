@@ -55,6 +55,8 @@ public interface DeviceHost {
         public void onObserveModeStateChanged(boolean enable);
 
         public void onRfDiscoveryEvent(boolean isDiscoveryStarted);
+
+        public void onSeSelected();
     }
 
     public interface TagEndpoint {
@@ -234,6 +236,7 @@ public interface DeviceHost {
 
     void setIsoDepProtocolRoute(int route);
     void setTechnologyABFRoute(int route);
+    void setSystemCodeRoute(int route);
     void clearRoutingEntry(int clearFlags);
 
     /**
