@@ -104,6 +104,9 @@ jmethodID gCachedNfcManagerNotifyVendorSpecificEvent;
 jmethodID gCachedNfcManagerNotifyCommandTimeout;
 jmethodID gCachedNfcManagerNotifyObserveModeChanged;
 jmethodID gCachedNfcManagerNotifyRfDiscoveryEvent;
+jmethodID gCachedNfcManagerNotifyEeAidSelected;
+jmethodID gCachedNfcManagerNotifyEeProtocolSelected;
+jmethodID gCachedNfcManagerNotifyEeTechSelected;
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
@@ -443,6 +446,14 @@ static void nfaConnectionCallback(uint8_t connEvent,
         /*If its multiprotocol tag, deactivate tag with current selected
         protocol to sleep . Select tag with next supported protocol after
         deactivation event is received*/
+        if (((tNFA_INTF_TYPE)eventData->activated.activate_ntf.intf_param
+                 .type == NFA_INTERFACE_FRAME)) {
+          uint8_t RW_TAG_SLP_REQ[] = {0x50, 0x00};
+          SyncEvent waitSome;
+          SyncEventGuard g(waitSome);
+          NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
+          waitSome.wait(4);
+        }
         NFA_Deactivate(true);
       }
 
@@ -705,6 +716,15 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyRfDiscoveryEvent =
       e->GetMethodID(cls.get(), "notifyRFDiscoveryEvent", "(Z)V");
+
+  gCachedNfcManagerNotifyEeAidSelected = e->GetMethodID(
+      cls.get(), "notifyEeAidSelected", "([BLjava/lang/String;)V");
+
+  gCachedNfcManagerNotifyEeProtocolSelected = e->GetMethodID(
+      cls.get(), "notifyEeProtocolSelected", "(ILjava/lang/String;)V");
+
+  gCachedNfcManagerNotifyEeTechSelected = e->GetMethodID(
+      cls.get(), "notifyEeTechSelected", "(ILjava/lang/String;)V");
 
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
@@ -2204,14 +2224,20 @@ static void nfcManager_clearRoutingEntry(JNIEnv* e, jobject o,
 
 static void nfcManager_updateIsoDepProtocolRoute(JNIEnv* e, jobject o,
                                                  jint route) {
-  LOG(DEBUG) << StringPrintf("%s: clearFlags=0x%X", __func__, route);
+  LOG(DEBUG) << StringPrintf("%s: route=0x%X", __func__, route);
   RoutingManager::getInstance().updateIsoDepProtocolRoute(route);
 }
 
 static void nfcManager_updateTechnologyABFRoute(JNIEnv* e, jobject o,
                                                 jint route) {
-  LOG(DEBUG) << StringPrintf("%s: clearFlags=0x%X", __func__, route);
+  LOG(DEBUG) << StringPrintf("%s: route=0x%X", __func__, route);
   RoutingManager::getInstance().updateTechnologyABFRoute(route);
+}
+
+static void nfcManager_updateSystemCodeRoute(JNIEnv* e, jobject o,
+                                                jint route) {
+  LOG(DEBUG) << StringPrintf("%s: route=0x%X", __func__, route);
+  RoutingManager::getInstance().updateSystemCodeRoute(route);
 }
 
 /*******************************************************************************
@@ -2457,6 +2483,9 @@ static JNINativeMethod gMethods[] = {
 
     {"setTechnologyABFRoute", "(I)V",
      (void*)nfcManager_updateTechnologyABFRoute},
+
+    {"setSystemCodeRoute", "(I)V",
+     (void*)nfcManager_updateSystemCodeRoute},
 
     {"setDiscoveryTech", "(II)V", (void*)nfcManager_setDiscoveryTech},
 

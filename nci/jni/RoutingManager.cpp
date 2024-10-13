@@ -54,7 +54,10 @@ const JNINativeMethod RoutingManager::sMethods[] = {
      (void*)RoutingManager::com_android_nfc_cardemulation_doGetAidMatchingMode},
     {"doGetDefaultIsoDepRouteDestination", "()I",
      (void*)RoutingManager::
-         com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination}};
+         com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination},
+    {"doGetDefaultScRouteDestination", "()I",
+     (void*)RoutingManager::
+         com_android_nfc_cardemulation_doGetDefaultScRouteDestination}};
 
 static const int MAX_NUM_EE = 5;
 // SCBR from host works only when App is in foreground
@@ -466,6 +469,93 @@ void RoutingManager::notifyActivated(uint8_t technology) {
   }
 }
 
+bool RoutingManager::getNameOfEe(tNFA_HANDLE ee_handle, std::string& eeName) {
+  if (mOffHostRouteEse.size() == 0) {
+    return false;
+  }
+  ee_handle &= ~NFA_HANDLE_GROUP_EE;
+
+  for (uint8_t i = 0; i < mOffHostRouteEse.size(); i++) {
+    if (ee_handle == mOffHostRouteEse[i]) {
+      eeName = "eSE" + std::to_string(i + 1);
+      return true;
+    }
+  }
+  for (uint8_t i = 0; i < mOffHostRouteUicc.size(); i++) {
+    if (ee_handle == mOffHostRouteUicc[i]) {
+      eeName = "SIM" + std::to_string(i + 1);
+      return true;
+    }
+  }
+
+  LOG(WARNING) << "Incorrect EE Id";
+  return false;
+}
+
+void RoutingManager::notifyEeAidSelected(tNFC_AID& nfcaid,
+                                         tNFA_HANDLE ee_handle) {
+  std::vector<uint8_t> aid(nfcaid.aid, nfcaid.aid + nfcaid.len_aid);
+  if (aid.empty()) {
+    return;
+  }
+
+  JNIEnv* e = NULL;
+  ScopedAttach attach(mNativeData->vm, &e);
+  CHECK(e);
+
+  ScopedLocalRef<jobject> aidJavaArray(e, e->NewByteArray(aid.size()));
+  CHECK(aidJavaArray.get());
+  e->SetByteArrayRegion((jbyteArray)aidJavaArray.get(), 0, aid.size(),
+                        (jbyte*)&aid[0]);
+  CHECK(!e->ExceptionCheck());
+
+  std::string evtSrc;
+  if (!getNameOfEe(ee_handle, evtSrc)) {
+    return;
+  }
+
+  ScopedLocalRef<jobject> srcJavaString(e, e->NewStringUTF(evtSrc.c_str()));
+  CHECK(srcJavaString.get());
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyEeAidSelected,
+                    aidJavaArray.get(), srcJavaString.get());
+}
+
+void RoutingManager::notifyEeProtocolSelected(uint8_t protocol,
+                                              tNFA_HANDLE ee_handle) {
+  JNIEnv* e = NULL;
+  ScopedAttach attach(mNativeData->vm, &e);
+  CHECK(e);
+
+  std::string evtSrc;
+  if (!getNameOfEe(ee_handle, evtSrc)) {
+    return;
+  }
+
+  ScopedLocalRef<jobject> srcJavaString(e, e->NewStringUTF(evtSrc.c_str()));
+  CHECK(srcJavaString.get());
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyEeProtocolSelected,
+                    protocol, srcJavaString.get());
+}
+
+void RoutingManager::notifyEeTechSelected(uint8_t tech, tNFA_HANDLE ee_handle) {
+  JNIEnv* e = NULL;
+  ScopedAttach attach(mNativeData->vm, &e);
+  CHECK(e);
+
+  std::string evtSrc;
+  if (!getNameOfEe(ee_handle, evtSrc)) {
+    return;
+  }
+
+  ScopedLocalRef<jobject> srcJavaString(e, e->NewStringUTF(evtSrc.c_str()));
+  CHECK(srcJavaString.get());
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyEeTechSelected, tech,
+                    srcJavaString.get());
+}
+
 void RoutingManager::notifyDeactivated(uint8_t technology) {
   mRxDataBuffer.clear();
   JNIEnv* e = NULL;
@@ -619,6 +709,24 @@ void RoutingManager::updateIsoDepProtocolRoute(int route) {
 
   mDefaultIsoDepRoute = route;
   updateDefaultProtocolRoute();
+}
+
+/*******************************************************************************
+**
+** Function:        updateSystemCodeRoute
+**
+** Description:     Updates the route for System Code
+**
+** Returns:         None
+**
+*******************************************************************************/
+void RoutingManager::updateSystemCodeRoute(int route) {
+  static const char fn[] = "RoutingManager::updateSystemCodeRoute";
+  LOG(DEBUG) << StringPrintf("%s; New default SC route: 0x%x", fn,
+                             route);
+  mEeInfoChanged = true;
+  mDefaultSysCodeRoute = route;
+  updateDefaultRoute();
 }
 
 void RoutingManager::updateDefaultProtocolRoute() {
@@ -912,26 +1020,32 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
 
     case NFA_EE_ACTION_EVT: {
       tNFA_EE_ACTION& action = eventData->action;
-      if (action.trigger == NFC_EE_TRIG_SELECT)
+      if (action.trigger == NFC_EE_TRIG_SELECT) {
+        tNFC_AID& aid = action.param.aid;
         LOG(DEBUG) << StringPrintf(
             "%s: NFA_EE_ACTION_EVT; h=0x%X; trigger=select (0x%X)", fn,
             action.ee_handle, action.trigger);
-      else if (action.trigger == NFC_EE_TRIG_APP_INIT) {
+        routingManager.notifyEeAidSelected(aid, action.ee_handle);
+      } else if (action.trigger == NFC_EE_TRIG_APP_INIT) {
         tNFC_APP_INIT& app_init = action.param.app_init;
         LOG(DEBUG) << StringPrintf(
             "%s: NFA_EE_ACTION_EVT; h=0x%X; trigger=app-init "
             "(0x%X); aid len=%u; data len=%u",
             fn, action.ee_handle, action.trigger, app_init.len_aid,
             app_init.len_data);
-      } else if (action.trigger == NFC_EE_TRIG_RF_PROTOCOL)
+      } else if (action.trigger == NFC_EE_TRIG_RF_PROTOCOL) {
         LOG(DEBUG) << StringPrintf(
             "%s: NFA_EE_ACTION_EVT; h=0x%X; trigger=rf protocol (0x%X)", fn,
             action.ee_handle, action.trigger);
-      else if (action.trigger == NFC_EE_TRIG_RF_TECHNOLOGY)
+        routingManager.notifyEeProtocolSelected(action.param.protocol,
+                                                  action.ee_handle);
+      } else if (action.trigger == NFC_EE_TRIG_RF_TECHNOLOGY) {
         LOG(DEBUG) << StringPrintf(
             "%s: NFA_EE_ACTION_EVT; h=0x%X; trigger=rf tech (0x%X)", fn,
             action.ee_handle, action.trigger);
-      else
+        routingManager.notifyEeTechSelected(action.param.technology,
+                                              action.ee_handle);
+      } else
         LOG(DEBUG) << StringPrintf(
             "%s: NFA_EE_ACTION_EVT; h=0x%X; unknown trigger (0x%X)", fn,
             action.ee_handle, action.trigger);
@@ -1324,4 +1438,18 @@ int RoutingManager::com_android_nfc_cardemulation_doGetAidMatchingMode(
 int RoutingManager::
     com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination(JNIEnv*) {
   return getInstance().mDefaultIsoDepRoute;
+}
+
+/*******************************************************************************
+**
+** Function:        com_android_nfc_cardemulation_doGetDefaultScRouteDestination
+**
+** Description:     Retrieves the default NFCEE route
+**
+** Returns:         default NFCEE route
+**
+*******************************************************************************/
+int RoutingManager::com_android_nfc_cardemulation_doGetDefaultScRouteDestination(
+    JNIEnv*) {
+  return getInstance().mDefaultSysCodeRoute;
 }
