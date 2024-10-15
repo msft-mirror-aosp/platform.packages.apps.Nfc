@@ -283,7 +283,6 @@ static void handleRfDiscoveryEvent(tNFC_RESULT_DEVT* discoveredDevice) {
 static void nfaConnectionCallback(uint8_t connEvent,
                                   tNFA_CONN_EVT_DATA* eventData) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
-  LOG(DEBUG) << StringPrintf("%s: event= %u", __func__, connEvent);
 
   switch (connEvent) {
     case NFA_LISTEN_ENABLED_EVT:  // whether listening successfully started
