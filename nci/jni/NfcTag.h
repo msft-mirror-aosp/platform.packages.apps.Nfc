@@ -47,6 +47,7 @@ class NfcTag {
                                              // RF_INTF_ACTIVATED NTF
   int mNumTechList;  // current number of NFC technologies in the list
   int mNumRfDiscId;
+  bool mIsReselecting;
 
   /*******************************************************************************
   **
@@ -385,6 +386,28 @@ class NfcTag {
   **
   *******************************************************************************/
   void setNumDiscNtf(int numDiscNtfValue);
+
+  /*******************************************************************************
+  **
+  ** Function:        isReselecting
+  **
+  ** Description:     used to check if a reSelect() procedure is ongoing
+  **
+  ** Returns:         value of mIsReselecting variable
+  **
+  *******************************************************************************/
+  bool isReselecting();
+
+  /*******************************************************************************
+  **
+  ** Function:        setReselect
+  **
+  ** Description:     Called by JNI to indicate status of reSelect() procedure
+  **
+  ** Returns:
+  **
+  *******************************************************************************/
+  void setReselect(bool isReselecting);
 
   /*******************************************************************************
   **

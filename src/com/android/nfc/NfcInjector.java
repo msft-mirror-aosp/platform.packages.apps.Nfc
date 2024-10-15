@@ -28,6 +28,7 @@ import android.nfc.NfcServiceManager;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -39,6 +40,7 @@ import android.se.omapi.SeServiceManager;
 import android.util.AtomicFile;
 import android.util.Log;
 
+import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.flags.FeatureFlags;
@@ -75,6 +77,7 @@ public class NfcInjector {
     private final NfcServiceManager.ServiceRegisterer mNfcManagerRegisterer;
     private final NfcWatchdog mNfcWatchdog;
     private static NfcInjector sInstance;
+    private CardEmulationManager mCardEmulationManager;
 
     public static NfcInjector getInstance() {
         if (sInstance == null) throw new IllegalStateException("Nfc injector instance null");
@@ -116,6 +119,13 @@ public class NfcInjector {
                 new AtomicFile(new File(NFC_DATA_DIR, EVENT_LOG_FILE_NAME)));
         mNfcWatchdog = new NfcWatchdog(mContext);
         sInstance = this;
+    }
+
+    public CardEmulationManager getCardEmulationManager() {
+        if (mCardEmulationManager == null) {
+            mCardEmulationManager = new CardEmulationManager(mContext, sInstance, mDeviceConfigFacade);
+        }
+        return mCardEmulationManager;
     }
 
     public Context getContext() {
@@ -253,6 +263,11 @@ public class NfcInjector {
                 mContext.getContentResolver(), Constants.SETTINGS_SATELLITE_MODE_ENABLED, 0) == 1;
     }
 
+    public static boolean isPrivileged(int callingUid) {
+        // Check for root uid to help invoking privileged APIs from rooted shell only.
+        return callingUid == Process.SYSTEM_UID || callingUid == Process.NFC_UID
+                || callingUid == Process.ROOT_UID;
+    }
 
     /**
      * Get the current time of the clock in milliseconds.
