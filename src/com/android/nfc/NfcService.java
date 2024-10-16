@@ -1058,7 +1058,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsWlcCapable = android.nfc.Flags.enableNfcCharging() &&
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_CHARGING);
         if (mIsWlcCapable) {
-            mNfcCharging = new NfcCharging(mContext, mDeviceHost);
+            mNfcCharging = mNfcInjector.getNfcCharging(mDeviceHost);
             mIsWlcEnabled = mPrefs.getBoolean(PREF_NFC_CHARGING_ON, NFC_CHARGING_ON_DEFAULT);
             // Register ThermalStatusChangedListener
             addThermalStatusListener();
