@@ -66,6 +66,7 @@ import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
 import android.nfc.NfcServiceManager;
 import android.nfc.Tag;
+import android.nfc.WlcListenerDeviceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
 import android.nfc.tech.Ndef;
@@ -95,6 +96,8 @@ import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.flags.FeatureFlags;
 import com.android.nfc.flags.Flags;
+import com.android.nfc.wlc.NfcCharging;
+
 import android.nfc.INfcVendorNciCallback;
 
 
@@ -116,8 +119,11 @@ import org.mockito.stubbing.Answer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import android.nfc.INfcWlcStateListener;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcServiceTest {
@@ -154,12 +160,14 @@ public final class NfcServiceTest {
     @Mock DisplayManager mDisplayManager;
     @Mock CardEmulationManager mCardEmulationManager;
     @Mock StatsdUtils mStatsdUtils;
+    @Mock NfcCharging mNfcCharging;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
     @Captor ArgumentCaptor<Integer> mSoundCaptor;
     @Captor ArgumentCaptor<Intent> mIntentArgumentCaptor;
     @Captor ArgumentCaptor<ContentObserver> mContentObserverArgumentCaptor;
+    @Captor ArgumentCaptor<BroadcastReceiver> mBroadcastReceiverArgumentCaptor;
     TestLooper mLooper;
     NfcService mNfcService;
     private MockitoSession mStaticMockSession;
@@ -193,6 +201,7 @@ public final class NfcServiceTest {
         when(mNfcInjector.getFeatureFlags()).thenReturn(mFeatureFlags);
         when(mNfcInjector.isSatelliteModeSensitive()).thenReturn(true);
         when(mNfcInjector.getCardEmulationManager()).thenReturn(mCardEmulationManager);
+        when(mNfcInjector.getNfcCharging(mDeviceHost)).thenReturn(mNfcCharging);
         when(mApplication.getSharedPreferences(anyString(), anyInt())).thenReturn(mPreferences);
         when(mApplication.getSystemService(PowerManager.class)).thenReturn(mPowerManager);
         when(mApplication.getSystemService(UserManager.class)).thenReturn(mUserManager);
@@ -777,6 +786,8 @@ public final class NfcServiceTest {
         when(mApplication.createCredentialProtectedStorageContext()).thenReturn(ceContext);
         when(ceContext.getSharedPreferences(anyString(), anyInt())).thenReturn(mPreferences);
         when(mApplication.moveSharedPreferencesFrom(ceContext, NfcService.PREF)).thenReturn(true);
+        when(mApplication.moveSharedPreferencesFrom(ceContext, NfcService.PREF_TAG_APP_LIST))
+            .thenReturn(true);
         mGlobalReceiver.getValue().onReceive(mApplication, new Intent(Intent.ACTION_USER_UNLOCKED));
         verify(mApplication).moveSharedPreferencesFrom(ceContext, NfcService.PREF);
         verify(mApplication).getSharedPreferences(eq(NfcService.PREF), anyInt());
@@ -1308,5 +1319,61 @@ public final class NfcServiceTest {
         verify(binder, times(2)).unlinkToDeath(any(), anyInt());
         verify(mDeviceHost).resetDiscoveryTech();
         Assert.assertNull(mNfcService.mDiscoveryTechParams);
+    }
+
+    @Test
+    public void testOnWlcData() throws RemoteException {
+        mNfcService.mIsWlcCapable = true;
+        INfcWlcStateListener listener = mock(INfcWlcStateListener.class);
+        mNfcService.mNfcAdapter.registerWlcStateListener(listener);
+        Map<String, Integer> wlcDeviceInfo = new HashMap<>();
+        wlcDeviceInfo.put(NfcCharging.VendorId, 1);
+        wlcDeviceInfo.put(NfcCharging.TemperatureListener, 1);
+        wlcDeviceInfo.put(NfcCharging.BatteryLevel, 1);
+        wlcDeviceInfo.put(NfcCharging.State, 1);
+        mNfcService.onWlcData(wlcDeviceInfo);
+        ArgumentCaptor<WlcListenerDeviceInfo> argumentCaptor = ArgumentCaptor
+                .forClass(WlcListenerDeviceInfo.class);
+        verify(listener).onWlcStateChanged(argumentCaptor.capture());
+        WlcListenerDeviceInfo deviceInfo = argumentCaptor.getValue();
+        Assert.assertNotNull(deviceInfo);
+        assertThat(deviceInfo.getBatteryLevel()).isEqualTo(1);
+    }
+
+    @Test
+    public void testOnWlcStopped() {
+        mNfcService.onWlcStopped(0x0);
+        verify(mNfcCharging).onWlcStopped(anyInt());
+    }
+
+    @Test
+    public void testRenewTagAppPrefList() throws PackageManager.NameNotFoundException {
+        BroadcastReceiver receiver = mGlobalReceiver.getValue();
+        Assert.assertNotNull(receiver);
+        Intent intent = new Intent();
+        intent.setAction(Intent.ACTION_USER_SWITCHED);
+        UserHandle uh = mock(UserHandle.class);
+        when(uh.getIdentifier()).thenReturn(5);
+        List<UserHandle> luh = new ArrayList<>();
+        luh.add(uh);
+        when(mUserManager.getEnabledProfiles()).thenReturn(luh);
+        String jsonString = "{}";
+        when(mPreferences.getString(anyString(), anyString())).thenReturn(jsonString);
+        mNfcService.mTagAppDefaultBlockList.add("com.android.test");
+        PackageInfo info = mock(PackageInfo.class);
+        when(mPackageManager.getPackageInfo(anyString(), anyInt())).thenReturn(info);
+        when(mPreferencesEditor.remove(any())).thenReturn(mPreferencesEditor);
+        when(mPreferencesEditor.putString(anyString(), anyString())).thenReturn(mPreferencesEditor);
+        receiver.onReceive(mApplication, intent);
+        verify(mUserManager, atLeastOnce()).getEnabledProfiles();
+        verify(mPreferencesEditor).putString(anyString(), anyString());
+    }
+
+    @Test
+    public void testSaveNfcPollTech() {
+        mNfcService.saveNfcPollTech(NfcService.DEFAULT_POLL_TECH);
+        verify(mPreferencesEditor).putInt(anyString(), anyInt());
+        verify(mPreferencesEditor).apply();
+        verify(mBackupManager).dataChanged();
     }
 }
