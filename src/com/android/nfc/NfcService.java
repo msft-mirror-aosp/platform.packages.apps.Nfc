@@ -1058,7 +1058,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mIsWlcCapable = android.nfc.Flags.enableNfcCharging() &&
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_CHARGING);
         if (mIsWlcCapable) {
-            mNfcCharging = new NfcCharging(mContext, mDeviceHost);
+            mNfcCharging = mNfcInjector.getNfcCharging(mDeviceHost);
             mIsWlcEnabled = mPrefs.getBoolean(PREF_NFC_CHARGING_ON, NFC_CHARGING_ON_DEFAULT);
             // Register ThermalStatusChangedListener
             addThermalStatusListener();
@@ -4953,11 +4953,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         Log.e(TAG, "Failed to migrate NFC Shared preferences to DE directory");
                         return;
                     }
+                    if (!mContext.moveSharedPreferencesFrom(ceContext, PREF_TAG_APP_LIST)) {
+                        Log.e(TAG, "Failed to migrate NFC Shared preferences for tag app "
+                                + "list to DE directory");
+                        return;
+                    }
                     if (mIsHceCapable) {
                         mCardEmulationManager.migrateSettingsFilesFromCe(ceContext);
                     }
                     // If the move is completed, refresh our reference to the shared preferences.
                     mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+                    initTagAppPrefList();
                     mPrefsEditor = mPrefs.edit();
                     mPrefsEditor.putBoolean(PREF_MIGRATE_TO_DE_COMPLETE, true);
                     mPrefsEditor.apply();
