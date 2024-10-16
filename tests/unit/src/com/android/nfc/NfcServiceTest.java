@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import android.app.VrManager;
 import android.hardware.display.DisplayManager;
 import android.nfc.INfcUnlockHandler;
 
@@ -161,6 +162,7 @@ public final class NfcServiceTest {
     @Mock CardEmulationManager mCardEmulationManager;
     @Mock StatsdUtils mStatsdUtils;
     @Mock NfcCharging mNfcCharging;
+    @Mock VrManager mVrManager;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
@@ -188,6 +190,10 @@ public final class NfcServiceTest {
 
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION))
                 .thenReturn(true);
+        when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_WATCH))
+                .thenReturn(false);
+        when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_VR_MODE_HIGH_PERFORMANCE))
+                .thenReturn(true);
         when(mNfcInjector.getMainLooper()).thenReturn(mLooper.getLooper());
         when(mNfcInjector.getNfcEventLog()).thenReturn(mNfcEventLog);
         when(mNfcInjector.makeDeviceHost(any())).thenReturn(mDeviceHost);
@@ -214,6 +220,7 @@ public final class NfcServiceTest {
         when(mApplication.createContextAsUser(any(), anyInt())).thenReturn(mApplication);
         when(mApplication.getContentResolver()).thenReturn(mContentResolver);
         when(mApplication.getSystemService(DisplayManager.class)).thenReturn(mDisplayManager);
+        when(mApplication.getSystemService(VrManager.class)).thenReturn(mVrManager);
         when(mUserManager.getUserRestrictions()).thenReturn(mUserRestrictions);
         when(mResources.getStringArray(R.array.nfc_allow_list)).thenReturn(new String[0]);
         when(mResources.getBoolean(R.bool.tag_intent_app_pref_supported)).thenReturn(true);
@@ -1375,5 +1382,72 @@ public final class NfcServiceTest {
         verify(mPreferencesEditor).putInt(anyString(), anyInt());
         verify(mPreferencesEditor).apply();
         verify(mBackupManager).dataChanged();
+    }
+
+    @Test
+    public void testSendData() {
+        mNfcService.sendData("test".getBytes());
+        ArgumentCaptor<byte[]> captor = ArgumentCaptor.forClass(byte[].class);
+        verify(mDeviceHost).sendRawFrame(captor.capture());
+        assertThat(captor.getValue()).isNotNull();
+        assertThat(captor.getValue()).isEqualTo("test".getBytes());
+    }
+
+    @Test
+    public void testSendMockNdefTag() {
+        NdefMessage msg = mock(NdefMessage.class);
+        when(mNfcDispatcher.dispatchTag(any())).thenReturn(NfcDispatcher.DISPATCH_SUCCESS);
+        when(mVrManager.isVrModeEnabled()).thenReturn(false);
+        mNfcService.mSoundPool = mSoundPool;
+        mNfcService.sendMockNdefTag(msg);
+        mLooper.dispatchAll();
+        ArgumentCaptor<Tag> captor = ArgumentCaptor.forClass(Tag.class);
+        verify(mNfcDispatcher).dispatchTag(captor.capture());
+        Tag tag = captor.getValue();
+        assertThat(tag).isNotNull();
+        verify(mSoundPool)
+                .play(anyInt(), anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+
+        when(mNfcDispatcher.dispatchTag(any())).thenReturn(NfcDispatcher.DISPATCH_FAIL);
+        mNfcService.sendMockNdefTag(msg);
+        mLooper.dispatchAll();
+        verify(mNfcDispatcher, atLeastOnce()).dispatchTag(captor.capture());
+        tag = captor.getValue();
+        assertThat(tag).isNotNull();
+        verify(mSoundPool, times(2))
+                .play(anyInt(), anyFloat(), anyFloat(), anyInt(), anyInt(), anyFloat());
+    }
+
+    @Test
+    public void testSendScreenMessageAfterNfcCharging() {
+        mNfcService.mPendingPowerStateUpdate = true;
+        when(mScreenStateHelper.checkScreenState(anyBoolean()))
+                .thenReturn(ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED);
+        boolean result = mNfcService.sendScreenMessageAfterNfcCharging();
+        mLooper.dispatchAll();
+        assertThat(mNfcService.mIsRequestUnlockShowed).isFalse();
+        assertThat(result).isTrue();
+        assertThat(mNfcService.mPendingPowerStateUpdate).isFalse();
+        verify(mDeviceHost).doSetScreenState(anyInt(), anyBoolean());
+    }
+
+    @Test
+    public void testSetPowerSavingMode() throws RemoteException {
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        byte[] payload = { 0x01, 0x01, 0x00, 0x00 };
+        when(mDeviceHost.setPowerSavingMode(true)).thenReturn(true);
+        int result = mNfcService.mNfcAdapter.sendVendorNciMessage(1,0x0f,0x0c, payload);
+        mLooper.dispatchAll();
+        assertThat(result).isEqualTo(0x00);
+        verify(mDeviceHost).setPowerSavingMode(anyBoolean());
+    }
+
+    @Test
+    public void testSetSystemCodeRoute() {
+        mNfcService.setSystemCodeRoute(1);
+        mLooper.dispatchAll();
+        ArgumentCaptor<Integer> captor = ArgumentCaptor.forClass(Integer.class);
+        verify(mDeviceHost).setSystemCodeRoute(captor.capture());
+        assertThat(captor.getValue()).isEqualTo(1);
     }
 }
