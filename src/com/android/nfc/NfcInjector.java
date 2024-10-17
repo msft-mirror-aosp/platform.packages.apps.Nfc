@@ -45,6 +45,7 @@ import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.flags.FeatureFlags;
 import com.android.nfc.handover.HandoverDataParser;
+import com.android.nfc.wlc.NfcCharging;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -126,6 +127,10 @@ public class NfcInjector {
             mCardEmulationManager = new CardEmulationManager(mContext, sInstance, mDeviceConfigFacade);
         }
         return mCardEmulationManager;
+    }
+
+    public NfcCharging getNfcCharging(DeviceHost deviceHost) {
+        return new NfcCharging(mContext, deviceHost);
     }
 
     public Context getContext() {
