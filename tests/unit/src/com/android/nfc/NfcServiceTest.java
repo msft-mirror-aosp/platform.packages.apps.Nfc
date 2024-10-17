@@ -42,14 +42,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import android.app.VrManager;
-import android.hardware.display.DisplayManager;
-import android.nfc.INfcUnlockHandler;
-
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.Application;
 import android.app.KeyguardManager;
+import android.app.VrManager;
 import android.app.backup.BackupManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -61,7 +58,12 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.hardware.display.DisplayManager;
 import android.media.SoundPool;
+import android.nfc.INfcOemExtensionCallback;
+import android.nfc.INfcUnlockHandler;
+import android.nfc.INfcVendorNciCallback;
+import android.nfc.INfcWlcStateListener;
 import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
@@ -86,21 +88,15 @@ import android.os.UserManager;
 import android.os.test.TestLooper;
 import android.se.omapi.ISecureElementService;
 import android.sysprop.NfcProperties;
-import android.nfc.INfcOemExtensionCallback;
 import android.view.Display;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.flags.FeatureFlags;
-import com.android.nfc.flags.Flags;
 import com.android.nfc.wlc.NfcCharging;
-
-import android.nfc.INfcVendorNciCallback;
-
 
 import org.junit.After;
 import org.junit.Assert;
@@ -124,7 +120,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import android.nfc.INfcWlcStateListener;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcServiceTest {
@@ -768,12 +763,16 @@ public final class NfcServiceTest {
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_UPDATE_TECHNOLOGY_ABF_ROUTE);
-        msg.obj = 1;
+        msg.arg1 = 1;
+        msg.arg2 = 2;
         handler.handleMessage(msg);
         ArgumentCaptor<Integer> flagCaptor = ArgumentCaptor.forClass(Integer.class);
-        verify(mDeviceHost).setTechnologyABFRoute(flagCaptor.capture());
+        ArgumentCaptor<Integer> flagCaptor2 = ArgumentCaptor.forClass(Integer.class);
+        verify(mDeviceHost).setTechnologyABFRoute(flagCaptor.capture(), flagCaptor2.capture());
         int flag = flagCaptor.getValue();
         Assert.assertEquals(1, flag);
+        int flag2 = flagCaptor2.getValue();
+        Assert.assertEquals(2, flag2);
     }
 
     @Test
