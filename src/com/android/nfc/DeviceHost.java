@@ -234,7 +234,10 @@ public interface DeviceHost {
     boolean isMultiTag();
 
     void setIsoDepProtocolRoute(int route);
-    void setTechnologyABFRoute(int route);
+    /**
+    * Set NFCC technology routing for ABF listening
+    */
+    void setTechnologyABFRoute(int route, int felicaRoute);
     void setSystemCodeRoute(int route);
     void clearRoutingEntry(int clearFlags);
 
