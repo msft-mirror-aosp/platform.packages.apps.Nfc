@@ -791,6 +791,13 @@ public final class NfcServiceTest {
         Context ceContext = mock(Context.class);
         when(mApplication.createCredentialProtectedStorageContext()).thenReturn(ceContext);
         when(ceContext.getSharedPreferences(anyString(), anyInt())).thenReturn(mPreferences);
+        doAnswer(new Answer() {
+            @Override
+            public Map<String, ?> answer(InvocationOnMock invocation) throws Throwable {
+                Map<String, Object> prefMap = Map.of(PREF_NFC_ON, true);
+                return prefMap;
+            }
+        }).when(mPreferences).getAll();
         when(mApplication.moveSharedPreferencesFrom(ceContext, NfcService.PREF)).thenReturn(true);
         when(mApplication.moveSharedPreferencesFrom(ceContext, NfcService.PREF_TAG_APP_LIST))
             .thenReturn(true);
