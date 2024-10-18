@@ -4972,22 +4972,34 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     Context ceContext = mContext.createCredentialProtectedStorageContext();
                     SharedPreferences cePreferences =
                         ceContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-                    Log.i(TAG, "CE Shared Pref values: " + cePreferences.getAll());
-                    if (!mContext.moveSharedPreferencesFrom(ceContext, PREF)) {
-                        Log.e(TAG, "Failed to migrate NFC Shared preferences to DE directory");
-                        return;
+                    SharedPreferences ceTagPreferences =
+                            ceContext.getSharedPreferences(PREF_TAG_APP_LIST, Context.MODE_PRIVATE);
+                    Log.d(TAG, "CE Shared Pref values: " + cePreferences.getAll() + ", "
+                            + ceTagPreferences.getAll());
+                    if (cePreferences.getAll().isEmpty()) {
+                        Log.d(TAG, "No NFC Shared preferences to migrate from CE data");
+                    } else {
+                        if (!mContext.moveSharedPreferencesFrom(ceContext, PREF)) {
+                            Log.e(TAG,
+                                    "Failed to migrate NFC Shared preferences to DE directory");
+                            return;
+                        }
                     }
-                    if (!mContext.moveSharedPreferencesFrom(ceContext, PREF_TAG_APP_LIST)) {
-                        Log.e(TAG, "Failed to migrate NFC Shared preferences for tag app "
-                                + "list to DE directory");
-                        return;
+                    if (ceTagPreferences.getAll().isEmpty()) {
+                        Log.d(TAG, "No NFC Shared preferences for tag app to migrate from CE data");
+                    } else {
+                        if (!mContext.moveSharedPreferencesFrom(ceContext, PREF_TAG_APP_LIST)) {
+                            Log.e(TAG, "Failed to migrate NFC Shared preferences for tag app "
+                                    + "list to DE directory");
+                            return;
+                        }
+                        initTagAppPrefList();
                     }
                     if (mIsHceCapable) {
                         mCardEmulationManager.migrateSettingsFilesFromCe(ceContext);
                     }
                     // If the move is completed, refresh our reference to the shared preferences.
                     mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-                    initTagAppPrefList();
                     mPrefsEditor = mPrefs.edit();
                     mPrefsEditor.putBoolean(PREF_MIGRATE_TO_DE_COMPLETE, true);
                     mPrefsEditor.apply();
