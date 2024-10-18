@@ -1908,16 +1908,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
             }
         }
-
-        int getAlwaysOnState() {
-            synchronized (NfcService.this) {
-                if (!mIsAlwaysOnSupported) {
-                    return NfcAdapter.STATE_OFF;
-                } else {
-                    return mAlwaysOnState;
-                }
-            }
-        }
     }
 
 
@@ -2795,17 +2785,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             return techMask;
-        }
-
-        private String getPackageNameFromUid(int uid) {
-            PackageManager packageManager = mContext.getPackageManager();
-            if (packageManager != null) {
-                String[] packageName = packageManager.getPackagesForUid(uid);
-                if (packageName != null && packageName.length > 0) {
-                    return packageName[0];
-                }
-            }
-            return null;
         }
 
         private void updateReaderModeParams(
