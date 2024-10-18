@@ -507,6 +507,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     };
 
+    private Object mDiscoveryLock = new Object();
+
     private boolean mCardEmulationActivated = false;
     private boolean mRfFieldActivated = false;
     private boolean mRfDiscoveryStarted = false;
@@ -745,7 +747,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onRfDiscoveryEvent(boolean isDiscoveryStarted) {
-        mRfDiscoveryStarted = isDiscoveryStarted;
+        synchronized (mDiscoveryLock) {
+            mRfDiscoveryStarted = isDiscoveryStarted;
+        }
         try {
             if (mNfcOemExtensionCallback != null) {
                 mNfcOemExtensionCallback.onRfDiscoveryStarted(mRfDiscoveryStarted);
@@ -2197,15 +2201,19 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public void pausePolling(int timeoutInMs) {
             NfcPermissions.enforceAdminPermissions(mContext);
-
-            if (timeoutInMs <= 0 || timeoutInMs > MAX_POLLING_PAUSE_TIMEOUT) {
-                Log.e(TAG, "Refusing to pause polling for " + timeoutInMs + "ms.");
-                return;
+            synchronized (mDiscoveryLock) {
+                if (!mRfDiscoveryStarted) {
+                    if (DBG) Log.d(TAG, "Polling is already disabled!");
+                    return;
+                }
             }
-
             synchronized (NfcService.this) {
                 mPollingPaused = true;
                 mDeviceHost.disableDiscovery();
+                if (timeoutInMs <= 0 || timeoutInMs > MAX_POLLING_PAUSE_TIMEOUT) {
+                    Log.d(TAG, "Invalid timeout " + timeoutInMs + "ms, hence no resume polling!");
+                    return;
+                }
                 mHandler.sendMessageDelayed(
                         mHandler.obtainMessage(MSG_RESUME_POLLING), timeoutInMs);
             }
@@ -2214,12 +2222,19 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public void resumePolling() {
             NfcPermissions.enforceAdminPermissions(mContext);
-
+            boolean rfDiscoveryStarted;
+            synchronized (mDiscoveryLock) {
+                rfDiscoveryStarted = mRfDiscoveryStarted;
+            }
             synchronized (NfcService.this) {
                 if (!mPollingPaused) {
-                    return;
+                    if (rfDiscoveryStarted) {
+                        if (DBG) Log.d(TAG, "Polling is already enabled!");
+                        return;
+                    } else {
+                        if (DBG) Log.d(TAG, "Enable polling explicitly!");
+                    }
                 }
-
                 mHandler.removeMessages(MSG_RESUME_POLLING);
                 mPollingPaused = false;
                 new ApplyRoutingTask().execute();
@@ -4112,8 +4127,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         sendMessage(MSG_UPDATE_ISODEP_PROTOCOL_ROUTE, route);
     }
 
-    public void setTechnologyABFRoute(int route) {
-        sendMessage(MSG_UPDATE_TECHNOLOGY_ABF_ROUTE, route);
+    /**
+     * Set NFCC technology routing for ABF listening
+     */
+    public void setTechnologyABFRoute(int route, int felicaRoute) {
+        Message msg = mHandler.obtainMessage();
+        msg.what = MSG_UPDATE_TECHNOLOGY_ABF_ROUTE;
+        msg.arg1 = route;
+        msg.arg2 = felicaRoute;
+        mHandler.sendMessage(msg);
     }
 
     public void setSystemCodeRoute(int route) {
@@ -4491,7 +4513,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     break;
                 case MSG_UPDATE_TECHNOLOGY_ABF_ROUTE:
                     if (DBG) Log.d(TAG, "Update technology A,B&F route");
-                    mDeviceHost.setTechnologyABFRoute((Integer)msg.obj);
+                    int msgRoute = msg.arg1;
+                    int felicaRoute = msg.arg2;
+                    mDeviceHost.setTechnologyABFRoute(msgRoute, felicaRoute);
                     break;
                 case MSG_WATCHDOG_PING:
                     NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
