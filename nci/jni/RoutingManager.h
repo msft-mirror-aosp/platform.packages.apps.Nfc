@@ -48,7 +48,7 @@ class RoutingManager {
   void updateRoutingTable();
   void eeSetPwrAndLinkCtrl(uint8_t config);
   void updateIsoDepProtocolRoute(int route);
-  tNFA_TECHNOLOGY_MASK updateTechnologyABFRoute(int route);
+  tNFA_TECHNOLOGY_MASK updateTechnologyABFRoute(int route, int felicaRoute);
   void updateSystemCodeRoute(int route);
   void clearRoutingEntry(int clearFlags);
   void setEeTechRouteUpdateRequired();
@@ -94,6 +94,8 @@ class RoutingManager {
   static int com_android_nfc_cardemulation_doGetDefaultRouteDestination(
       JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetDefaultOffHostRouteDestination(
+      JNIEnv* e);
+  static int com_android_nfc_cardemulation_doGetDefaultFelicaRouteDestination(
       JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetDefaultScRouteDestination(
       JNIEnv* e);
