@@ -27,6 +27,15 @@ public class NfcFileUtils {
     private static final String TAG = "NfcFileUtils";
 
     /**
+     * Check if there are any files in the provided directory.
+     * @return true if there are no files, false otherwise.
+     */
+    public static boolean isEmptyDir(File dir) {
+        final File[] files = dir.listFiles();
+        return files == null || files.length == 0;
+    }
+
+    /**
      * Try our best to migrate all files from source to target.
      *
      * @return the number of files moved, or -1 if there was trouble.
