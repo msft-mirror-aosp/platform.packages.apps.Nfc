@@ -2491,7 +2491,7 @@ static JNINativeMethod gMethods[] = {
     {"nativeSendRawVendorCmd", "(III[B)Lcom/android/nfc/NfcVendorNciResponse;",
      (void*)nfcManager_nativeSendRawVendorCmd},
 
-    {"dofetchActiveNfceeList", "()Ljava/util/List;",
+    {"dofetchActiveNfceeList", "()Ljava/util/Map;",
      (void*)nfcManager_dofetchActiveNfceeList},
 
     {"getProprietaryCaps", "()[B", (void*)nfcManager_getProprietaryCaps},

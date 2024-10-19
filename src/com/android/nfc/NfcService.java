@@ -3121,12 +3121,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             mNfcOemExtensionCallback = null;
         }
         @Override
-        public List<String> fetchActiveNfceeList() throws RemoteException {
-            List<String> list = new ArrayList<String>();
+        public Map<String, Integer> fetchActiveNfceeList() throws RemoteException {
+            Map<String, Integer> map = new HashMap<String, Integer>();
             if (isNfcEnabled()) {
-                list = mDeviceHost.dofetchActiveNfceeList();
+                map = mDeviceHost.dofetchActiveNfceeList();
             }
-            return list;
+            return map;
         }
 
         @Override
