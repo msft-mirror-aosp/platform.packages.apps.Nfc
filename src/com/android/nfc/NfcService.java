@@ -1908,16 +1908,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
             }
         }
-
-        int getAlwaysOnState() {
-            synchronized (NfcService.this) {
-                if (!mIsAlwaysOnSupported) {
-                    return NfcAdapter.STATE_OFF;
-                } else {
-                    return mAlwaysOnState;
-                }
-            }
-        }
     }
 
 
@@ -2020,8 +2010,22 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     final class NfcAdapterService extends INfcAdapter.Stub {
 
+        private void checkPackageName(String packageName) {
+            PackageManager pm = mContext.getPackageManager();
+            try {
+                if (pm.getPackageUid(packageName, 0) != Binder.getCallingUid()) {
+                    throw new SecurityException("Package " + packageName + " does not belong to "
+                                    + Binder.getCallingUid());
+                }
+            } catch (PackageManager.NameNotFoundException e) {
+                throw new IllegalArgumentException("Calling package "
+                        + packageName + " is not found");
+            }
+        }
+
         @Override
         public boolean enable(String pkg) throws RemoteException {
+            checkPackageName(pkg);
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -2067,6 +2071,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean disable(boolean saveState, String pkg) throws RemoteException {
+            checkPackageName(pkg);
+
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -2129,6 +2135,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public synchronized boolean setObserveMode(boolean enable, String packageName) {
+            checkPackageName(packageName);
             if (!isNfcEnabled()) {
                 Log.e(TAG, "setObserveMode: NFC must be enabled but is: " + mState);
                 return false;
@@ -2420,6 +2427,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void updateDiscoveryTechnology(
                 IBinder binder, int pollTech, int listenTech, String packageName)
                 throws RemoteException {
+            checkPackageName(packageName);
             NfcPermissions.enforceUserPermissions(mContext);
             int callingUid = Binder.getCallingUid();
             boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
@@ -2535,6 +2543,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void setReaderMode(
                 IBinder binder, IAppCallback callback, int flags, Bundle extras, String packageName)
                 throws RemoteException {
+            checkPackageName(packageName);
             int callingUid = Binder.getCallingUid();
             int callingPid = Binder.getCallingPid();
             boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
@@ -2795,17 +2804,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             return techMask;
-        }
-
-        private String getPackageNameFromUid(int uid) {
-            PackageManager packageManager = mContext.getPackageManager();
-            if (packageManager != null) {
-                String[] packageName = packageManager.getPackagesForUid(uid);
-                if (packageName != null && packageName.length > 0) {
-                    return packageName[0];
-                }
-            }
-            return null;
         }
 
         private void updateReaderModeParams(
@@ -4972,22 +4970,34 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     Context ceContext = mContext.createCredentialProtectedStorageContext();
                     SharedPreferences cePreferences =
                         ceContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-                    Log.i(TAG, "CE Shared Pref values: " + cePreferences.getAll());
-                    if (!mContext.moveSharedPreferencesFrom(ceContext, PREF)) {
-                        Log.e(TAG, "Failed to migrate NFC Shared preferences to DE directory");
-                        return;
+                    SharedPreferences ceTagPreferences =
+                            ceContext.getSharedPreferences(PREF_TAG_APP_LIST, Context.MODE_PRIVATE);
+                    Log.d(TAG, "CE Shared Pref values: " + cePreferences.getAll() + ", "
+                            + ceTagPreferences.getAll());
+                    if (cePreferences.getAll().isEmpty()) {
+                        Log.d(TAG, "No NFC Shared preferences to migrate from CE data");
+                    } else {
+                        if (!mContext.moveSharedPreferencesFrom(ceContext, PREF)) {
+                            Log.e(TAG,
+                                    "Failed to migrate NFC Shared preferences to DE directory");
+                            return;
+                        }
                     }
-                    if (!mContext.moveSharedPreferencesFrom(ceContext, PREF_TAG_APP_LIST)) {
-                        Log.e(TAG, "Failed to migrate NFC Shared preferences for tag app "
-                                + "list to DE directory");
-                        return;
+                    if (ceTagPreferences.getAll().isEmpty()) {
+                        Log.d(TAG, "No NFC Shared preferences for tag app to migrate from CE data");
+                    } else {
+                        if (!mContext.moveSharedPreferencesFrom(ceContext, PREF_TAG_APP_LIST)) {
+                            Log.e(TAG, "Failed to migrate NFC Shared preferences for tag app "
+                                    + "list to DE directory");
+                            return;
+                        }
+                        initTagAppPrefList();
                     }
                     if (mIsHceCapable) {
                         mCardEmulationManager.migrateSettingsFilesFromCe(ceContext);
                     }
                     // If the move is completed, refresh our reference to the shared preferences.
                     mPrefs = mContext.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-                    initTagAppPrefList();
                     mPrefsEditor = mPrefs.edit();
                     mPrefsEditor.putBoolean(PREF_MIGRATE_TO_DE_COMPLETE, true);
                     mPrefsEditor.apply();
