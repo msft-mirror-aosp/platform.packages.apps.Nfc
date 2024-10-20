@@ -43,6 +43,8 @@
     <string name="nfc_default_isodep_route" translatable="false"></string>
     <!-- Default OffHost Route value -->
     <string name="nfc_default_offhost_route" translatable="false"></string>
+    <!-- Default System Code Route value -->
+    <string name="nfc_default_sc_route" translatable="false"></string>
     <!-- Overlay to enable NFC developer option notification-->
     <bool name="enable_developer_option_notification">true</bool>
     <!-- Whether to enable NFC by default on boot or not. -->
