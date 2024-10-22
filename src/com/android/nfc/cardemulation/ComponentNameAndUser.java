@@ -16,12 +16,19 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.UserIdInt;
 import android.content.ComponentName;
+import java.util.Objects;
 import android.util.Pair;
 
- public class ComponentNameAndUser extends Pair<Integer, ComponentName> {
-    ComponentNameAndUser(int userId, ComponentName componentName) {
-        super(userId, componentName);
+ public class ComponentNameAndUser {
+    @UserIdInt
+    private final int mUserId;
+    private ComponentName mComponentName;
+
+    ComponentNameAndUser(@UserIdInt int userId, ComponentName componentName) {
+        mUserId = userId;
+        mComponentName = componentName;
     }
 
     static ComponentNameAndUser create(Pair<Integer, ComponentName> pair) {
@@ -31,11 +38,34 @@ import android.util.Pair;
         return new ComponentNameAndUser(pair.first == null ? -1 : pair.first, pair.second);
     }
 
-    int getUserId() {
-        return first;
+    @UserIdInt int getUserId() {
+        return mUserId;
     }
 
     ComponentName getComponentName() {
-        return second;
+        return mComponentName;
+    }
+
+    @Override
+    public String toString() {
+        return mComponentName + " for user id: " + mUserId;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj != null && obj instanceof ComponentNameAndUser) {
+            ComponentNameAndUser other = (ComponentNameAndUser)obj;
+            return other.getUserId() == mUserId &&
+                    Objects.equals(other.getComponentName(), mComponentName);
+        }
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        if (mComponentName == null) {
+            return mUserId;
+        }
+        return mComponentName.hashCode() + mUserId;
     }
 }
