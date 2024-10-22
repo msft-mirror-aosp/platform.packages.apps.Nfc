@@ -15,6 +15,7 @@
 -->
 <configuration description="Configuration for {MODULE} Rust tests">
    <target_preparer class="com.android.tradefed.targetprep.RootTargetPreparer"/>
+   <option name="config-descriptor:metadata" key="mainline-param" value="com.google.android.nfcservices.apex" />
    <target_preparer class="com.android.compatibility.common.tradefed.targetprep.FilePusher">
        <option name="cleanup" value="true" />
        <option name="push" value="{MODULE}->/data/local/tmp/{MODULE}" />
@@ -26,7 +27,7 @@
    </test>
    <object type="module_controller"
            class="com.android.tradefed.testtype.suite.module.MainlineTestModuleController">
-       <option name="mainline-module-package-name" value="com.google.android.nfc" />
+       <option name="mainline-module-package-name" value="com.google.android.nfcservices" />
    </object>
    <object type="module_controller"
            class="com.android.tradefed.testtype.suite.module.DeviceFeatureModuleController">
