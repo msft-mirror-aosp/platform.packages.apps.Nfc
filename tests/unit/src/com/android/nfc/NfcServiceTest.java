@@ -71,11 +71,13 @@ import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcVendorNciCallback;
 import android.nfc.INfcWlcStateListener;
 import android.nfc.NdefMessage;
+import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
 import android.nfc.NfcOemExtension;
 import android.nfc.NfcServiceManager;
 import android.nfc.Tag;
+import android.nfc.TransceiveResult;
 import android.nfc.WlcListenerDeviceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
@@ -87,6 +89,7 @@ import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
@@ -124,6 +127,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.quality.Strictness;
 import org.mockito.stubbing.Answer;
 
+import java.io.FileDescriptor;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -135,6 +139,7 @@ import android.nfc.INfcWlcStateListener;
 import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcAdapterExtras;
 import android.nfc.INfcDta;
+import android.nfc.ITagRemovedCallback;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcServiceTest {
@@ -1809,5 +1814,107 @@ public final class NfcServiceTest {
         mNfcService.mObjectMap.put(1, tagEndpoint);
         int result = tagService.ndefMakeReadOnly(1);
         assertThat(result).isEqualTo(ErrorCodes.SUCCESS);
+    }
+
+    @Test
+    public void testNdefRead() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        when(tagEndpoint.readNdef()).thenReturn(ndefMessage.toByteArray());
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+        NdefMessage resultMessage = tagService.ndefRead(1);
+        assertThat(resultMessage).isNotNull();
+        assertThat(resultMessage.getRecords()).hasLength(1);
+    }
+
+    @Test
+    public void testNdefWrite() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        when(tagEndpoint.writeNdef(any())).thenReturn(true);
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+        int result = tagService.ndefWrite(1, ndefMessage);
+        assertThat(result).isEqualTo(ErrorCodes.SUCCESS);
+    }
+
+    @Test
+    public void testResetTimeouts() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        tagService.resetTimeouts();
+        verify(mDeviceHost).resetTimeouts();
+    }
+
+    @Test
+    public void testSetTimeout() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        when(mDeviceHost.setTimeout(Ndef.NDEF, 100)).thenReturn(true);
+        int result = tagService.setTimeout(Ndef.NDEF, 100);
+        verify(mDeviceHost).setTimeout(Ndef.NDEF, 100);
+        assertThat(result).isEqualTo(ErrorCodes.SUCCESS);
+    }
+
+    @Test
+    public void testTransceive() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        when(mDeviceHost.getMaxTransceiveLength(anyInt())).thenReturn(100);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(Ndef.NDEF);
+        when(tagEndpoint.transceive(any(), anyBoolean(), any()))
+                .thenReturn(ndefMessage.toByteArray());
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+
+        TransceiveResult result = tagService.transceive(1, ndefMessage
+                .toByteArray(), true);
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    public void testGetWlcListenerDeviceInfo() {
+        Map<String, Integer> wlcDeviceInfo = new HashMap<>();
+        wlcDeviceInfo.put(NfcCharging.VendorId, 1);
+        wlcDeviceInfo.put(NfcCharging.TemperatureListener, 1);
+        wlcDeviceInfo.put(NfcCharging.BatteryLevel, 1);
+        wlcDeviceInfo.put(NfcCharging.State, 1);
+        mNfcService.onWlcData(wlcDeviceInfo);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mIsWlcCapable = true;
+        WlcListenerDeviceInfo wlcListenerDeviceInfo = adapterService.getWlcListenerDeviceInfo();
+        assertThat(wlcListenerDeviceInfo).isNotNull();
+        assertThat(wlcListenerDeviceInfo.getBatteryLevel()).isEqualTo(1);
+    }
+
+    @Test
+    public void testHandleShellCommand() {
+        ParcelFileDescriptor in = mock(ParcelFileDescriptor.class);
+        when(in.getFileDescriptor()).thenReturn(mock(FileDescriptor.class));
+        ParcelFileDescriptor out = mock(ParcelFileDescriptor.class);
+        when(out.getFileDescriptor()).thenReturn(mock(FileDescriptor.class));
+        ParcelFileDescriptor err = mock(ParcelFileDescriptor.class);
+        when(err.getFileDescriptor()).thenReturn(mock(FileDescriptor.class));
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        int result = adapterService.handleShellCommand(in, out, err, new String[]{"test"});
+        assertThat(result).isEqualTo(-1);
+    }
+
+    @Test
+    public void testIgnore() throws RemoteException {
+        mNfcService.mDebounceTagNativeHandle = 0;
+        ITagRemovedCallback callback = mock(ITagRemovedCallback.class);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        boolean result = adapterService.ignore(0,0, callback);
+        mLooper.dispatchAll();
+        assertThat(result).isTrue();
     }
 }
