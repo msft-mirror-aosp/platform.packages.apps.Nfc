@@ -27,11 +27,11 @@ import android.nfc.NfcFrameworkInitializer;
 import android.nfc.NfcServiceManager;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.IBinder;
 import android.os.Looper;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.se.omapi.ISecureElementService;
@@ -40,11 +40,12 @@ import android.se.omapi.SeServiceManager;
 import android.util.AtomicFile;
 import android.util.Log;
 
+import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.flags.FeatureFlags;
 import com.android.nfc.handover.HandoverDataParser;
-import com.android.nfc.proto.NfcEventProto;
+import com.android.nfc.wlc.NfcCharging;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -75,7 +76,9 @@ public class NfcInjector {
     private final ForegroundUtils mForegroundUtils;
     private final NfcDiagnostics mNfcDiagnostics;
     private final NfcServiceManager.ServiceRegisterer mNfcManagerRegisterer;
+    private final NfcWatchdog mNfcWatchdog;
     private static NfcInjector sInstance;
+    private CardEmulationManager mCardEmulationManager;
 
     public static NfcInjector getInstance() {
         if (sInstance == null) throw new IllegalStateException("Nfc injector instance null");
@@ -115,7 +118,19 @@ public class NfcInjector {
         eventLogThread.start();
         mNfcEventLog = new NfcEventLog(mContext, this, eventLogThread.getLooper(),
                 new AtomicFile(new File(NFC_DATA_DIR, EVENT_LOG_FILE_NAME)));
+        mNfcWatchdog = new NfcWatchdog(mContext);
         sInstance = this;
+    }
+
+    public CardEmulationManager getCardEmulationManager() {
+        if (mCardEmulationManager == null) {
+            mCardEmulationManager = new CardEmulationManager(mContext, sInstance, mDeviceConfigFacade);
+        }
+        return mCardEmulationManager;
+    }
+
+    public NfcCharging getNfcCharging(DeviceHost deviceHost) {
+        return new NfcCharging(mContext, deviceHost);
     }
 
     public Context getContext() {
@@ -182,6 +197,10 @@ public class NfcInjector {
         return mNfcManagerRegisterer;
     }
 
+    public NfcWatchdog getNfcWatchdog() {
+        return mNfcWatchdog;
+    }
+
     public DeviceHost makeDeviceHost(DeviceHost.DeviceHostListener listener) {
         return new NativeNfcManager(mContext, listener);
     }
@@ -196,6 +215,10 @@ public class NfcInjector {
 
     public LocalDateTime getLocalDateTime() {
         return LocalDateTime.now();
+    }
+
+    public String getNfcPackageName() {
+        return mContext.getPackageName();
     }
 
     public boolean isInProvisionMode() {
@@ -245,6 +268,12 @@ public class NfcInjector {
                 mContext.getContentResolver(), Constants.SETTINGS_SATELLITE_MODE_ENABLED, 0) == 1;
     }
 
+    public static boolean isPrivileged(int callingUid) {
+        // Check for root uid to help invoking privileged APIs from rooted shell only.
+        return callingUid == Process.SYSTEM_UID || callingUid == Process.NFC_UID
+                || callingUid == Process.ROOT_UID;
+    }
+
     /**
      * Get the current time of the clock in milliseconds.
      *
@@ -270,5 +299,18 @@ public class NfcInjector {
      */
     public long getElapsedSinceBootNanos() {
         return SystemClock.elapsedRealtimeNanos();
+    }
+
+    /**
+     * Temporary location to store nfc properties being added in Android 16 for OEM convergence.
+     * Will move all of these together to libsysprop later to avoid multiple rounds of API reviews.
+     */
+    public static final class NfcProperties {
+        private static final String NFC_EUICC_SUPPORTED_PROP_KEY = "ro.nfc.euicc_supported";
+
+        public static boolean isEuiccSupported() {
+            return SystemProperties.getBoolean(NFC_EUICC_SUPPORTED_PROP_KEY, true);
+        }
+
     }
 }
