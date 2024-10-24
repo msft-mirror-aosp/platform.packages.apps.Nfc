@@ -24,7 +24,7 @@
     <option name="config-descriptor:metadata" key="parameter" value="not_multi_abi" />
     <option name="config-descriptor:metadata" key="parameter" value="secondary_user" />
     <option name="config-descriptor:metadata" key="parameter" value="no_foldable_states" />
-    <option name="config-descriptor:metadata" key="mainline-param" value="com.google.android.nfc.apex" />
+    <option name="config-descriptor:metadata" key="mainline-param" value="com.google.android.nfcservices.apex" />
     <option name="not-shardable" value="true" />
     <option name="install-arg" value="-t" />
     <target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller">
@@ -42,6 +42,6 @@
     </object>
     <object type="module_controller"
             class="com.android.tradefed.testtype.suite.module.MainlineTestModuleController">
-        <option name="mainline-module-package-name" value="com.google.android.nfc" />
+        <option name="mainline-module-package-name" value="com.google.android.nfcservices" />
     </object>
 </configuration>
