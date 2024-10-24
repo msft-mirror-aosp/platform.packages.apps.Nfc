@@ -2009,9 +2009,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     final class NfcAdapterService extends INfcAdapter.Stub {
-
         @Override
         public boolean enable(String pkg) throws RemoteException {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
+            }
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -2057,6 +2059,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean disable(boolean saveState, String pkg) throws RemoteException {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
+            }
+
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -2119,6 +2125,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public synchronized boolean setObserveMode(boolean enable, String packageName) {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
+            }
             if (!isNfcEnabled()) {
                 Log.e(TAG, "setObserveMode: NFC must be enabled but is: " + mState);
                 return false;
@@ -2410,6 +2419,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void updateDiscoveryTechnology(
                 IBinder binder, int pollTech, int listenTech, String packageName)
                 throws RemoteException {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
+            }
             NfcPermissions.enforceUserPermissions(mContext);
             int callingUid = Binder.getCallingUid();
             boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
@@ -2525,6 +2537,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void setReaderMode(
                 IBinder binder, IAppCallback callback, int flags, Bundle extras, String packageName)
                 throws RemoteException {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
+            }
             int callingUid = Binder.getCallingUid();
             int callingPid = Binder.getCallingPid();
             boolean privilegedCaller = NfcInjector.isPrivileged(callingUid)
