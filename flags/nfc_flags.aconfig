@@ -67,3 +67,10 @@ flag {
     description: "Propigate NFA_EE_ACTION_EVT->NFC_EE_TRIG_SELECT up to onOffHostAidSelected()"
     bug: "323440961"
 }
+
+flag {
+    name: "check_passed_in_package"
+    namespace: "nfc"
+    description: "Enable checking package name in nfc service"
+    bug: "364020298"
+}

@@ -224,7 +224,8 @@ public class RegisteredAidCacheTest {
         verify(mAidRoutingManager).supportsAidSubsetRouting();
         assertEquals(FOREGROUND_SERVICE, resolveInfo.defaultService.getComponent());
         assertEquals(
-                new Pair<>(USER_ID, FOREGROUND_SERVICE), mRegisteredAidCache.getPreferredService());
+                new ComponentNameAndUser(USER_ID, FOREGROUND_SERVICE),
+                mRegisteredAidCache.getPreferredService());
         assertEquals(1, resolveInfo.services.size());
         assertEquals(CardEmulation.CATEGORY_PAYMENT, resolveInfo.category);
         verifyNoMoreInteractions(mAidRoutingManager);
@@ -730,12 +731,12 @@ public class RegisteredAidCacheTest {
 
         mRegisteredAidCache =
                 new RegisteredAidCache(mContext, mWalletRoleObserver, mAidRoutingManager);
-        Pair<Integer, ComponentName> servicePair = mRegisteredAidCache.getPreferredService();
-        Assert.assertNull(servicePair.second);
+        ComponentNameAndUser servicePair = mRegisteredAidCache.getPreferredService();
+        Assert.assertNull(servicePair.getComponentName());
         mRegisteredAidCache.onPreferredForegroundServiceChanged(
                 new ComponentNameAndUser(USER_ID, FOREGROUND_SERVICE));
         servicePair = mRegisteredAidCache.getPreferredService();
-        Assert.assertNotNull(servicePair.second);
-        assertEquals(new Pair<>(USER_ID, FOREGROUND_SERVICE), servicePair);
+        Assert.assertNotNull(servicePair.getComponentName());
+        assertEquals(new ComponentNameAndUser(USER_ID, FOREGROUND_SERVICE), servicePair);
     }
 }

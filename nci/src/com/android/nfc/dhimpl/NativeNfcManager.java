@@ -31,10 +31,11 @@ import android.util.Log;
 
 import com.android.nfc.DeviceHost;
 import com.android.nfc.NfcDiscoveryParameters;
+import com.android.nfc.NfcProprietaryCaps;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 import com.android.nfc.NfcVendorNciResponse;
-import com.android.nfc.NfcProprietaryCaps;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.nio.ByteBuffer;
@@ -571,7 +572,7 @@ public class NativeNfcManager implements DeviceHost {
     public native void setIsoDepProtocolRoute(int route);
 
     @Override
-    public native void setTechnologyABFRoute(int route);
+    public native void setTechnologyABFRoute(int route, int felicaRoute);
 
     @Override
     public native void setSystemCodeRoute(int route);

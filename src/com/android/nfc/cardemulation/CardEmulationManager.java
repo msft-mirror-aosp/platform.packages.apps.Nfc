@@ -873,7 +873,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             NfcPermissions.validateUserId(userId);
             NfcPermissions.enforceUserPermissions(mContext);
             NfcPermissions.enforcePreferredPaymentInfoPermissions(mContext);
-            return mServiceCache.getService(userId, mAidCache.getPreferredService().second);
+            return mServiceCache.getService(userId,
+                        mAidCache.getPreferredService().getComponentName());
         }
 
         @Override
@@ -1186,10 +1187,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Override
     public void onPreferredPaymentServiceChanged(ComponentNameAndUser service) {
         Log.i(TAG, "onPreferredPaymentServiceChanged");
-        ComponentName oldPreferredService = mAidCache.getPreferredService().second;
+        ComponentNameAndUser oldPreferredService = mAidCache.getPreferredService();
         mAidCache.onPreferredPaymentServiceChanged(service);
         mHostEmulationManager.onPreferredPaymentServiceChanged(service);
-        ComponentName newPreferredService = mAidCache.getPreferredService().second;
+        ComponentNameAndUser newPreferredService = mAidCache.getPreferredService();
 
         NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_CHANGED);
@@ -1201,9 +1202,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     @Override
     public void onPreferredForegroundServiceChanged(ComponentNameAndUser service) {
         Log.i(TAG, "onPreferredForegroundServiceChanged");
-        ComponentName oldPreferredService = mAidCache.getPreferredService().second;
+        ComponentNameAndUser oldPreferredService = mAidCache.getPreferredService();
         mHostEmulationManager.onPreferredForegroundServiceChanged(service);
-        ComponentName newPreferredService = mAidCache.getPreferredService().second;
+        ComponentNameAndUser newPreferredService = mAidCache.getPreferredService();
 
         NfcService.getInstance().onPreferredPaymentChanged(
                 NfcAdapter.PREFERRED_PAYMENT_CHANGED);
@@ -1225,7 +1226,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "adapter is null, returning");
                 return;
             }
-            ComponentName preferredService = mAidCache.getPreferredService().second;
+            ComponentName preferredService = mAidCache.getPreferredService().getComponentName();
             boolean enableObserveMode = mServiceCache.doesServiceShouldDefaultToObserveMode(userId,
                     preferredService);
             mHostEmulationManager.updateForShouldDefaultToObserveMode(enableObserveMode);

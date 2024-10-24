@@ -340,6 +340,10 @@ public class RegisteredServicesCache {
     void migrateFromCe(Context ceContext) {
         File ceFilesDir = ceContext.getFilesDir();
         File deFilesDir = mContext.getFilesDir();
+        if (NfcFileUtils.isEmptyDir(ceFilesDir)) {
+            Log.d(TAG, "Nothing to migrate from CE data");
+            return;
+        }
         if (NfcFileUtils.moveFiles(ceFilesDir, deFilesDir) < 0) {
             Log.e(TAG, "Failed to move directory from " + ceFilesDir + " to " + deFilesDir);
             return;

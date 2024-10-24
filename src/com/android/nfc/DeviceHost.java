@@ -22,7 +22,6 @@ import android.nfc.cardemulation.PollingFrame;
 import android.os.Bundle;
 
 import java.io.FileDescriptor;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
 
@@ -235,7 +234,10 @@ public interface DeviceHost {
     boolean isMultiTag();
 
     void setIsoDepProtocolRoute(int route);
-    void setTechnologyABFRoute(int route);
+    /**
+    * Set NFCC technology routing for ABF listening
+    */
+    void setTechnologyABFRoute(int route, int felicaRoute);
     void setSystemCodeRoute(int route);
     void clearRoutingEntry(int clearFlags);
 
