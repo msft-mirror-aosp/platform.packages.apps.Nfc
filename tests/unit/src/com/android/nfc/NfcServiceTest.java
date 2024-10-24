@@ -44,6 +44,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.VrManager;
+import android.app.role.RoleManager;
 import android.hardware.display.DisplayManager;
 import android.nfc.ErrorCodes;
 import android.nfc.INfcUnlockHandler;
@@ -179,6 +180,7 @@ public final class NfcServiceTest {
     @Mock StatsdUtils mStatsdUtils;
     @Mock NfcCharging mNfcCharging;
     @Mock VrManager mVrManager;
+    @Mock RoleManager mRoleManager;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
@@ -199,6 +201,8 @@ public final class NfcServiceTest {
                 .mockStatic(android.nfc.Flags.class)
                 .mockStatic(com.android.nfc.flags.Flags.class)
                 .mockStatic(NfcStatsLog.class)
+                .mockStatic(android.permission.flags.Flags.class)
+                .mockStatic(NfcInjector.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         MockitoAnnotations.initMocks(this);
@@ -237,6 +241,7 @@ public final class NfcServiceTest {
         when(mApplication.getContentResolver()).thenReturn(mContentResolver);
         when(mApplication.getSystemService(DisplayManager.class)).thenReturn(mDisplayManager);
         when(mApplication.getSystemService(VrManager.class)).thenReturn(mVrManager);
+        when(mApplication.getSystemService(RoleManager.class)).thenReturn(mRoleManager);
         when(mUserManager.getUserRestrictions()).thenReturn(mUserRestrictions);
         when(mResources.getStringArray(R.array.nfc_allow_list)).thenReturn(new String[0]);
         when(mResources.getBoolean(R.bool.tag_intent_app_pref_supported)).thenReturn(true);
@@ -1918,5 +1923,54 @@ public final class NfcServiceTest {
         boolean result = adapterService.ignore(0,0, callback);
         mLooper.dispatchAll();
         assertThat(result).isTrue();
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getUid()).thenReturn(new byte[]{4, 18 ,52, 86});
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+        result = adapterService.ignore(1,1, callback);
+        verify(tagEndpoint).disconnect();
+        mLooper.dispatchAll();
+        assertThat(result).isTrue();
+
+    }
+
+    @Test
+    public void testIsNfcSecureEnabled() throws RemoteException {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mIsSecureNfcEnabled = true;
+        boolean result = adapterService.isNfcSecureEnabled();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testIsReaderOptionSupported() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mReaderOptionCapable = true;
+        boolean result = adapterService.isReaderOptionSupported();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testGetTagIntentAppPreferenceForUser() throws RemoteException {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mTagAppPrefList.put(1, new HashMap<>());
+        Map result = adapterService.getTagIntentAppPreferenceForUser(1);
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    public void testGetWalletRoleHolder() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        when(NfcInjector.isPrivileged(anyInt())).thenReturn(false);
+        when(mCardEmulationManager.isPreferredServicePackageNameForUser(anyString(), anyInt()))
+                .thenReturn(true);
+        when(android.permission.flags.Flags.walletRoleEnabled()).thenReturn(true);
+        List<String> list = new ArrayList<>();
+        list.add("com.android.test");
+        when(mRoleManager.getRoleHolders(anyString())).thenReturn(list);
+        boolean result = adapterService.setObserveMode(true, "com.android.test");
+        assertThat(result).isFalse();
+        verify(mDeviceHost).setObserveMode(anyBoolean());
     }
 }
