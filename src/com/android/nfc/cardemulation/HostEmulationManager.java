@@ -18,6 +18,7 @@ package com.android.nfc.cardemulation;
 
 import android.annotation.FlaggedApi;
 import android.annotation.TargetApi;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.content.ComponentName;
@@ -123,18 +124,19 @@ public class HostEmulationManager {
     Messenger mService;
 
     static class HostEmulationConnection {
-        int mUserId;
+        @UserIdInt int mUserId;
         ComponentName mComponentName;
         ServiceConnection mServiceConnection;
         Messenger mMessenger;
 
-        HostEmulationConnection(
-                int userId, ComponentName componentName, ServiceConnection serviceConnection) {
+        HostEmulationConnection(@UserIdInt int userId,
+                                ComponentName componentName,
+                                ServiceConnection serviceConnection) {
             this(userId, componentName, serviceConnection, null);
         }
 
         HostEmulationConnection(
-                int userId,
+            @UserIdInt int userId,
                 ComponentName componentName,
                 ServiceConnection serviceConnection,
                 Messenger messenger) {
@@ -155,7 +157,7 @@ public class HostEmulationManager {
             new HashMap<>();
     boolean mServiceBound = false;
     ComponentName mServiceName = null;
-    int mServiceUserId; // The UserId of the non-payment service
+    @UserIdInt int mServiceUserId; // The UserId of the non-payment service
     ArrayList<PollingFrame> mPendingPollingLoopFrames = null;
     ArrayList<PollingFrame> mUnprocessedPollingFrames = null;
     Map<ComponentName, ArrayList<PollingFrame>> mPollingFramesToSend = null;
@@ -172,7 +174,7 @@ public class HostEmulationManager {
     boolean mEnableObserveModeAfterTransaction = false;
     boolean mEnableObserveModeOnFieldOff = false;
     ComponentName mPaymentServiceName = null;
-    int mPaymentServiceUserId; // The userId of the payment service
+    @UserIdInt int mPaymentServiceUserId; // The userId of the payment service
     ComponentName mLastBoundPaymentServiceName;
 
     // mActiveService denotes the service interface
@@ -181,7 +183,7 @@ public class HostEmulationManager {
     // On deactivation, mActiveService stops being valid.
     Messenger mActiveService;
     ComponentName mActiveServiceName;
-    int mActiveServiceUserId; // The UserId of the current active one
+    @UserIdInt int mActiveServiceUserId; // The UserId of the current active one
 
     String mLastSelectedAid;
     int mState;
@@ -219,8 +221,7 @@ public class HostEmulationManager {
                 }
 
                 void unbindInactiveServicesLocked() {
-                    ComponentNameAndUser preferredNameAndUser =
-                                    ComponentNameAndUser.create(mAidCache.getPreferredService());
+                    ComponentNameAndUser preferredNameAndUser = mAidCache.getPreferredService();
                     Map<ComponentNameAndUser, HostEmulationConnection> retainedConnections =
                             new HashMap<>();
                     mComponentNameToConnectionsMap.keySet().forEach((key) -> {
@@ -315,8 +316,7 @@ public class HostEmulationManager {
     }
 
     private Pair<Messenger, ComponentName> getForegroundServiceAndNameOrDefault() {
-        ComponentNameAndUser preferredService =
-                ComponentNameAndUser.create(mAidCache.getPreferredService());
+        ComponentNameAndUser preferredService = mAidCache.getPreferredService();
         int preferredServiceUserId = preferredService.getUserId();
         ComponentName preferredServiceName = preferredService.getComponentName();
 
@@ -345,7 +345,7 @@ public class HostEmulationManager {
 
     @TargetApi(35)
     @FlaggedApi(android.nfc.Flags.FLAG_NFC_READ_POLLING_LOOP)
-    public void updatePollingLoopFilters(int userId, List<ApduServiceInfo> services) {
+    public void updatePollingLoopFilters(@UserIdInt int userId, List<ApduServiceInfo> services) {
         HashMap<String, List<ApduServiceInfo>> pollingLoopFilters =
                 new HashMap<String, List<ApduServiceInfo>>();
         HashMap<Pattern, List<ApduServiceInfo>> pollingLoopPatternFilters =
@@ -651,8 +651,7 @@ public class HostEmulationManager {
             int userId = serviceAndUser.getUserId();
             ComponentName service = serviceAndUser.getComponentName();
             if (android.nfc.Flags.nfcEventListener()) {
-                ComponentNameAndUser oldServiceAndUser =
-                        ComponentNameAndUser.create(mAidCache.getPreferredService());
+                ComponentNameAndUser oldServiceAndUser = mAidCache.getPreferredService();
                 ComponentNameAndUser newServiceAndUser = new ComponentNameAndUser(userId, service);
                 Messenger oldPreferredService = null;
                 if (oldServiceAndUser != null && oldServiceAndUser.getComponentName() != null) {
@@ -1003,14 +1002,13 @@ public class HostEmulationManager {
         }
     }
 
-    Messenger bindServiceIfNeededLocked(int userId, ComponentName service) {
+    Messenger bindServiceIfNeededLocked(@UserIdInt int userId, ComponentName service) {
         if (service == null) {
             Log.e(TAG, "service ComponentName is null");
             return null;
         }
 
-        ComponentNameAndUser preferredPaymentService =
-                ComponentNameAndUser.create(mAidCache.getPreferredPaymentService());
+        ComponentNameAndUser preferredPaymentService = mAidCache.getPreferredPaymentService();
         int preferredPaymentUserId = preferredPaymentService.getUserId();
         ComponentName preferredPaymentServiceName = preferredPaymentService.getComponentName();
         ComponentNameAndUser newServiceAndUser = new ComponentNameAndUser(userId, service);
@@ -1182,7 +1180,7 @@ public class HostEmulationManager {
         mPaymentServiceUserId = -1;
     }
 
-    void bindPaymentServiceLocked(int userId, ComponentName serviceName) {
+    void bindPaymentServiceLocked(@UserIdInt int userId, ComponentName serviceName) {
         unbindPaymentServiceLocked();
 
         Log.d(TAG, "Binding to payment service " + serviceName + " for userid:" + userId);
@@ -1355,17 +1353,16 @@ public class HostEmulationManager {
     };
 
     class HostEmulationServiceConnection implements ServiceConnection {
-        int mUserId;
+        @UserIdInt int mUserId;
 
-        HostEmulationServiceConnection(int userId) {
+        HostEmulationServiceConnection(@UserIdInt int userId) {
             mUserId = userId;
         }
 
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             synchronized (mLock) {
-                ComponentNameAndUser preferredUserAndService =
-                        ComponentNameAndUser.create(mAidCache.getPreferredService());
+                ComponentNameAndUser preferredUserAndService = mAidCache.getPreferredService();
                 ComponentName preferredServiceName =
                         preferredUserAndService == null ? null :
                                 preferredUserAndService.getComponentName();
@@ -1580,7 +1577,7 @@ public class HostEmulationManager {
     }
 
     @VisibleForTesting
-    public Boolean isServiceBounded(int userId, ComponentName componentName) {
+    public Boolean isServiceBounded(@UserIdInt int userId, ComponentName componentName) {
         if (isMultipleBindingSupported()) {
             return mComponentNameToConnectionsMap.containsKey(
                     new ComponentNameAndUser(userId, componentName));
