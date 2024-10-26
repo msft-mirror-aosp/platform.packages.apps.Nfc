@@ -18,6 +18,7 @@ package com.android.nfc;
 import static android.nfc.NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED;
 
 import static com.android.nfc.NfcService.INVALID_NATIVE_HANDLE;
+import static com.android.nfc.NfcService.NCI_VERSION_1_0;
 import static com.android.nfc.NfcService.NFC_POLL_V;
 import static com.android.nfc.NfcService.PREF_NFC_ON;
 import static com.android.nfc.NfcService.SOUND_END;
@@ -36,6 +37,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -44,6 +46,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.VrManager;
+import android.app.role.RoleManager;
 import android.hardware.display.DisplayManager;
 import android.nfc.ErrorCodes;
 import android.nfc.INfcUnlockHandler;
@@ -71,11 +74,13 @@ import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcVendorNciCallback;
 import android.nfc.INfcWlcStateListener;
 import android.nfc.NdefMessage;
+import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
 import android.nfc.NfcOemExtension;
 import android.nfc.NfcServiceManager;
 import android.nfc.Tag;
+import android.nfc.TransceiveResult;
 import android.nfc.WlcListenerDeviceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.PollingFrame;
@@ -88,6 +93,7 @@ import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
@@ -125,6 +131,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.quality.Strictness;
 import org.mockito.stubbing.Answer;
 
+import java.io.FileDescriptor;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -136,6 +143,8 @@ import android.nfc.INfcWlcStateListener;
 import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcAdapterExtras;
 import android.nfc.INfcDta;
+import android.nfc.ITagRemovedCallback;
+import android.nfc.INfcControllerAlwaysOnListener;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcServiceTest {
@@ -174,6 +183,7 @@ public final class NfcServiceTest {
     @Mock StatsdUtils mStatsdUtils;
     @Mock NfcCharging mNfcCharging;
     @Mock VrManager mVrManager;
+    @Mock RoleManager mRoleManager;
     @Captor ArgumentCaptor<DeviceHost.DeviceHostListener> mDeviceHostListener;
     @Captor ArgumentCaptor<BroadcastReceiver> mGlobalReceiver;
     @Captor ArgumentCaptor<IBinder> mIBinderArgumentCaptor;
@@ -194,6 +204,8 @@ public final class NfcServiceTest {
                 .mockStatic(android.nfc.Flags.class)
                 .mockStatic(com.android.nfc.flags.Flags.class)
                 .mockStatic(NfcStatsLog.class)
+                .mockStatic(android.permission.flags.Flags.class)
+                .mockStatic(NfcInjector.class)
                 .strictness(Strictness.LENIENT)
                 .startMocking();
         MockitoAnnotations.initMocks(this);
@@ -232,6 +244,7 @@ public final class NfcServiceTest {
         when(mApplication.getContentResolver()).thenReturn(mContentResolver);
         when(mApplication.getSystemService(DisplayManager.class)).thenReturn(mDisplayManager);
         when(mApplication.getSystemService(VrManager.class)).thenReturn(mVrManager);
+        when(mApplication.getSystemService(RoleManager.class)).thenReturn(mRoleManager);
         when(mUserManager.getUserRestrictions()).thenReturn(mUserRestrictions);
         when(mResources.getStringArray(R.array.nfc_allow_list)).thenReturn(new String[0]);
         when(mResources.getBoolean(R.bool.tag_intent_app_pref_supported)).thenReturn(true);
@@ -1812,4 +1825,237 @@ public final class NfcServiceTest {
         int result = tagService.ndefMakeReadOnly(1);
         assertThat(result).isEqualTo(ErrorCodes.SUCCESS);
     }
+
+    @Test
+    public void testNdefRead() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        when(tagEndpoint.readNdef()).thenReturn(ndefMessage.toByteArray());
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+        NdefMessage resultMessage = tagService.ndefRead(1);
+        assertThat(resultMessage).isNotNull();
+        assertThat(resultMessage.getRecords()).hasLength(1);
+    }
+
+    @Test
+    public void testNdefWrite() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        when(tagEndpoint.writeNdef(any())).thenReturn(true);
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+        int result = tagService.ndefWrite(1, ndefMessage);
+        assertThat(result).isEqualTo(ErrorCodes.SUCCESS);
+    }
+
+    @Test
+    public void testResetTimeouts() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        tagService.resetTimeouts();
+        verify(mDeviceHost).resetTimeouts();
+    }
+
+    @Test
+    public void testSetTimeout() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        when(mDeviceHost.setTimeout(Ndef.NDEF, 100)).thenReturn(true);
+        int result = tagService.setTimeout(Ndef.NDEF, 100);
+        verify(mDeviceHost).setTimeout(Ndef.NDEF, 100);
+        assertThat(result).isEqualTo(ErrorCodes.SUCCESS);
+    }
+
+    @Test
+    public void testTransceive() throws RemoteException {
+        NfcService.TagService tagService = mNfcService.new TagService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        mNfcService.mIsReaderOptionEnabled = true;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        NdefRecord record = NdefRecord.createTextRecord("en", "ndef");
+        NdefMessage ndefMessage = new NdefMessage(new NdefRecord[]{record});
+        when(mDeviceHost.getMaxTransceiveLength(anyInt())).thenReturn(100);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(Ndef.NDEF);
+        when(tagEndpoint.transceive(any(), anyBoolean(), any()))
+                .thenReturn(ndefMessage.toByteArray());
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+
+        TransceiveResult result = tagService.transceive(1, ndefMessage
+                .toByteArray(), true);
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    public void testGetWlcListenerDeviceInfo() {
+        Map<String, Integer> wlcDeviceInfo = new HashMap<>();
+        wlcDeviceInfo.put(NfcCharging.VendorId, 1);
+        wlcDeviceInfo.put(NfcCharging.TemperatureListener, 1);
+        wlcDeviceInfo.put(NfcCharging.BatteryLevel, 1);
+        wlcDeviceInfo.put(NfcCharging.State, 1);
+        mNfcService.onWlcData(wlcDeviceInfo);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mIsWlcCapable = true;
+        WlcListenerDeviceInfo wlcListenerDeviceInfo = adapterService.getWlcListenerDeviceInfo();
+        assertThat(wlcListenerDeviceInfo).isNotNull();
+        assertThat(wlcListenerDeviceInfo.getBatteryLevel()).isEqualTo(1);
+    }
+
+    @Test
+    public void testHandleShellCommand() {
+        ParcelFileDescriptor in = mock(ParcelFileDescriptor.class);
+        when(in.getFileDescriptor()).thenReturn(mock(FileDescriptor.class));
+        ParcelFileDescriptor out = mock(ParcelFileDescriptor.class);
+        when(out.getFileDescriptor()).thenReturn(mock(FileDescriptor.class));
+        ParcelFileDescriptor err = mock(ParcelFileDescriptor.class);
+        when(err.getFileDescriptor()).thenReturn(mock(FileDescriptor.class));
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        int result = adapterService.handleShellCommand(in, out, err, new String[]{"test"});
+        assertThat(result).isEqualTo(-1);
+    }
+
+    @Test
+    public void testIgnore() throws RemoteException {
+        mNfcService.mDebounceTagNativeHandle = 0;
+        ITagRemovedCallback callback = mock(ITagRemovedCallback.class);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        boolean result = adapterService.ignore(0,0, callback);
+        mLooper.dispatchAll();
+        assertThat(result).isTrue();
+
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getUid()).thenReturn(new byte[]{4, 18 ,52, 86});
+        mNfcService.mObjectMap.put(1, tagEndpoint);
+        result = adapterService.ignore(1,1, callback);
+        verify(tagEndpoint).disconnect();
+        mLooper.dispatchAll();
+        assertThat(result).isTrue();
+
+    }
+
+    @Test
+    public void testIsNfcSecureEnabled() throws RemoteException {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mIsSecureNfcEnabled = true;
+        boolean result = adapterService.isNfcSecureEnabled();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testIsReaderOptionSupported() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mReaderOptionCapable = true;
+        boolean result = adapterService.isReaderOptionSupported();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testGetTagIntentAppPreferenceForUser() throws RemoteException {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mTagAppPrefList.put(1, new HashMap<>());
+        Map result = adapterService.getTagIntentAppPreferenceForUser(1);
+        assertThat(result).isNotNull();
+    }
+
+    @Test
+    public void testGetWalletRoleHolder() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        when(NfcInjector.isPrivileged(anyInt())).thenReturn(false);
+        when(mCardEmulationManager.isPreferredServicePackageNameForUser(anyString(), anyInt()))
+                .thenReturn(true);
+        when(android.permission.flags.Flags.walletRoleEnabled()).thenReturn(true);
+        List<String> list = new ArrayList<>();
+        list.add("com.android.test");
+        when(mRoleManager.getRoleHolders(anyString())).thenReturn(list);
+        boolean result = adapterService.setObserveMode(true, "com.android.test");
+        assertThat(result).isFalse();
+        verify(mDeviceHost).setObserveMode(anyBoolean());
+    }
+
+    @Test
+    public void testIsWlcEnabled() throws RemoteException {
+        mNfcService.mIsWlcCapable = true;
+        mNfcService.mIsWlcEnabled = true;
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        boolean result = adapterService.isWlcEnabled();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testNotifyTestHceData() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        doNothing().when(mCardEmulationManager).onHostCardEmulationData(anyInt(), any());
+        when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
+        adapterService.notifyTestHceData(Ndef.NDEF, "test".getBytes());
+        verify(mCardEmulationManager).onHostCardEmulationData(anyInt(), any());
+        verify(mNfcEventLog, times(2)).logEvent(any());
+    }
+
+    @Test
+    public void testPausePolling() {
+        mNfcService.onRfDiscoveryEvent(true);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        adapterService.pausePolling(100);
+        verify(mDeviceHost).disableDiscovery();
+        mLooper.dispatchAll();
+    }
+
+    @Test
+    public void testRegisterControllerAlwaysOnListener() throws RemoteException {
+        INfcControllerAlwaysOnListener iNfcControllerAlwaysOnListener
+                = mock(INfcControllerAlwaysOnListener.class);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        adapterService.registerControllerAlwaysOnListener(iNfcControllerAlwaysOnListener);
+    }
+
+    @Test
+    public void testSetNfcSecure() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        when(mKeyguardManager.isKeyguardLocked()).thenReturn(false);
+        mNfcService.mIsSecureNfcEnabled = false;
+        when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
+        mNfcService.mIsHceCapable = true;
+        adapterService.setNfcSecure(true);
+        verify(mPreferencesEditor).putBoolean(anyString(), anyBoolean());
+        verify(mPreferencesEditor).apply();
+        verify(mBackupManager).dataChanged();
+        verify(mDeviceHost).setNfcSecure(true);
+        verify(mNfcEventLog, times(2)).logEvent(any());
+        verify(mCardEmulationManager).onSecureNfcToggled();
+    }
+
+    @Test
+    public void testSetScreenState() throws RemoteException {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        when(mScreenStateHelper.checkScreenState(anyBoolean()))
+                .thenReturn(ScreenStateHelper.SCREEN_STATE_OFF_LOCKED);
+        mNfcService.mScreenState = ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
+        when(mDeviceHost.getNciVersion()).thenReturn(NCI_VERSION_1_0);
+        when(mFeatureFlags.reduceStateTransition()).thenReturn(true);
+        mNfcService.mIsWatchType = true;
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        when(mCardEmulationManager.isRequiresScreenOnServiceExist()).thenReturn(false);
+        adapterService.setScreenState();
+        mLooper.dispatchAll();
+        verify(mDeviceHost).doSetScreenState(anyInt(), anyBoolean());
+    }
+
+    @Test
+    public void testSetWlcEnabled() {
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        mNfcService.mIsWlcCapable = true;
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
+        adapterService.setWlcEnabled(true);
+        verify(mPreferencesEditor).putBoolean(anyString(), anyBoolean());
+        verify(mPreferencesEditor).apply();
+        verify(mBackupManager).dataChanged();
+        verify(mBackupManager).dataChanged();
+    }
+
 }
