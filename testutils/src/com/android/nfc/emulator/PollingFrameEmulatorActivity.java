@@ -36,7 +36,9 @@ public class PollingFrameEmulatorActivity extends PollingLoopEmulatorActivity {
     private List<PollingFrame> pollingFrames = new ArrayList<PollingFrame>();
 
     public PollingFrame[] getPollingFrames() {
-        return pollingFrames.stream().toArray(PollingFrame[]::new);
+        PollingFrame[] result = pollingFrames.stream().toArray(PollingFrame[]::new);
+        this.pollingFrames = new ArrayList<PollingFrame>();
+        return result;
     }
 
     @Override
