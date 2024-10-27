@@ -16,6 +16,18 @@
 
 from binascii import hexlify
 
+
+def responses_match(expected: bytes, actual: bytes) -> bool:
+    if expected == actual:
+        return True
+    if len(expected) == 0 or len(actual) == 0:
+        return False
+    if expected[0] != 0x00 and actual[0] == 0x00:
+        if expected == actual[1:]:
+            return True
+    return False
+
+
 class Tag:
     def __init__(self, target_id: int):
         self.target_id = target_id
@@ -24,7 +36,7 @@ class Tag:
         self.log.debug("Starting transaction with %d commands", len(command_apdus))
         for i in range(len(command_apdus)):
             rsp = self.pn532.transceive(bytearray([self.target_id]) + command_apdus[i])
-            if response_apdus[i] != "*" and rsp != response_apdus[i]:
+            if response_apdus[i] != "*" and not responses_match(response_apdus[i], rsp):
                 received_apdu = hexlify(rsp).decode() if type(rsp) is bytes else "None"
                 self.log.error(
                     "Unexpected APDU: received %s, expected %s",
