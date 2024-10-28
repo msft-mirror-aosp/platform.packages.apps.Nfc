@@ -2011,6 +2011,13 @@ public final class NfcServiceTest {
                 = mock(INfcControllerAlwaysOnListener.class);
         NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
         adapterService.registerControllerAlwaysOnListener(iNfcControllerAlwaysOnListener);
+
+        mNfcService.mAlwaysOnState = NfcAdapter.STATE_TURNING_ON;
+        mNfcService.mState = NfcAdapter.STATE_OFF;
+        mNfcService.mNfcAdapter.setControllerAlwaysOn(NfcOemExtension.ENABLE_DEFAULT);
+        mLooper.dispatchAll();
+
+        verify(iNfcControllerAlwaysOnListener).onControllerAlwaysOnChanged(anyBoolean());
     }
 
     @Test
@@ -2058,4 +2065,58 @@ public final class NfcServiceTest {
         verify(mBackupManager).dataChanged();
     }
 
+    @Test
+    public void testUnregisterControllerAlwaysOnListener() throws RemoteException {
+        INfcControllerAlwaysOnListener iNfcControllerAlwaysOnListener
+                = mock(INfcControllerAlwaysOnListener.class);
+        NfcService.NfcAdapterService adapterService = mNfcService.new NfcAdapterService();
+        adapterService.unregisterControllerAlwaysOnListener(iNfcControllerAlwaysOnListener);
+
+        mNfcService.mAlwaysOnState = NfcAdapter.STATE_TURNING_ON;
+        mNfcService.mState = NfcAdapter.STATE_OFF;
+        mNfcService.mNfcAdapter.setControllerAlwaysOn(NfcOemExtension.ENABLE_DEFAULT);
+        mLooper.dispatchAll();
+
+        verify(iNfcControllerAlwaysOnListener, never()).onControllerAlwaysOnChanged(anyBoolean());
+    }
+
+    @Test
+    public void testUnregisterOemExtensionCallback() throws RemoteException {
+        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        INfcOemExtensionCallback callback = mock(INfcOemExtensionCallback.class);
+        mNfcService.mNfcAdapter.registerOemExtensionCallback(callback);
+        ArgumentCaptor<INfcOemExtensionCallback> captor = ArgumentCaptor
+                .forClass(INfcOemExtensionCallback.class);
+        verify(mCardEmulationManager).setOemExtension(captor.capture());
+        assertThat(captor.getValue()).isEqualTo(callback);
+
+        mNfcService.mNfcAdapter.unregisterOemExtensionCallback(callback);
+        mNfcService.onHostCardEmulationActivated(Ndef.NDEF);
+        verify(callback, times(1)).onCardEmulationActivated(anyBoolean());
+    }
+
+    @Test
+    public void testUnregisterWlcStateListener() throws RemoteException {
+        mNfcService.mIsWlcCapable = true;
+        INfcWlcStateListener listener = mock(INfcWlcStateListener.class);
+        mNfcService.mNfcAdapter.registerWlcStateListener(listener);
+        Map<String, Integer> wlcDeviceInfo = new HashMap<>();
+        wlcDeviceInfo.put(NfcCharging.VendorId, 1);
+        wlcDeviceInfo.put(NfcCharging.TemperatureListener, 1);
+        wlcDeviceInfo.put(NfcCharging.BatteryLevel, 1);
+        wlcDeviceInfo.put(NfcCharging.State, 1);
+        mNfcService.onWlcData(wlcDeviceInfo);
+        verify(listener).onWlcStateChanged(any());
+
+        mNfcService.mNfcAdapter.unregisterWlcStateListener(listener);
+        mNfcService.onWlcData(wlcDeviceInfo);
+        verify(listener, times(1)).onWlcStateChanged(any());
+    }
+
+    @Test
+    public void testIsControllerAlwaysOn() throws RemoteException {
+        mNfcService.mAlwaysOnState = NfcAdapter.STATE_ON;
+        boolean result = mNfcService.mNfcAdapter.isControllerAlwaysOn();
+        assertThat(result).isTrue();
+    }
 }
