@@ -3119,6 +3119,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "Unregister the oem extension callback");
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcOemExtensionCallback = null;
+            if (mCardEmulationManager != null) {
+                mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+            }
         }
         @Override
         public List<String> fetchActiveNfceeList() throws RemoteException {
@@ -4219,6 +4222,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             return;
                         }
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
+                            if (mNfcOemExtensionCallback != null) {
+                                try {
+                                    mNfcOemExtensionCallback.onRoutingChanged();
+                                } catch (RemoteException e) {
+                                    Log.e(TAG, "onRoutingChanged failed",e);
+                                }
+                            }
                             mDeviceHost.commitRouting();
                         } else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
