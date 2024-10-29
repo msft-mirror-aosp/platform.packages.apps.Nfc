@@ -16,6 +16,7 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.Nullable;
 import android.annotation.FlaggedApi;
 import android.annotation.TargetApi;
 import android.annotation.UserIdInt;
@@ -26,6 +27,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
@@ -116,6 +118,8 @@ public class HostEmulationManager {
     private final Looper mLooper;
 
     private final StatsdUtils mStatsdUtils;
+
+    INfcOemExtensionCallback mNfcOemExtensionCallback;
 
     // All variables below protected by mLock
 
@@ -285,6 +289,10 @@ public class HostEmulationManager {
         if (isMultipleBindingSupported()) {
             mHandler.postDelayed(mUnbindInactiveServicesRunnable, UNBIND_SERVICES_DELAY_MS);
         }
+    }
+
+    public void setOemExtension(@Nullable INfcOemExtensionCallback nfcOemExtensionCallback) {
+        mNfcOemExtensionCallback = nfcOemExtensionCallback;
     }
 
     /**
@@ -871,8 +879,8 @@ public class HostEmulationManager {
                         mStatsdUtils.setCardEmulationEventCategory(CardEmulation.CATEGORY_OTHER);
                         mStatsdUtils.logCardEmulationWrongSettingEvent();
                     }
-                    launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services, null,
-                            resolveInfo.category);
+                    launchResolver(selectAid, (ArrayList<ApduServiceInfo>)resolveInfo.services,
+                        null, resolveInfo.category);
                     return;
                 }
             }
@@ -1241,6 +1249,14 @@ public class HostEmulationManager {
     }
 
     void launchTapAgain(ApduServiceInfo service, String category) {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onLaunchHceTapAgainActivity(service, category);
+                return;
+            } catch(RemoteException e){
+                Log.e(TAG, "onLaunchHceTapAgainActivity failed",e);
+            }
+        }
         Intent dialogIntent = new Intent(mContext, TapAgainDialog.class);
         dialogIntent.putExtra(TapAgainDialog.EXTRA_CATEGORY, category);
         dialogIntent.putExtra(TapAgainDialog.EXTRA_APDU_SERVICE, service);
@@ -1249,8 +1265,17 @@ public class HostEmulationManager {
                 UserHandle.getUserHandleForUid(service.getUid()));
     }
 
-    void launchResolver(ArrayList<ApduServiceInfo> services, ComponentName failedComponent,
-            String category) {
+    void launchResolver(String selectedAid, ArrayList<ApduServiceInfo> services,
+        ComponentName failedComponent, String category) {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onLaunchHceAppChooserActivity(
+                    selectedAid, services, failedComponent, category);
+                return;
+            }catch (RemoteException e){
+                Log.e(TAG, "onLaunchHceAppChooserActivity failed",e);
+            }
+        }
         Intent intent = new Intent(mContext, AppChooserActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         intent.putParcelableArrayListExtra(AppChooserActivity.EXTRA_APDU_SERVICES, services);
@@ -1511,8 +1536,9 @@ public class HostEmulationManager {
                     boolean isPayment = false;
                     if (resolveInfo.services.size() > 0) {
                         NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, mLastSelectedAid);
-                        launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services,
-                                mActiveServiceName, resolveInfo.category);
+                        launchResolver(mLastSelectedAid,
+                            (ArrayList<ApduServiceInfo>)resolveInfo.services,
+                            mActiveServiceName, resolveInfo.category);
                     }
                 }
             }
