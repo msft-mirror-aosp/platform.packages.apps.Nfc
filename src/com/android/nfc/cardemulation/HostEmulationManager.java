@@ -890,6 +890,20 @@ public class HostEmulationManager {
                                 bindServiceIfNeededLocked(user.getIdentifier(), resolvedService);
                         if (existingService != null) {
                             Log.d(TAG, "Binding to existing service");
+                            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                                    NfcEventProto.EventType.newBuilder()
+                                            .setCeRoutedAid(
+                                                NfcEventProto.NfcCeRoutedAid.newBuilder()
+                                                    .setAid(selectAid)
+                                                    .setComponentInfo(
+                                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                                            .setPackageName(
+                                                                resolvedService.getPackageName())
+                                                            .setClassName(
+                                                                resolvedService.getClassName())
+                                                            .build())
+                                                    .build())
+                                            .build());
                             sendDataToServiceLocked(existingService, data);
                         } else {
                             // Waiting for service to be bound
@@ -1404,6 +1418,21 @@ public class HostEmulationManager {
                     if (mStatsdUtils != null) {
                         mStatsdUtils.notifyCardEmulationEventServiceBound();
                     }
+                    NfcInjector.getInstance().getNfcEventLog().logEvent(
+                            NfcEventProto.EventType.newBuilder()
+                                    .setCeRoutedAid(
+                                        NfcEventProto.NfcCeRoutedAid.newBuilder()
+                                            .setAid(mLastSelectedAid == null
+                                                        ? "" : mLastSelectedAid)
+                                            .setComponentInfo(
+                                                NfcEventProto.NfcComponentInfo.newBuilder()
+                                                    .setPackageName(
+                                                        name.getPackageName())
+                                                    .setClassName(
+                                                        name.getClassName())
+                                                    .build())
+                                            .build())
+                                    .build());
                     sendDataToServiceLocked(messenger, mSelectApdu);
                     mSelectApdu = null;
                 } else if (mPollingFramesToSend != null && mPollingFramesToSend.containsKey(name)) {
