@@ -20,6 +20,8 @@ from binascii import hexlify
 def responses_match(expected: bytes, actual: bytes) -> bool:
     if expected == actual:
         return True
+    if expected is None or actual is None:
+        return False
     if len(expected) == 0 or len(actual) == 0:
         return False
     if expected[0] != 0x00 and actual[0] == 0x00:
