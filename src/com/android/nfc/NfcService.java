@@ -571,6 +571,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onRemoteEndpointDiscovered(TagEndpoint tag) {
+      Log.d(TAG, "onRemoteEndpointDiscovered()");
         sendMessage(NfcService.MSG_NDEF_TAG, tag);
     }
 
@@ -642,6 +643,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 .build());
             }
         }
+    }
+
+
+    /** Notifies Removal Detection procedure completed,
+        endpoint deactivation reason returned by NFCC */
+    public void onEndpointRemoved(int reason) {
+       Log.d(TAG, "onEndpointRemoved() - Deactivation reason is " + reason);
+       if (mIsWlcEnabled && (mNfcCharging.NfcChargingMode == true)) {
+         mNfcCharging.onEndpointRemoved(reason);
+       }
+       /* else send intent to notify other applications */
+    }
+
+    public boolean startRemovalDetection(int waiting_time_int) {
+      return mDeviceHost.detectEpRemoval(waiting_time_int);
     }
 
     @Override

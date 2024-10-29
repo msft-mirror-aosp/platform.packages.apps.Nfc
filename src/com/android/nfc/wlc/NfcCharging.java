@@ -1049,6 +1049,14 @@ public class NfcCharging {
         }
     }
 
+    public void onEndpointRemoved(int reason) {
+        Log.d(TAG, "onEndpointRemoved");
+
+        mWatchdogWlc.setTimeout(0);
+        WLCState = STATE_2;
+        mWatchdogWlc.interrupt();
+      }
+
     public String convert_state_2_str(int state) {
         switch (state) {
             case STATE_2:

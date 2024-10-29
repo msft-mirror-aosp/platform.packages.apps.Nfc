@@ -63,6 +63,8 @@ public interface DeviceHost {
         public void onSeSelected();
 
         public void onCommandTimeout();
+
+        public void onEndpointRemoved(int reason);
     }
 
     public interface TagEndpoint {
@@ -304,7 +306,10 @@ public interface DeviceHost {
     /**
      * Sends Vendor NCI command
      */
+
     NfcVendorNciResponse sendRawVendorCmd(int mt, int gid, int oid, byte[] payload);
+
+    public boolean detectEpRemoval(int waiting_time_int);
 
     void enableVendorNciNotifications(boolean enabled);
 
