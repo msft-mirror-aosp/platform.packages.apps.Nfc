@@ -23,9 +23,11 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.nfc.ComponentNameAndUser;
+import android.nfc.INfcOemExtensionCallback;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.Utils;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.sysprop.NfcProperties;
@@ -51,6 +53,7 @@ import java.util.TreeMap;
 
 public class RegisteredAidCache {
     static final String TAG = "RegisteredAidCache";
+    private INfcOemExtensionCallback mNfcOemExtensionCallback;
 
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
     private static final boolean VDBG = false; // turn on for local testing.
@@ -1071,6 +1074,10 @@ public class RegisteredAidCache {
         return power;
     }
 
+    public void setOemExtension(INfcOemExtensionCallback nfcOemExtensionCallback) {
+        mNfcOemExtensionCallback = nfcOemExtensionCallback;
+    }
+
     void updateRoutingLocked(boolean force) {
         if (!mNfcEnabled) {
             if (DBG) Log.d(TAG, "Not updating routing table because NFC is off.");
@@ -1192,7 +1199,14 @@ public class RegisteredAidCache {
             }
         }
         mRequiresScreenOnServiceExist = requiresScreenOnServiceExist;
-        mRoutingManager.configureRouting(routingEntries, force);
+        boolean isBufferFull = mRoutingManager.configureRouting(routingEntries, force);
+        if (isBufferFull && mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onRoutingTableFull();
+            } catch (RemoteException exception) {
+                Log.e(TAG, "Error in onLaunchRoutingTableFullDialog: " + exception);
+            }
+        }
     }
 
     public void onServicesUpdated(int userId, List<ApduServiceInfo> services) {
