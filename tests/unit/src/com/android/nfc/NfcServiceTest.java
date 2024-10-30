@@ -2119,4 +2119,91 @@ public final class NfcServiceTest {
         boolean result = mNfcService.mNfcAdapter.isControllerAlwaysOn();
         assertThat(result).isTrue();
     }
+
+
+    @Test
+    public void testDisableDta() throws RemoteException {
+        mNfcService.mNfcAdapter.getNfcDtaInterface("com.android.test");
+        NfcService.sIsDtaMode = true;
+        mNfcService.mNfcDtaService.disableDta();
+        verify(mDeviceHost).disableDtaMode();
+        assertThat(NfcService.sIsDtaMode).isFalse();
+    }
+
+    @Test
+    public void testEnableClient() throws RemoteException {
+        mNfcService.mNfcAdapter.getNfcDtaInterface("com.android.test");
+        boolean result = mNfcService.mNfcDtaService.enableClient("com.android.test",
+                0, 0, 0);
+        assertThat(result).isFalse();
+
+    }
+
+    @Test
+    public void testEnableDta() throws RemoteException {
+        mNfcService.mNfcAdapter.getNfcDtaInterface("com.android.test");
+        NfcService.sIsDtaMode = false;
+        mNfcService.mNfcDtaService.enableDta();
+        verify(mDeviceHost).enableDtaMode();
+        assertThat(NfcService.sIsDtaMode).isTrue();
+    }
+
+    @Test
+    public void testEnableServer() throws RemoteException {
+        mNfcService.mNfcAdapter.getNfcDtaInterface("com.android.test");
+        boolean result = mNfcService.mNfcDtaService.enableServer("com.android.test",
+                0, 0, 0, 0);
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    public void testRegisterMessageService() throws RemoteException {
+        mNfcService.mNfcAdapter.getNfcDtaInterface("com.android.test");
+        boolean result = mNfcService.mNfcDtaService
+                .registerMessageService("com.android.test");
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testPollingDelay() {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.NDEF);
+        when(tagEndpoint.reconnect()).thenReturn(false);
+        mNfcService.mScreenState = ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
+        msg.obj = tagEndpoint;
+        handler.handleMessage(msg);
+        verify(tagEndpoint).disconnect();
+        verify(mDeviceHost).startStopPolling(false);
+    }
+
+    @Test
+    public void testOnTagDisconnected() throws RemoteException {
+        Handler handler = mNfcService.getHandler();
+        Assert.assertNotNull(handler);
+        Message msg = handler.obtainMessage(NfcService.MSG_NDEF_TAG);
+        mNfcService.mState = NfcAdapter.STATE_ON;
+        DeviceHost.TagEndpoint tagEndpoint = mock(DeviceHost.TagEndpoint.class);
+        when(tagEndpoint.getConnectedTechnology()).thenReturn(TagTechnology.NDEF);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        when(tagEndpoint.findAndReadNdef()).thenReturn(ndefMessage);
+        msg.obj = tagEndpoint;
+        handler.handleMessage(msg);
+        ArgumentCaptor<DeviceHost.TagDisconnectedCallback> callbackArgumentCaptor
+                = ArgumentCaptor.forClass(DeviceHost.TagDisconnectedCallback.class);
+        verify(tagEndpoint, atLeastOnce()).startPresenceChecking(anyInt(),
+                callbackArgumentCaptor.capture());
+
+        DeviceHost.TagDisconnectedCallback callback = callbackArgumentCaptor.getValue();
+        Assert.assertNotNull(callback);
+        when(mPreferences.getBoolean(eq(PREF_NFC_ON), anyBoolean())).thenReturn(true);
+        INfcOemExtensionCallback oemExtensionCallback = mock(INfcOemExtensionCallback.class);
+        mNfcService.mNfcAdapter.registerOemExtensionCallback(oemExtensionCallback);
+        callback.onTagDisconnected();
+        assertThat(mNfcService.mCookieUpToDate).isLessThan(0);
+        verify(oemExtensionCallback).onTagConnected(anyBoolean(), any());
+    }
 }
