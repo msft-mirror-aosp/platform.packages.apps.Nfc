@@ -317,7 +317,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int NCI_MSG_PROP_ANDROID = 0x0C;
     private static final int NCI_MSG_PROP_ANDROID_POWER_SAVING = 0x01;
 
-    private static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
+    public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
 
     private final Looper mLooper;
     private final UserManager mUserManager;
@@ -525,35 +525,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public static NfcService getInstance() {
         return sService;
-    }
-
-    private static class NfcCallbackResultReceiver extends ResultReceiver {
-        CountDownLatch mCountDownLatch;
-        OnReceiveResultListener mOnReceiveResultListener;
-
-        public NfcCallbackResultReceiver(CountDownLatch latch, OnReceiveResultListener listener) {
-            super(null);
-            mCountDownLatch = latch;
-            mOnReceiveResultListener = listener;
-        }
-
-        @Override
-        protected void onReceiveResult(int resultCode, Bundle resultData) {
-            mOnReceiveResultListener.onReceiveResult(resultCode == 1);
-            mCountDownLatch.countDown();
-        }
-    }
-
-    private static class OnReceiveResultListener {
-        boolean result;
-
-        void onReceiveResult(boolean result) {
-            this.result = result;
-        }
-
-        boolean getResult() {
-            return result;
-        }
     }
 
     @Override
@@ -906,7 +877,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     boolean receiveOemCallbackResult(int action) {
         CountDownLatch latch = new CountDownLatch(1);
-        OnReceiveResultListener listener = new OnReceiveResultListener();
+        NfcCallbackResultReceiver.OnReceiveResultListener listener =
+                new NfcCallbackResultReceiver.OnReceiveResultListener();
         ResultReceiver receiver = new NfcCallbackResultReceiver(latch, listener);
         try {
             switch (action) {
@@ -934,7 +906,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (!success) {
                 return false;
             } else {
-                return listener.getResult();
+                return listener.getResultCode() == 1;
             }
         } catch (InterruptedException ie) {
             return false;
@@ -3112,6 +3084,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (mCardEmulationManager != null) {
                 mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
             }
+            if(mNfcDispatcher != null) {
+                mNfcDispatcher.setOemExtension(mNfcOemExtensionCallback);
+            }
         }
 
         @Override
@@ -3122,6 +3097,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             mNfcOemExtensionCallback = null;
             if (mCardEmulationManager != null) {
                 mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+            }
+            if (mNfcDispatcher != null) {
+                mNfcDispatcher.setOemExtension(mNfcOemExtensionCallback);
             }
         }
         @Override
