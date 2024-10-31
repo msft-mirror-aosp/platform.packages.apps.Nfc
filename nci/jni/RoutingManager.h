@@ -54,6 +54,7 @@ class RoutingManager {
   static const int CLEAR_AID_ENTRIES = 0x01;
   static const int CLEAR_PROTOCOL_ENTRIES = 0x02;
   static const int CLEAR_TECHNOLOGY_ENTRIES = 0x04;
+  SyncEvent mEeUpdateEvent;
 
  private:
   RoutingManager();
@@ -128,7 +129,6 @@ class RoutingManager {
   static const JNINativeMethod sMethods[];
   SyncEvent mEeRegisterEvent;
   SyncEvent mRoutingEvent;
-  SyncEvent mEeUpdateEvent;
   SyncEvent mEeInfoEvent;
   SyncEvent mEeSetModeEvent;
   SyncEvent mEePwrAndLinkCtrlEvent;
