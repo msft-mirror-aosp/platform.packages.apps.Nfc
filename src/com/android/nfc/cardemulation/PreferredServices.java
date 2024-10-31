@@ -218,7 +218,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
                         mContext.createContextAsUser(uh, 0).getContentResolver(),
                         Constants.SETTINGS_SECURE_NFC_PAYMENT_DEFAULT_COMPONENT);
             } catch (IllegalStateException e) {
-                Log.d(TAG, "Fail to get PackageManager for user: " + uh);
+                Log.d(TAG, "Fail to get default payment component for user: " + uh);
                 continue;
             }
 
