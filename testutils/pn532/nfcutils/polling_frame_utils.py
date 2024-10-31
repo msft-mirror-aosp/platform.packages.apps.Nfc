@@ -75,6 +75,16 @@ class PollingFrameTestCase:
             extras["bitrate"] = self.configuration.bitrate
         return {"type": self.configuration.type, "data": self.data, **extras}
 
+    @property
+    def expected_data(self):
+        """Returns all data variations that should not cause a test to fail"""
+        return [*self.success_data, *self.warning_data]
+
+    @property
+    def expected_types(self):
+        """Returns all types that should not cause a test to fail"""
+        return self.success_types
+
 
 @dataclass
 class PollingFrame:
@@ -173,7 +183,7 @@ _F_424 = TransceiveConfiguration(
 #    - 7-bit short frames (Type A only);
 #    - 424 kbps (Type F only)
 # 3) Full frames without CRC (Types A,B only)
-# 4) Full frames with CRC (Types A,B,F)
+# 4) Full frames with CRC (Types A,B only, F does not use PLF, no need to test)
 
 # Placeholder test cases for ON/OFF
 POLLING_FRAME_ON = PollingFrameTestCase(_O, "01", ["O"], ["01"])
@@ -187,7 +197,7 @@ POLLING_FRAMES_TYPE_A_SPECIAL = [
     # REQA
     PollingFrameTestCase(_A_SHORT, "52", ["A"], ["52"], ["26"]),
     # Some readers send SLP_REQ in the polling loop
-    PollingFrameTestCase(_A, "5000", ["A"], ["5000"]),
+    PollingFrameTestCase(_A, "5000", ["A", "U"], ["5000"]),
 ]
 # 2) 7-bit short frames
 POLLING_FRAMES_TYPE_A_SHORT = [
@@ -212,7 +222,13 @@ POLLING_FRAMES_TYPE_A_LONG = [
     PollingFrameTestCase(_A, "ff001122", ["U"]),
     PollingFrameTestCase(_A, "ff00112233445566", ["U"]),
     PollingFrameTestCase(_A, "ff00112233445566778899aa", ["U"]),
-    PollingFrameTestCase(_A, "ff00112233445566778899aabbccddee", ["U"]),
+    PollingFrameTestCase(_A, "000102030405060708090a0b0c0d", ["U"]),
+    PollingFrameTestCase(_A, "101112131415161718191a1b1c1d1e", ["U"]),
+    PollingFrameTestCase(_A, "202122232425262728292a2b2c2d2e2f", ["U"]),
+    PollingFrameTestCase(_A, "303132333435363738393a3b3c3d3e3f30", ["U"]),
+    PollingFrameTestCase(_A, "404142434445464748494a4b4c4d4e4f4041", ["U"]),
+    PollingFrameTestCase(_A, "505152535455565758595a5b5c5d5e5f505152", ["U"]),
+    PollingFrameTestCase(_A, "606162636465666768696a6b6c6d6e6f60616263", ["U"]),
 ]
 
 # Type B
@@ -254,10 +270,12 @@ POLLING_FRAMES_TYPE_B_LONG = [
     PollingFrameTestCase(_B, "ff00112233445566778899aa", ["U"]),
     # 16 bytes
     PollingFrameTestCase(_B, "ff00112233445566778899aabbccddee", ["U"]),
+    # 20 bytes
+    PollingFrameTestCase(_B, "ff00112233445566778899aabbccddeeff001122", ["U"]),
 ]
 
 # Type F
-# 1/2)
+# 1)
 POLLING_FRAMES_TYPE_F_SPECIAL = [
     # 1.0) Common
     #   SENSF_REQ, SC, 0xffff, RC 0x00, TS 0x00
@@ -280,22 +298,6 @@ POLLING_FRAMES_TYPE_F_SPECIAL = [
     #   SENSF_REQ, SC, 0x0003
     PollingFrameTestCase(_F_424, "00ffff0100", ["F"]),
 ]
-# 4)
-POLLING_FRAMES_TYPE_F_LONG = [
-    PollingFrameTestCase(_F, "ffaabbccdd", ["F", "U"]),
-    PollingFrameTestCase(_F, "ff00112233", ["F", "U"]),
-    # 2 bytes
-    PollingFrameTestCase(_F, "ff00", ["F", "U"]),
-    # 4 bytes
-    PollingFrameTestCase(_F, "ff001122", ["F", "U"]),
-    # 8 bytes
-    PollingFrameTestCase(_F, "ff00112233445566", ["F", "U"]),
-    # 12 bytes
-    PollingFrameTestCase(_F, "ff00112233445566778899aa", ["F", "U"]),
-    # 16 bytes
-    PollingFrameTestCase(_F, "ff00112233445566778899aabbccddee", ["F", "U"]),
-]
-
 
 POLLING_FRAME_ALL_TEST_CASES = [
     POLLING_FRAME_ON,
@@ -307,7 +309,6 @@ POLLING_FRAME_ALL_TEST_CASES = [
     *POLLING_FRAMES_TYPE_B_NOCRC,
     *POLLING_FRAMES_TYPE_B_LONG,
     *POLLING_FRAMES_TYPE_F_SPECIAL,
-    *POLLING_FRAMES_TYPE_F_LONG,
     POLLING_FRAME_OFF,
 ]
 
@@ -451,7 +452,15 @@ _test_apply_original_frame_ordering()
 _FRAME_EVENT_TIMEOUT_SEC = 1
 
 
-def poll_and_observe_frames(pn532, emulator, testcases, **kwargs):
+def poll_and_observe_frames(
+    pn532,
+    emulator,
+    testcases,
+    *,
+    restore_original_frame_ordering=False,
+    ignore_field_off_event_timeout=False,
+    **kwargs,
+):
     """Handles broadcasting polling loop events for provided list of test cases.
     Provided set of test cases MUST contain a complete polling loop, starting
     with 'O' and ending with 'X' event.
@@ -493,8 +502,30 @@ def poll_and_observe_frames(pn532, emulator, testcases, **kwargs):
         if off_event_handler is not None:
             off_event_handler.waitAndGet("XEvent", _FRAME_EVENT_TIMEOUT_SEC)
     except (Exception, ) as e:
-        emulator.log.warning( f"Timed out waiting for 'X' event due to {e}")
+        if not ignore_field_off_event_timeout:
+            emulator.log.warning( f"Timed out waiting for 'X' event due to {e}")
 
     frames = [PollingFrame.from_dict(f) for f in emulator.getPollingFrames()]
 
+    if restore_original_frame_ordering:
+        # Attempt to revert expedited frame delivery ordering for U and F frames
+        # while keeping timestamp wrapping into account
+        frames = apply_original_frame_ordering(frames)
+
     return frames
+
+
+def get_frame_test_stats(testcases, frames, timestamps=()):
+    """Creates a dict containing test info for error output"""
+    if len(timestamps) == 0:
+        timestamps = [-1] * len(testcases)
+
+    return  {
+        "frames_sent_count": len(testcases),
+        "frames_received_count": len(frames),
+        "frames_sent": [
+            testcase.format_for_error(timestamp=timestamp)
+            for timestamp, testcase in zip(timestamps, testcases)
+        ],
+        "frames_received": [frame.to_dict() for frame in frames],
+    }
