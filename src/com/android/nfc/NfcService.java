@@ -593,7 +593,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     public void onHostCardEmulationData(int technology, byte[] data) {
         if (mCardEmulationManager != null) {
             mCardEmulationManager.onHostCardEmulationData(technology, data);
-            if (android.nfc.Flags.nfcPersistLog()) {
+            if (android.nfc.Flags.nfcPersistLog() && NFC_VENDOR_DEBUG_ENABLED) {
                 mNfcEventLog.logEvent(
                         NfcEventProto.EventType.newBuilder()
                                 .setHostCardEmulationData(
@@ -646,12 +646,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         if (mStatsdUtils != null) {
             mStatsdUtils.logFieldChanged(true, 0);
         }
-        if (android.nfc.Flags.nfcPersistLog()) {
+        if (android.nfc.Flags.nfcPersistLog() && NFC_VENDOR_DEBUG_ENABLED) {
             mNfcEventLog.logEvent(
                     NfcEventProto.EventType.newBuilder()
                             .setRemoteFieldStateChange(
                                     NfcEventProto.NfcRemoteFieldStateChange.newBuilder()
-                                            .setEnable(true)
+                                            .setFieldOn(true)
                                             .build())
                             .build());
         }
@@ -672,12 +672,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         if (mStatsdUtils != null) {
             mStatsdUtils.logFieldChanged(false, 0);
         }
-        if (android.nfc.Flags.nfcPersistLog()) {
+        if (android.nfc.Flags.nfcPersistLog() && NFC_VENDOR_DEBUG_ENABLED) {
             mNfcEventLog.logEvent(
                     NfcEventProto.EventType.newBuilder()
                             .setRemoteFieldStateChange(
                                     NfcEventProto.NfcRemoteFieldStateChange.newBuilder()
-                                            .setEnable(false)
+                                            .setFieldOn(false)
                                             .build())
                             .build());
         }
