@@ -48,9 +48,14 @@ class RoutingManager {
   void updateRoutingTable();
   void eeSetPwrAndLinkCtrl(uint8_t config);
   void updateIsoDepProtocolRoute(int route);
-  tNFA_TECHNOLOGY_MASK updateTechnologyABFRoute(int route);
+  tNFA_TECHNOLOGY_MASK updateTechnologyABFRoute(int route, int felicaRoute);
+  void updateSystemCodeRoute(int route);
   void clearRoutingEntry(int clearFlags);
   void setEeTechRouteUpdateRequired();
+  void notifyEeAidSelected(tNFC_AID& aid, tNFA_HANDLE ee_handle);
+  void notifyEeProtocolSelected(uint8_t protocol, tNFA_HANDLE ee_handle);
+  void notifyEeTechSelected(uint8_t tech, tNFA_HANDLE ee_handle);
+  bool getNameOfEe(tNFA_HANDLE ee_handle, std::string& eeName);
 
   static const int CLEAR_AID_ENTRIES = 0x01;
   static const int CLEAR_PROTOCOL_ENTRIES = 0x02;
@@ -89,6 +94,10 @@ class RoutingManager {
   static int com_android_nfc_cardemulation_doGetDefaultRouteDestination(
       JNIEnv* e);
   static int com_android_nfc_cardemulation_doGetDefaultOffHostRouteDestination(
+      JNIEnv* e);
+  static int com_android_nfc_cardemulation_doGetDefaultFelicaRouteDestination(
+      JNIEnv* e);
+  static int com_android_nfc_cardemulation_doGetDefaultScRouteDestination(
       JNIEnv* e);
   static jbyteArray com_android_nfc_cardemulation_doGetOffHostUiccDestination(
       JNIEnv* e);

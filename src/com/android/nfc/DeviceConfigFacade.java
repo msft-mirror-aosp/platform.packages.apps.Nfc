@@ -47,6 +47,10 @@ public class DeviceConfigFacade {
     private boolean mReaderOptionDefault;
     private boolean mSecureNfcCapable;
     private boolean mSecureNfcDefault;
+    private String mDefaultRoute;
+    private String mDefaultIsoDepRoute;
+    private String mDefaultOffHostRoute;
+    private String mDefaultScRoute;
 
     private static DeviceConfigFacade sInstance;
     public static DeviceConfigFacade getInstance(Context context, Handler handler) {
@@ -93,6 +97,22 @@ public class DeviceConfigFacade {
         mSecureNfcDefault = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_NFC,
             KEY_SECURE_NFC_DEFAULT,
             mContext.getResources().getBoolean(R.bool.secure_nfc_default));
+
+        mDefaultRoute = DeviceConfig.getString(DEVICE_CONFIG_NAMESPACE_NFC,
+                "nfc_default_route",
+                mContext.getResources().getString(R.string.nfc_default_route));
+
+        mDefaultIsoDepRoute = DeviceConfig.getString(DEVICE_CONFIG_NAMESPACE_NFC,
+                "nfc_default_isodep_route",
+                mContext.getResources().getString(R.string.nfc_default_isodep_route));
+
+        mDefaultOffHostRoute = DeviceConfig.getString(DEVICE_CONFIG_NAMESPACE_NFC,
+                "nfc_default_offhost_route",
+                mContext.getResources().getString(R.string.nfc_default_offhost_route));
+
+        mDefaultScRoute = DeviceConfig.getString(DEVICE_CONFIG_NAMESPACE_NFC,
+                "nfc_default_sc_route",
+                mContext.getResources().getString(R.string.nfc_default_sc_route));
     }
 
     private boolean isSecureNfcCapableDefault() {
@@ -121,4 +141,8 @@ public class DeviceConfigFacade {
     public boolean getDefaultReaderOption() { return mReaderOptionDefault; }
     public boolean isSecureNfcCapable() {return mSecureNfcCapable; }
     public boolean getDefaultSecureNfcState() { return mSecureNfcDefault; }
+    public String getDefaultRoute() { return mDefaultRoute; }
+    public String getDefaultIsoDepRoute() { return mDefaultIsoDepRoute; }
+    public String getDefaultOffHostRoute() { return mDefaultOffHostRoute; }
+    public String getDefaultScRoute() { return mDefaultScRoute; }
 }
