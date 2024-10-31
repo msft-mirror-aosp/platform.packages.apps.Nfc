@@ -108,11 +108,11 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         /**
          * Notify when preferred payment service is changed
          */
-        void onPreferredPaymentServiceChanged(int userId, ComponentName service);
+        void onPreferredPaymentServiceChanged(ComponentNameAndUser service);
         /**
          * Notify when preferred foreground service is changed
          */
-        void onPreferredForegroundServiceChanged(int userId, ComponentName service);
+        void onPreferredForegroundServiceChanged(ComponentNameAndUser service);
     }
 
     public PreferredServices(Context context, RegisteredServicesCache serviceCache,
@@ -165,7 +165,8 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
     public void onWalletRoleHolderChanged(String defaultWalletHolderPackageName, int userId) {
         if (defaultWalletHolderPackageName == null) {
             mDefaultWalletHolderPaymentService = null;
-            mCallback.onPreferredPaymentServiceChanged(userId, null);
+            mUserIdDefaultWalletHolder = userId;
+            mCallback.onPreferredPaymentServiceChanged(new ComponentNameAndUser(userId, null));
             return;
         }
         List<ApduServiceInfo> serviceInfos = mServiceCache.getInstalledServices(userId);
@@ -188,13 +189,14 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
                 }
             }
         }
-        mUserIdDefaultWalletHolder = userId;
         ComponentName candidate = !roleHolderPaymentServices.isEmpty()
                 ? roleHolderPaymentServices.get(0) : null;
-        if (!Objects.equals(candidate, mDefaultWalletHolderPaymentService)) {
-            mCallback.onPreferredPaymentServiceChanged(userId, candidate);
+        if (!Objects.equals(candidate, mDefaultWalletHolderPaymentService) ||
+                userId != mUserIdDefaultWalletHolder) {
+            mDefaultWalletHolderPaymentService = candidate;
+            mUserIdDefaultWalletHolder = userId;
+            mCallback.onPreferredPaymentServiceChanged(new ComponentNameAndUser(userId, candidate));
         }
-        mDefaultWalletHolderPaymentService = candidate;
     }
 
     void loadDefaultsFromSettings(int userId, boolean force) {
@@ -267,7 +269,8 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         }
         // Notify if anything changed
         if (!mWalletRoleObserver.isWalletRoleFeatureEnabled() && (paymentDefaultChanged || force)) {
-            mCallback.onPreferredPaymentServiceChanged(newUser.getIdentifier(), newDefault);
+            mCallback.onPreferredPaymentServiceChanged(
+                    new ComponentNameAndUser(newUser.getIdentifier(), newDefault));
         }
         if (paymentPreferForegroundChanged || force) {
             computePreferredForegroundService();
@@ -302,7 +305,8 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         }
         // Notify if anything changed
         if (changed) {
-            mCallback.onPreferredForegroundServiceChanged(preferredServiceUserId, preferredService);
+            mCallback.onPreferredForegroundServiceChanged(
+                    new ComponentNameAndUser(preferredServiceUserId, preferredService));
         }
     }
 
