@@ -50,7 +50,9 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.FastXmlSerializer;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.Utils;
+import com.android.nfc.cardemulation.util.NfcFileUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -58,12 +60,10 @@ import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -102,8 +102,8 @@ public class RegisteredServicesCache {
     // mUserServices holds the card emulation services that are running for each user
     final SparseArray<UserServices> mUserServices = new SparseArray<UserServices>();
     final Callback mCallback;
-    final SettingsFile mDynamicSettingsFile;
-    final SettingsFile mOthersFile;
+    SettingsFile mDynamicSettingsFile;
+    SettingsFile mOthersFile;
     final ServiceParser mServiceParser;
     final RoutingOptionManager mRoutingOptionManager;
 
@@ -334,6 +334,30 @@ public class RegisteredServicesCache {
     public void onManagedProfileChanged() {
         synchronized (mLock) {
             refreshUserProfilesLocked(true);
+        }
+    }
+
+    void migrateFromCe(Context ceContext) {
+        File ceFilesDir = ceContext.getFilesDir();
+        File deFilesDir = mContext.getFilesDir();
+        if (NfcFileUtils.isEmptyDir(ceFilesDir)) {
+            Log.d(TAG, "Nothing to migrate from CE data");
+            return;
+        }
+        if (NfcFileUtils.moveFiles(ceFilesDir, deFilesDir) < 0) {
+            Log.e(TAG, "Failed to move directory from " + ceFilesDir + " to " + deFilesDir);
+            return;
+        }
+        Log.i(TAG, "Moved directory from " + ceFilesDir + " to " + deFilesDir
+            + ". Reinitializing cache.");
+        mDynamicSettingsFile = new SettingsFile(mContext, AID_XML_PATH);
+        mOthersFile = new SettingsFile(mContext, OTHER_STATUS_PATH);
+    }
+
+    public void migrateSettingsFilesFromCe(Context ceContext) {
+        synchronized (mLock) {
+            migrateFromCe(ceContext);
+            initialize();
         }
     }
 
@@ -970,7 +994,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1013,7 +1037,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1054,7 +1078,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1087,7 +1111,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1117,7 +1141,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1145,7 +1169,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1175,7 +1199,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1204,7 +1228,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1288,7 +1312,7 @@ public class RegisteredServicesCache {
             String category) {
         ApduServiceInfo serviceInfo = getService(userId, componentName);
         if (serviceInfo != null) {
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 Log.e(TAG, "UID mismatch");
                 return null;
             }
@@ -1307,7 +1331,7 @@ public class RegisteredServicesCache {
             UserServices services = findOrCreateUserLocked(userId);
             ApduServiceInfo serviceInfo = getService(userId, componentName);
             if (serviceInfo != null) {
-                if (serviceInfo.getUid() != uid) {
+                if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                     // Calling from different uid
                     Log.e(TAG, "UID mismatch");
                     return false;
