@@ -23,6 +23,7 @@ import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_LOCKED;
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.Application;
@@ -3119,6 +3120,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "Unregister the oem extension callback");
             NfcPermissions.enforceAdminPermissions(mContext);
             mNfcOemExtensionCallback = null;
+            if (mCardEmulationManager != null) {
+                mCardEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+            }
         }
         @Override
         public List<String> fetchActiveNfceeList() throws RemoteException {
@@ -4219,6 +4223,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             return;
                         }
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
+                            if (mNfcOemExtensionCallback != null) {
+                                try {
+                                    mNfcOemExtensionCallback.onRoutingChanged();
+                                } catch (RemoteException e) {
+                                    Log.e(TAG, "onRoutingChanged failed",e);
+                                }
+                            }
                             mDeviceHost.commitRouting();
                         } else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
@@ -4269,6 +4280,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 @Override
                                 public void onTagDisconnected() {
                                     mCookieUpToDate = -1;
+                                    executeOemOnTagConnectedCallback(false, null);
                                     applyRouting(false);
                                 }
                             };
@@ -4316,6 +4328,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         if (!tag.reconnect()) {
                             tag.disconnect();
                             if (DBG) Log.d(TAG, "Read NDEF error");
+                            executeOemOnTagConnectedCallback(false, null);
                             if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
                                 if (mReadErrorCount < mReadErrorCountMax) {
                                     mReadErrorCount++;
@@ -4795,6 +4808,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Tag tag = new Tag(tagEndpoint.getUid(), tagEndpoint.getTechList(),
                         tagEndpoint.getTechExtras(), tagEndpoint.getHandle(),
                         mCookieUpToDate, mNfcTagService);
+                executeOemOnTagConnectedCallback(true, tag);
                 registerTagObject(tagEndpoint);
                 if (readerParams != null) {
                     try {
@@ -4825,6 +4839,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 int dispatchResult = mNfcDispatcher.dispatchTag(tag);
                 if (dispatchResult == NfcDispatcher.DISPATCH_FAIL) {
                     if (DBG) Log.d(TAG, "Tag dispatch failed");
+                    executeOemOnTagConnectedCallback(false, null);
                     unregisterObject(tagEndpoint.getHandle());
                     if (mPollDelayTime > NO_POLL_DELAY) {
                         tagEndpoint.stopPresenceChecking();
@@ -4870,6 +4885,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             } catch (Exception e) {
                 Log.e(TAG, "Tag creation exception, not dispatching.", e);
                 return;
+            }
+        }
+    }
+
+    private void executeOemOnTagConnectedCallback(boolean connected, @Nullable Tag tag) {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                if (tag == null) {
+                    tag = Tag.createMockTag(new byte[]{0x00},
+                        new int[]{TagTechnology.NDEF}, new Bundle[]{}, mCookieUpToDate);
+                }
+                mNfcOemExtensionCallback.onTagConnected(connected, tag);
+            } catch (RemoteException e) {
+                Log.e(TAG, e.toString());
             }
         }
     }
