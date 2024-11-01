@@ -102,7 +102,7 @@ message NfcHostCardEmulationData {
 }
 
 message NfcRemoteFieldStateChange {
-  required bool enable = 1;
+  required bool field_on = 1;
 }
 
 message NfcDiscoveryTechnologyUpdate {
