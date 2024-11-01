@@ -877,6 +877,13 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
           SyncEventGuard guard(gNfaGetConfigEvent);
           gNfaGetConfigEvent.notifyOne();
         }
+        {
+          LOG(DEBUG) << StringPrintf(
+              "%s: aborting RoutingManager::getInstance().mEeUpdateEvent",
+              __func__);
+          SyncEventGuard guard(RoutingManager::getInstance().mEeUpdateEvent);
+          RoutingManager::getInstance().mEeUpdateEvent.notifyOne();
+        }
       } else {
         nativeNfcTag_abortWaits();
         NfcTag::getInstance().abort();
