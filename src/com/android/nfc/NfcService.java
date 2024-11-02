@@ -16,6 +16,8 @@
 
 package com.android.nfc;
 
+import static android.Manifest.permission.BIND_NFC_SERVICE;
+
 import static com.android.nfc.NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
 import static com.android.nfc.NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
 import static com.android.nfc.NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__WALLET_ROLE_HOLDER;
@@ -1174,6 +1176,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         // If overlay is set, delay the NFC boot up until the OEM extension indicates it is ready to
         // proceed with NFC bootup.
         if (mContext.getResources().getBoolean(R.bool.enable_oem_extension)) {
+            // Send intent for OEM extension to initialize.
+            Intent intent = new Intent(NfcOemExtension.ACTION_OEM_EXTENSION_INIT);
+            mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT, BIND_NFC_SERVICE);
+            Log.i(TAG, "Sent intent for OEM extension to initialize.");
             return;
         }
         new EnableDisableTask().execute(TASK_BOOT);
