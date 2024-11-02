@@ -259,6 +259,7 @@ public final class NfcServiceTest {
         when(NfcProperties.info_antpos_X()).thenReturn(List.of());
         when(NfcProperties.info_antpos_Y()).thenReturn(List.of());
         when(NfcProperties.initialized()).thenReturn(Optional.of(Boolean.TRUE));
+        when(NfcProperties.vendor_debug_enabled()).thenReturn(Optional.of(Boolean.TRUE));
         when(mPackageManager.getPackageUid(PKG_NAME, 0)).thenReturn(Binder.getCallingUid());
         createNfcService();
     }
@@ -1313,7 +1314,7 @@ public final class NfcServiceTest {
         verify(mApplication).sendBroadcastAsUser(any(), any());
         verify(mApplication).sendBroadcast(any());
         verify(mStatsdUtils).logFieldChanged(anyBoolean(), anyInt());
-        verify(mNfcEventLog, times(3)).logEvent(any());
+        verify(mNfcEventLog, times(2)).logEvent(any());
     }
 
     @Test
@@ -1334,7 +1335,7 @@ public final class NfcServiceTest {
         verify(mCardEmulationManager).onFieldChangeDetected(anyBoolean());
         verify(mApplication).sendBroadcastAsUser(any(), any());
         verify(mStatsdUtils).logFieldChanged(anyBoolean(), anyInt());
-        verify(mNfcEventLog, times(3)).logEvent(any());
+        verify(mNfcEventLog, times(2)).logEvent(any());
     }
 
     @Test
@@ -1993,7 +1994,7 @@ public final class NfcServiceTest {
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         adapterService.notifyTestHceData(Ndef.NDEF, "test".getBytes());
         verify(mCardEmulationManager).onHostCardEmulationData(anyInt(), any());
-        verify(mNfcEventLog, times(2)).logEvent(any());
+        verify(mNfcEventLog, times(1)).logEvent(any());
     }
 
     @Test
