@@ -67,11 +67,16 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 /**
  * This class is inspired by android.content.pm.RegisteredServicesCache
@@ -120,6 +125,8 @@ public class RegisteredServicesCache {
 
     static class DynamicSettings {
         public final int uid;
+        public final Map<String, Boolean> pollingLoopFilters = new HashMap<>();
+        public final Map<String, Boolean> pollingLoopPatternFilters = new HashMap<>();
         public final HashMap<String, AidGroup> aidGroups = new HashMap<>();
         public String offHostSE;
         public String shouldDefaultToObserveModeStr;
@@ -536,6 +543,15 @@ public class RegisteredServicesCache {
                     for (AidGroup group : dynamicSettings.aidGroups.values()) {
                         serviceInfo.setDynamicAidGroup(group);
                     }
+                    for (Map.Entry<String, Boolean> filter : dynamicSettings.pollingLoopFilters
+                            .entrySet()) {
+                        serviceInfo.addPollingLoopFilter(filter.getKey(), filter.getValue());
+                    }
+                    for (Map.Entry<String, Boolean> filter : dynamicSettings
+                            .pollingLoopPatternFilters
+                            .entrySet()) {
+                        serviceInfo.addPollingLoopPatternFilter(filter.getKey(), filter.getValue());
+                    }
                     if (dynamicSettings.offHostSE != null) {
                         serviceInfo.setOffHostSecureElement(dynamicSettings.offHostSE);
                     }
@@ -686,6 +702,8 @@ public class RegisteredServicesCache {
                 String currentOffHostSE = null;
                 String shouldDefaultToObserveModeStr = null;
                 ArrayList<AidGroup> currentGroups = new ArrayList<AidGroup>();
+                Map<String, Boolean> plFilters = new HashMap<>();
+                Map<String, Boolean> plPatternFilters = new HashMap<>();
                 while (eventType != XmlPullParser.END_DOCUMENT) {
                     tagName = parser.getName();
                     if (eventType == XmlPullParser.START_TAG) {
@@ -718,6 +736,19 @@ public class RegisteredServicesCache {
                                 Log.e(TAG, "Could not parse AID group.");
                             }
                         }
+                        if ("pl_filter".equals(tagName) && parser.getDepth() == 4 && inService) {
+                            String filter = parser.getAttributeValue(null, "value");
+                            String autoTransact = parser
+                                    .getAttributeValue(null, "auto_transact");
+                            plFilters.put(filter, Boolean.parseBoolean(autoTransact));
+                        }
+                        if ("pl_pattern_filter".equals(tagName) && parser.getDepth() == 4
+                                && inService) {
+                            String pattern = parser.getAttributeValue(null, "value");
+                            String autoTransact = parser
+                                    .getAttributeValue(null, "auto_transact");
+                            plPatternFilters.put(pattern, Boolean.parseBoolean(autoTransact));
+                        }
                     } else if (eventType == XmlPullParser.END_TAG) {
                         if ("service".equals(tagName)) {
                             // See if we have a valid service
@@ -730,6 +761,8 @@ public class RegisteredServicesCache {
                                 for (AidGroup group : currentGroups) {
                                     dynSettings.aidGroups.put(group.getCategory(), group);
                                 }
+                                dynSettings.pollingLoopFilters.putAll(plFilters);
+                                dynSettings.pollingLoopPatternFilters.putAll(plPatternFilters);
                                 dynSettings.offHostSE = currentOffHostSE;
                                 dynSettings.shouldDefaultToObserveModeStr
                                         = shouldDefaultToObserveModeStr;
@@ -741,6 +774,8 @@ public class RegisteredServicesCache {
                             }
                             currentUid = -1;
                             currentComponent = null;
+                            plFilters.clear();
+                            plPatternFilters.clear();
                             currentGroups.clear();
                             inService = false;
                             currentOffHostSE = null;
@@ -908,6 +943,26 @@ public class RegisteredServicesCache {
                     for (AidGroup group : service.getValue().aidGroups.values()) {
                         group.writeAsXml(out);
                     }
+                    out.startTag(null , "pl_filters");
+                    for (Map.Entry<String, Boolean> filter
+                            : service.getValue().pollingLoopFilters.entrySet()) {
+                        out.startTag(null, "pl_filter");
+                        out.attribute(null, "value", filter.getKey());
+                        out.attribute(null, "auto_transact",
+                                Boolean.toString(filter.getValue()));
+                        out.endTag(null, "pl_filter");
+                    }
+                    out.endTag(null, "pl_filters");
+                    out.startTag(null , "pl_pattern_filters");
+                    for (Map.Entry<String, Boolean> filter
+                            : service.getValue().pollingLoopPatternFilters.entrySet()) {
+                        out.startTag(null, "pl_pattern_filter");
+                        out.attribute(null, "value", filter.getKey());
+                        out.attribute(null, "auto_transact",
+                                Boolean.toString(filter.getValue()));
+                        out.endTag(null, "pl_pattern_filter");
+                    }
+                    out.endTag(null, "pl_pattern_filters");
                     out.endTag(null, "service");
                 }
             }
@@ -1122,6 +1177,9 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
+            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            dynamicSettings.pollingLoopFilters.put(pollingLoopFilter,
+                    autoTransact);
             serviceInfo.addPollingLoopFilter(pollingLoopFilter, autoTransact);
             newServices = new ArrayList<ApduServiceInfo>(services.services.values());
         }
@@ -1180,6 +1238,9 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
+            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            dynamicSettings.pollingLoopPatternFilters
+                    .put(pollingLoopPatternFilter, autoTransact);
             serviceInfo.addPollingLoopPatternFilter(pollingLoopPatternFilter, autoTransact);
             newServices = new ArrayList<ApduServiceInfo>(services.services.values());
         }
@@ -1397,6 +1458,14 @@ public class RegisteredServicesCache {
         status.checked = checked;
 
         return writeOthersLocked();
+    }
+
+    private DynamicSettings getOrCreateSettings(UserServices services, ComponentName componentName,
+            int uid) {
+        if (!services.dynamicSettings.containsKey(componentName)) {
+            services.dynamicSettings.put(componentName, new DynamicSettings(uid));
+        }
+        return services.dynamicSettings.get(componentName);
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
