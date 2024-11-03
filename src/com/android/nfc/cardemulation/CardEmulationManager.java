@@ -15,6 +15,7 @@
  */
 package com.android.nfc.cardemulation;
 
+import android.annotation.Nullable;
 import android.annotation.TargetApi;
 import android.annotation.FlaggedApi;
 import android.app.ActivityManager;
@@ -195,8 +196,9 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         initialize();
     }
 
-    public void setOemExtension(INfcOemExtensionCallback nfcOemExtensionCallback) {
+    public void setOemExtension(@Nullable INfcOemExtensionCallback nfcOemExtensionCallback) {
         mNfcOemExtensionCallback = nfcOemExtensionCallback;
+        mHostEmulationManager.setOemExtension(mNfcOemExtensionCallback);
     }
 
     private void initialize() {
@@ -232,7 +234,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     public void onHostCardEmulationActivated(int technology) {
-        if(mNfcOemExtensionCallback!=null) {
+        if(mNfcOemExtensionCallback != null) {
             try {
                 mNfcOemExtensionCallback.onHceEventReceived(NfcOemExtension.HCE_ACTIVATE);
             } catch (RemoteException e) {

@@ -102,7 +102,7 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public boolean initialize() {
         boolean ret = doInitialize();
-        if (isProprietaryGetCapsSupported()) {
+        if (ret && isProprietaryGetCapsSupported()) {
             mProprietaryCaps = NfcProprietaryCaps.createFromByteArray(getProprietaryCaps());
             Log.i(TAG, "mProprietaryCaps: " + mProprietaryCaps);
             logProprietaryCaps(mProprietaryCaps);
