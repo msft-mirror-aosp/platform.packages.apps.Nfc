@@ -20,6 +20,7 @@ import static android.content.pm.PackageManager.MATCH_CLONE_PROFILE;
 import static android.content.pm.PackageManager.MATCH_DEFAULT_ONLY;
 import static android.nfc.Flags.enableNfcMainline;
 
+import static com.android.nfc.NfcService.WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
@@ -40,6 +41,7 @@ import android.content.pm.PackageManager.ResolveInfoFlags;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources.NotFoundException;
 import android.net.Uri;
+import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
@@ -47,10 +49,13 @@ import android.nfc.Tag;
 import android.nfc.tech.Ndef;
 import android.nfc.tech.NfcBarcode;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.Process;
+import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -77,6 +82,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -115,6 +122,8 @@ class NfcDispatcher {
     private NfcAdapter mNfcAdapter;
     private boolean mIsTagAppPrefSupported;
 
+    INfcOemExtensionCallback mNfcOemExtensionCallback;
+
     NfcDispatcher(Context context,
                   HandoverDataParser handoverDataParser,
                   NfcInjector nfcInjector,
@@ -152,6 +161,9 @@ class NfcDispatcher {
         mContext.registerReceiver(mBluetoothStatusReceiver, filter);
     }
 
+    void setOemExtension(INfcOemExtensionCallback nfcOemExtensionCallback) {
+        mNfcOemExtensionCallback = nfcOemExtensionCallback;
+    }
     @Override
     protected void finalize() throws Throwable {
         mContext.unregisterReceiver(mBluetoothStatusReceiver);
@@ -637,6 +649,9 @@ class NfcDispatcher {
             }
         }
 
+        if (tryOemPackage(tag, message)) {
+            return DISPATCH_SUCCESS;
+        }
         if (tryNdef(dispatch, message)) {
             return screenUnlocked ? DISPATCH_UNLOCK : DISPATCH_SUCCESS;
         }
@@ -810,6 +825,12 @@ class NfcDispatcher {
         return false;
     }
 
+    boolean tryOemPackage(Tag tag, NdefMessage message) {
+        if (message == null || mNfcOemExtensionCallback == null) {
+            return false;
+        }
+        return receiveOemCallbackResult(tag,message);
+    }
     boolean tryNdef(DispatchInfo dispatch, NdefMessage message) {
         if (message == null) {
             return false;
@@ -914,6 +935,32 @@ class NfcDispatcher {
         return aarPackages;
     }
 
+    Intent getOemAppSearchIntent(String firstPackage) {
+        if (mNfcOemExtensionCallback != null) {
+            CountDownLatch latch = new CountDownLatch(1);
+            NfcCallbackResultReceiver.OnReceiveResultListener listener =
+                    new NfcCallbackResultReceiver.OnReceiveResultListener();
+            ResultReceiver receiver = new NfcCallbackResultReceiver(latch, listener);
+            try {
+                mNfcOemExtensionCallback.onGetOemAppSearchIntent(List.of(firstPackage), receiver);
+            } catch (RemoteException remoteException) {
+                return null;
+            }
+            try {
+                boolean success = latch.await(
+                        WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                if (!success) {
+                    return null;
+                } else {
+                    Bundle bundle = listener.getResultData();
+                    return bundle.getParcelable("intent", Intent.class);
+                }
+            } catch (InterruptedException ie) {
+                return null;
+            }
+        }
+        return null;
+    }
     boolean tryTech(DispatchInfo dispatch, Tag tag) {
         dispatch.setTechIntent();
 
@@ -1030,7 +1077,8 @@ class NfcDispatcher {
         }
         intent.putExtra(PeripheralHandoverService.EXTRA_BT_ENABLED, mBluetoothEnabledByNfc.get());
         intent.putExtra(PeripheralHandoverService.EXTRA_CLIENT, mMessenger);
-        Context contextAsUser = mContext.createContextAsUser(UserHandle.CURRENT, /* flags= */ 0);
+        Context contextAsUser = mContext.createContextAsUser(
+            UserHandle.of(ActivityManager.getCurrentUser()), /* flags= */ 0);
         contextAsUser.startService(intent);
 
         int btClass = BluetoothProtoEnums.MAJOR_CLASS_UNCATEGORIZED;
@@ -1238,4 +1286,29 @@ class NfcDispatcher {
             }
         }
     };
+
+    boolean receiveOemCallbackResult(Tag tag, NdefMessage message) {
+        if (mNfcOemExtensionCallback == null) {
+            return false;
+        }
+        CountDownLatch latch = new CountDownLatch(1);
+        NfcCallbackResultReceiver.OnReceiveResultListener listener =
+                new NfcCallbackResultReceiver.OnReceiveResultListener();
+        ResultReceiver receiver = new NfcCallbackResultReceiver(latch, listener);
+        try {
+            mNfcOemExtensionCallback.onNdefMessage(tag, message, receiver);
+        } catch (RemoteException remoteException) {
+            return false;
+        }
+        try {
+            boolean success = latch.await(WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (!success) {
+                return false;
+            } else {
+                return listener.getResultCode() == 1;
+            }
+        } catch (InterruptedException ie) {
+            return false;
+        }
+    }
 }

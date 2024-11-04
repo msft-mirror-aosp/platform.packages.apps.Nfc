@@ -22,7 +22,6 @@ import android.nfc.cardemulation.PollingFrame;
 import android.os.Bundle;
 
 import java.io.FileDescriptor;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
 
@@ -55,6 +54,8 @@ public interface DeviceHost {
         public void onObserveModeStateChanged(boolean enable);
 
         public void onRfDiscoveryEvent(boolean isDiscoveryStarted);
+
+        public void onSeSelected();
     }
 
     public interface TagEndpoint {
@@ -140,6 +141,8 @@ public interface DeviceHost {
     public boolean checkFirmware();
 
     public boolean initialize();
+
+    public void setPartialInitMode(int mode);
 
     public boolean deinitialize();
 
@@ -231,7 +234,11 @@ public interface DeviceHost {
     boolean isMultiTag();
 
     void setIsoDepProtocolRoute(int route);
-    void setTechnologyABFRoute(int route);
+    /**
+    * Set NFCC technology routing for ABF listening
+    */
+    void setTechnologyABFRoute(int route, int felicaRoute);
+    void setSystemCodeRoute(int route);
     void clearRoutingEntry(int clearFlags);
 
     /**

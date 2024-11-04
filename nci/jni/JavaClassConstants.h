@@ -31,6 +31,10 @@ extern jmethodID gCachedNfcManagerNotifyEeUpdated;
 
 extern jmethodID gCachedNfcManagerNotifyWlcStopped;
 
+extern jmethodID gCachedNfcManagerNotifyEeAidSelected;
+extern jmethodID gCachedNfcManagerNotifyEeProtocolSelected;
+extern jmethodID gCachedNfcManagerNotifyEeTechSelected;
+
 extern const char* gNativeNfcTagClassName;
 extern const char* gNativeNfcManagerClassName;
 }  // namespace android

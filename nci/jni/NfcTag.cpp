@@ -50,6 +50,7 @@ static int sLastSelectedTagId = 0;
 NfcTag::NfcTag()
     : mNumTechList(0),
       mNumRfDiscId(0),
+      mIsReselecting(false),
       mTechnologyTimeoutsTable(MAX_NUM_TECHNOLOGY),
       mNativeData(NULL),
       mIsActivated(false),
@@ -392,7 +393,8 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
   } else if (NFC_PROTOCOL_MIFARE == rfDetail.protocol) {
     LOG(DEBUG) << StringPrintf("%s: Mifare Classic", fn);
     mTechList[mNumTechList] =
-        TARGET_TYPE_ISO14443_3A;  // is TagTechnology.NFC_A by Java API
+        TARGET_TYPE_MIFARE_CLASSIC;  // is TagTechnology.MIFARE_CLASSIC by Java
+                                     // API
     mNumTechList++;
     mTechHandles[mNumTechList] = rfDetail.rf_disc_id;
     mTechLibNfcTypes[mNumTechList] = rfDetail.protocol;
@@ -400,8 +402,7 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
     memcpy(&(mTechParams[mNumTechList]), &(rfDetail.rf_tech_param),
            sizeof(rfDetail.rf_tech_param));
     mTechList[mNumTechList] =
-        TARGET_TYPE_MIFARE_CLASSIC;  // is TagTechnology.MIFARE_CLASSIC by Java
-                                     // API
+        TARGET_TYPE_ISO14443_3A;  // is TagTechnology.NFC_A by Java API
   } else {
     LOG(ERROR) << StringPrintf("%s: unknown protocol ????", fn);
     mTechList[mNumTechList] = TARGET_TYPE_UNKNOWN;
@@ -409,9 +410,9 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
 
   mNumTechList++;
   for (int i = 0; i < mNumTechList; i++) {
-    LOG(DEBUG) << StringPrintf("%s: index=%d; tech=%d; handle=%d; nfc type=%d",
-                               fn, i, mTechList[i], mTechHandles[i],
-                               mTechLibNfcTypes[i]);
+    LOG(DEBUG) << StringPrintf(
+        "%s: index=%d; tech=0x%x; handle=%d; nfc type=0x%x", fn, i,
+        mTechList[i], mTechHandles[i], mTechLibNfcTypes[i]);
   }
   mNfcStatsUtil->logNfcTagType(mTechLibNfcTypes[mTechListTail],
                                mTechParams[mTechListTail].mode);
@@ -437,7 +438,7 @@ void NfcTag::discoverTechnologies(tNFA_DISC_RESULT& discoveryData) {
   uint8_t index = mNumDiscNtf;
 
   LOG(DEBUG) << StringPrintf(
-      "%s: enter: rf disc. id=%u; protocol=%u, mNumTechList=%u", fn,
+      "%s: enter: rf disc. id=%u; protocol=0x%x, mNumTechList=%u", fn,
       discovery_ntf.rf_disc_id, discovery_ntf.protocol, mNumTechList);
   if (index >= MAX_NUM_TECHNOLOGY) {
     LOG(ERROR) << StringPrintf("%s: exceed max=%d", fn, MAX_NUM_TECHNOLOGY);
@@ -450,8 +451,8 @@ void NfcTag::discoverTechnologies(tNFA_DISC_RESULT& discoveryData) {
   }
   if (discovery_ntf.more != NCI_DISCOVER_NTF_MORE) {
     for (int i = 0; i < mNumDiscTechList; i++) {
-      LOG(DEBUG) << StringPrintf("%s: index=%d; handle=%d; nfc type=%d", fn, i,
-                                 mTechHandlesDiscData[i],
+      LOG(DEBUG) << StringPrintf("%s: index=%d; handle=%d; nfc type=0x%x", fn,
+                                 i, mTechHandlesDiscData[i],
                                  mTechLibNfcTypesDiscData[i]);
     }
   }
@@ -1112,8 +1113,8 @@ void NfcTag::selectNextTagIfExists() {
   LOG(DEBUG) << StringPrintf("%s: enter, mNumDiscTechList=%x", fn,
                              mNumDiscTechList);
   for (int i = 0; i < mNumDiscTechList; i++) {
-    LOG(DEBUG) << StringPrintf("%s: nfa target idx=%dh=0x%X; protocol=0x%X", fn,
-                               i, mTechHandlesDiscData[i],
+    LOG(DEBUG) << StringPrintf("%s: nfa target idx=%d h=0x%X; protocol=0x%X",
+                               fn, i, mTechHandlesDiscData[i],
                                mTechLibNfcTypesDiscData[i]);
     if (((mTechHandlesDiscData[sLastSelectedTagId] !=
           mTechHandlesDiscData[i]) ||
@@ -1333,7 +1334,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
   switch (event) {
     case NFA_DISC_RESULT_EVT: {
       tNFA_DISC_RESULT& disc_result = data->disc_result;
-      if (disc_result.status == NFA_STATUS_OK) {
+      if ((disc_result.status == NFA_STATUS_OK) && !mIsReselecting) {
         discoverTechnologies(disc_result);
       }
     } break;
@@ -1350,7 +1351,9 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
         mIsActivated = true;
         mProtocol = activated.activate_ntf.protocol;
         calculateT1tMaxMessageSize(activated);
-        discoverTechnologies(activated);
+        if (!mIsReselecting) {
+          discoverTechnologies(activated);
+        }
         createNativeNfcTag(activated);
       }
       break;
@@ -1358,7 +1361,9 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
     case NFA_DEACTIVATED_EVT:
       mIsActivated = false;
       mProtocol = NFC_PROTOCOL_UNKNOWN;
-      resetTechnologies();
+      if (!mIsReselecting) {
+        resetTechnologies();
+      }
       break;
 
     case NFA_READ_CPLT_EVT: {
@@ -1574,3 +1579,25 @@ void NfcTag::setNumDiscNtf(int numDiscNtfValue) {
 **
 *******************************************************************************/
 int NfcTag::getNumDiscNtf() { return mNumDiscNtf; }
+
+/*******************************************************************************
+**
+** Function:        isReselecting
+**
+** Description:     used to check if a reSelect() procedure is ongoing
+**
+** Returns:         value of mIsReselecting variable
+**
+*******************************************************************************/
+bool NfcTag::isReselecting() { return mIsReselecting; }
+
+/*******************************************************************************
+**
+** Function:        setReselect
+**
+** Description:     Called by JNI to indicate status of reSelect() procedure
+**
+** Returns:
+**
+*******************************************************************************/
+void NfcTag::setReselect(bool isReselecting) { mIsReselecting = isReselecting; }
