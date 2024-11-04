@@ -39,6 +39,7 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.nfc.ComponentNameAndUser;
 import android.nfc.Constants;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
