@@ -237,16 +237,22 @@ public class RegisteredServicesCacheMigration {
                 continue;
             } else {
                 for (AidGroup group : dynamicSettings.aidGroups.values()) {
+                    Log.d(TAG, "registerAidsForService: " + component + " = " + group.getAids());
                     mCardEmulation.registerAidsForService(
                             component, group.getCategory(), group.getAids());
                 }
                 if (dynamicSettings.offHostSE != null) {
+                    Log.d(TAG, "setOffHostForService: " + component + " = "
+                        + dynamicSettings.offHostSE);
                     mCardEmulation.setOffHostForService(component, dynamicSettings.offHostSE);
                 }
                 if (dynamicSettings.shouldDefaultToObserveModeStr != null) {
+                    boolean shouldDefaultToObserveMode =
+                        convertValueToBoolean(dynamicSettings.shouldDefaultToObserveModeStr, false);
+                    Log.d(TAG, "setShouldDefaultToObserveModeForService: " + component
+                        + " = " + shouldDefaultToObserveMode);
                     mCardEmulation.setShouldDefaultToObserveModeForService(
-                            component, convertValueToBoolean(
-                                    dynamicSettings.shouldDefaultToObserveModeStr, false));
+                            component, shouldDefaultToObserveMode);
                 }
             }
         }
@@ -274,6 +280,8 @@ public class RegisteredServicesCacheMigration {
                             CardEmulation.class.getMethod(
                                     "setServiceEnabledForCategoryOther", ComponentName.class,
                                     boolean.class, int.class);
+                    Log.d(TAG, "setServiceEnabledForCategoryOther: " + component + " = "
+                        + status.checked);
                     setServiceEnabledForCategoryOtherMethod.invoke(
                             mCardEmulation, component, status.checked, userId);
                     // TODO: Add formal API
