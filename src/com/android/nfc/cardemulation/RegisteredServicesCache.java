@@ -50,7 +50,9 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.FastXmlSerializer;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.Utils;
+import com.android.nfc.cardemulation.util.NfcFileUtils;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -58,20 +60,23 @@ import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
 import java.io.FileDescriptor;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 /**
  * This class is inspired by android.content.pm.RegisteredServicesCache
@@ -102,8 +107,8 @@ public class RegisteredServicesCache {
     // mUserServices holds the card emulation services that are running for each user
     final SparseArray<UserServices> mUserServices = new SparseArray<UserServices>();
     final Callback mCallback;
-    final SettingsFile mDynamicSettingsFile;
-    final SettingsFile mOthersFile;
+    SettingsFile mDynamicSettingsFile;
+    SettingsFile mOthersFile;
     final ServiceParser mServiceParser;
     final RoutingOptionManager mRoutingOptionManager;
 
@@ -120,6 +125,8 @@ public class RegisteredServicesCache {
 
     static class DynamicSettings {
         public final int uid;
+        public final Map<String, Boolean> pollingLoopFilters = new HashMap<>();
+        public final Map<String, Boolean> pollingLoopPatternFilters = new HashMap<>();
         public final HashMap<String, AidGroup> aidGroups = new HashMap<>();
         public String offHostSE;
         public String shouldDefaultToObserveModeStr;
@@ -337,6 +344,30 @@ public class RegisteredServicesCache {
         }
     }
 
+    void migrateFromCe(Context ceContext) {
+        File ceFilesDir = ceContext.getFilesDir();
+        File deFilesDir = mContext.getFilesDir();
+        if (NfcFileUtils.isEmptyDir(ceFilesDir)) {
+            Log.d(TAG, "Nothing to migrate from CE data");
+            return;
+        }
+        if (NfcFileUtils.moveFiles(ceFilesDir, deFilesDir) < 0) {
+            Log.e(TAG, "Failed to move directory from " + ceFilesDir + " to " + deFilesDir);
+            return;
+        }
+        Log.i(TAG, "Moved directory from " + ceFilesDir + " to " + deFilesDir
+            + ". Reinitializing cache.");
+        mDynamicSettingsFile = new SettingsFile(mContext, AID_XML_PATH);
+        mOthersFile = new SettingsFile(mContext, OTHER_STATUS_PATH);
+    }
+
+    public void migrateSettingsFilesFromCe(Context ceContext) {
+        synchronized (mLock) {
+            migrateFromCe(ceContext);
+            initialize();
+        }
+    }
+
     private void refreshUserProfilesLocked(boolean invalidateCache) {
         UserManager um = mContext.createContextAsUser(
                 UserHandle.of(ActivityManager.getCurrentUser()), /*flags=*/0)
@@ -512,6 +543,15 @@ public class RegisteredServicesCache {
                     for (AidGroup group : dynamicSettings.aidGroups.values()) {
                         serviceInfo.setDynamicAidGroup(group);
                     }
+                    for (Map.Entry<String, Boolean> filter : dynamicSettings.pollingLoopFilters
+                            .entrySet()) {
+                        serviceInfo.addPollingLoopFilter(filter.getKey(), filter.getValue());
+                    }
+                    for (Map.Entry<String, Boolean> filter : dynamicSettings
+                            .pollingLoopPatternFilters
+                            .entrySet()) {
+                        serviceInfo.addPollingLoopPatternFilter(filter.getKey(), filter.getValue());
+                    }
                     if (dynamicSettings.offHostSE != null) {
                         serviceInfo.setOffHostSecureElement(dynamicSettings.offHostSE);
                     }
@@ -662,6 +702,8 @@ public class RegisteredServicesCache {
                 String currentOffHostSE = null;
                 String shouldDefaultToObserveModeStr = null;
                 ArrayList<AidGroup> currentGroups = new ArrayList<AidGroup>();
+                Map<String, Boolean> plFilters = new HashMap<>();
+                Map<String, Boolean> plPatternFilters = new HashMap<>();
                 while (eventType != XmlPullParser.END_DOCUMENT) {
                     tagName = parser.getName();
                     if (eventType == XmlPullParser.START_TAG) {
@@ -694,6 +736,19 @@ public class RegisteredServicesCache {
                                 Log.e(TAG, "Could not parse AID group.");
                             }
                         }
+                        if ("pl_filter".equals(tagName) && parser.getDepth() == 4 && inService) {
+                            String filter = parser.getAttributeValue(null, "value");
+                            String autoTransact = parser
+                                    .getAttributeValue(null, "auto_transact");
+                            plFilters.put(filter, Boolean.parseBoolean(autoTransact));
+                        }
+                        if ("pl_pattern_filter".equals(tagName) && parser.getDepth() == 4
+                                && inService) {
+                            String pattern = parser.getAttributeValue(null, "value");
+                            String autoTransact = parser
+                                    .getAttributeValue(null, "auto_transact");
+                            plPatternFilters.put(pattern, Boolean.parseBoolean(autoTransact));
+                        }
                     } else if (eventType == XmlPullParser.END_TAG) {
                         if ("service".equals(tagName)) {
                             // See if we have a valid service
@@ -706,6 +761,8 @@ public class RegisteredServicesCache {
                                 for (AidGroup group : currentGroups) {
                                     dynSettings.aidGroups.put(group.getCategory(), group);
                                 }
+                                dynSettings.pollingLoopFilters.putAll(plFilters);
+                                dynSettings.pollingLoopPatternFilters.putAll(plPatternFilters);
                                 dynSettings.offHostSE = currentOffHostSE;
                                 dynSettings.shouldDefaultToObserveModeStr
                                         = shouldDefaultToObserveModeStr;
@@ -717,6 +774,8 @@ public class RegisteredServicesCache {
                             }
                             currentUid = -1;
                             currentComponent = null;
+                            plFilters.clear();
+                            plPatternFilters.clear();
                             currentGroups.clear();
                             inService = false;
                             currentOffHostSE = null;
@@ -884,6 +943,26 @@ public class RegisteredServicesCache {
                     for (AidGroup group : service.getValue().aidGroups.values()) {
                         group.writeAsXml(out);
                     }
+                    out.startTag(null , "pl_filters");
+                    for (Map.Entry<String, Boolean> filter
+                            : service.getValue().pollingLoopFilters.entrySet()) {
+                        out.startTag(null, "pl_filter");
+                        out.attribute(null, "value", filter.getKey());
+                        out.attribute(null, "auto_transact",
+                                Boolean.toString(filter.getValue()));
+                        out.endTag(null, "pl_filter");
+                    }
+                    out.endTag(null, "pl_filters");
+                    out.startTag(null , "pl_pattern_filters");
+                    for (Map.Entry<String, Boolean> filter
+                            : service.getValue().pollingLoopPatternFilters.entrySet()) {
+                        out.startTag(null, "pl_pattern_filter");
+                        out.attribute(null, "value", filter.getKey());
+                        out.attribute(null, "auto_transact",
+                                Boolean.toString(filter.getValue()));
+                        out.endTag(null, "pl_pattern_filter");
+                    }
+                    out.endTag(null, "pl_pattern_filters");
                     out.endTag(null, "service");
                 }
             }
@@ -970,7 +1049,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1013,7 +1092,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1054,7 +1133,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1087,7 +1166,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1098,6 +1177,9 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
+            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            dynamicSettings.pollingLoopFilters.put(pollingLoopFilter,
+                    autoTransact);
             serviceInfo.addPollingLoopFilter(pollingLoopFilter, autoTransact);
             newServices = new ArrayList<ApduServiceInfo>(services.services.values());
         }
@@ -1117,7 +1199,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1145,7 +1227,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1156,6 +1238,9 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
+            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            dynamicSettings.pollingLoopPatternFilters
+                    .put(pollingLoopPatternFilter, autoTransact);
             serviceInfo.addPollingLoopPatternFilter(pollingLoopPatternFilter, autoTransact);
             newServices = new ArrayList<ApduServiceInfo>(services.services.values());
         }
@@ -1175,7 +1260,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1204,7 +1289,7 @@ public class RegisteredServicesCache {
                 Log.e(TAG, "Service " + componentName + " does not exist.");
                 return false;
             }
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 // This is probably a good indication something is wrong here.
                 // Either newer service installed with different uid (but then
                 // we should have known about it), or somebody calling us from
@@ -1288,7 +1373,7 @@ public class RegisteredServicesCache {
             String category) {
         ApduServiceInfo serviceInfo = getService(userId, componentName);
         if (serviceInfo != null) {
-            if (serviceInfo.getUid() != uid) {
+            if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                 Log.e(TAG, "UID mismatch");
                 return null;
             }
@@ -1307,7 +1392,7 @@ public class RegisteredServicesCache {
             UserServices services = findOrCreateUserLocked(userId);
             ApduServiceInfo serviceInfo = getService(userId, componentName);
             if (serviceInfo != null) {
-                if (serviceInfo.getUid() != uid) {
+                if (!NfcInjector.isPrivileged(uid) && serviceInfo.getUid() != uid) {
                     // Calling from different uid
                     Log.e(TAG, "UID mismatch");
                     return false;
@@ -1373,6 +1458,14 @@ public class RegisteredServicesCache {
         status.checked = checked;
 
         return writeOthersLocked();
+    }
+
+    private DynamicSettings getOrCreateSettings(UserServices services, ComponentName componentName,
+            int uid) {
+        if (!services.dynamicSettings.containsKey(componentName)) {
+            services.dynamicSettings.put(componentName, new DynamicSettings(uid));
+        }
+        return services.dynamicSettings.get(componentName);
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

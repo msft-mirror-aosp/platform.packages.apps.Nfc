@@ -22,6 +22,7 @@ import android.annotation.FlaggedApi;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.nfc.ComponentNameAndUser;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.Utils;
@@ -29,7 +30,6 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.sysprop.NfcProperties;
 import android.util.Log;
-import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.nfc.NfcService;
@@ -716,15 +716,15 @@ public class RegisteredAidCache {
     }
 
     static boolean isExact(String aid) {
-        return (!((aid.endsWith("*") || (aid.endsWith("#")))));
+        return aid == null ? false : !(aid.endsWith("*") || aid.endsWith("#"));
     }
 
     static boolean isPrefix(String aid) {
-        return aid.endsWith("*");
+        return aid == null ? false : aid.endsWith("*");
     }
 
     static boolean isSubset(String aid) {
-        return aid.endsWith("#");
+        return aid == null ? false : aid.endsWith("#");
     }
 
     final class ResolvedPrefixConflictAid {
@@ -1205,20 +1205,20 @@ public class RegisteredAidCache {
         }
     }
 
-    public void onPreferredPaymentServiceChanged(int userId, ComponentName service) {
-        if (DBG) Log.d(TAG, "Preferred payment service changed for user:" + userId);
+    public void onPreferredPaymentServiceChanged(ComponentNameAndUser service) {
+        if (DBG) Log.d(TAG, "Preferred payment service changed for user:" + service.getUserId());
         synchronized (mLock) {
-            mPreferredPaymentService = service;
-            mUserIdPreferredPaymentService = userId;
+            mPreferredPaymentService = service.getComponentName();
+            mUserIdPreferredPaymentService = service.getUserId();
             generateAidCacheLocked();
         }
     }
 
-    public void onPreferredForegroundServiceChanged(int userId, ComponentName service) {
-        if (DBG) Log.d(TAG, "Preferred foreground service changed for user:" + userId);
+    public void onPreferredForegroundServiceChanged(ComponentNameAndUser service) {
+        if (DBG) Log.d(TAG, "Preferred foreground service changed for user:" + service.getUserId());
         synchronized (mLock) {
-            mPreferredForegroundService = service;
-            mUserIdPreferredForegroundService = userId;
+            mPreferredForegroundService = service.getComponentName();
+            mUserIdPreferredForegroundService = service.getUserId();
             generateAidCacheLocked();
         }
     }
@@ -1233,10 +1233,11 @@ public class RegisteredAidCache {
     }
 
     @NonNull
-    public Pair<Integer, ComponentName> getPreferredService() {
+    public ComponentNameAndUser getPreferredService() {
         if (mPreferredForegroundService != null) {
             // return current foreground service
-            return new Pair<>(mUserIdPreferredForegroundService, mPreferredForegroundService);
+            return new ComponentNameAndUser(
+                    mUserIdPreferredForegroundService, mPreferredForegroundService);
         } else {
             // return current preferred service
             return getPreferredPaymentService();
@@ -1244,8 +1245,8 @@ public class RegisteredAidCache {
     }
 
     @NonNull
-    public Pair<Integer, ComponentName> getPreferredPaymentService() {
-         return new Pair<>(mUserIdPreferredPaymentService, mPreferredPaymentService);
+    public ComponentNameAndUser getPreferredPaymentService() {
+         return new ComponentNameAndUser(mUserIdPreferredPaymentService, mPreferredPaymentService);
     }
 
     public boolean isPreferredServicePackageNameForUser(String packageName, int userId) {
