@@ -27,6 +27,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.nfc.ComponentNameAndUser;
 import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.ApduServiceInfo;
@@ -381,19 +382,6 @@ public class HostEmulationManager {
 
     public void onObserveModeStateChange(boolean enabled) {
         synchronized(mLock) {
-            if (android.nfc.Flags.nfcEventListener()) {
-                Messenger service = getForegroundServiceOrDefault();
-                if (service != null) {
-                    Message msg = Message.obtain(null, HostApduService.MSG_OBSERVE_MODE_CHANGE);
-                    msg.arg1 = enabled ? 1 : 0;
-                    msg.replyTo = mMessenger;
-                    try {
-                        service.send(msg);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Remote service has died", e);
-                    }
-                }
-            }
             if (!enabled && mAutoDisableObserveModeRunnable != null) {
                 mHandler.removeCallbacks(mAutoDisableObserveModeRunnable);
                 mAutoDisableObserveModeRunnable = null;
@@ -658,44 +646,6 @@ public class HostEmulationManager {
         synchronized (mLock) {
             int userId = serviceAndUser.getUserId();
             ComponentName service = serviceAndUser.getComponentName();
-            if (android.nfc.Flags.nfcEventListener()) {
-                ComponentNameAndUser oldServiceAndUser = mAidCache.getPreferredService();
-                ComponentNameAndUser newServiceAndUser = new ComponentNameAndUser(userId, service);
-                Messenger oldPreferredService = null;
-                if (oldServiceAndUser != null && oldServiceAndUser.getComponentName() != null) {
-                    if (mPaymentServiceName != null
-                        && mPaymentServiceName.equals(oldServiceAndUser.getComponentName())
-                        && mPaymentServiceUserId == oldServiceAndUser.getUserId()) {
-                        oldPreferredService = mPaymentService;
-                    } else if (!isMultipleBindingSupported()
-                            && mServiceName != null
-                            && mServiceName.equals(oldServiceAndUser.getComponentName())
-                            && mServiceUserId == oldServiceAndUser.getUserId()) {
-                        oldPreferredService = mService;
-                    } else if (isMultipleBindingSupported()
-                            && mComponentNameToConnectionsMap.containsKey(newServiceAndUser)
-                            && Objects.equals(newServiceAndUser, oldServiceAndUser)) {
-                        oldPreferredService =
-                            mComponentNameToConnectionsMap.get(newServiceAndUser).mMessenger;
-                    } else {
-                        Log.w(TAG, oldServiceAndUser.getComponentName() +
-                            " is no longer the preferred NFC service but isn't bound");
-                    }
-                    if (oldPreferredService != null) {
-                        Message msg =
-                        Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-                        msg.arg1 = 0;
-                        msg.replyTo = mMessenger;
-                        try {
-                            oldPreferredService.send(msg);
-                        } catch (RemoteException e) {
-                            Log.e(TAG, "Remote service has died", e);
-                        }
-                    }
-                } else {
-                    Log.i(TAG, "old service is null");
-                }
-            }
 
             mAidCache.onPreferredForegroundServiceChanged(serviceAndUser);
 
@@ -1174,17 +1124,6 @@ public class HostEmulationManager {
     }
 
     void unbindPaymentServiceLocked() {
-        if (android.nfc.Flags.nfcEventListener() &&
-            mPaymentService != null) {
-            Message msg = Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-            msg.arg1 = 0;
-            msg.replyTo = mMessenger;
-            try {
-                mPaymentService.send(msg);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Remote service has died", e);
-            }
-        }
         Log.d(TAG, "Unbinding payment service");
         if (mPaymentServiceBound) {
             try {
@@ -1351,18 +1290,6 @@ public class HostEmulationManager {
                         }
                 }
                 Log.i(TAG, "Payment service bound: " + name);
-                if (android.nfc.Flags.nfcEventListener() &&
-                    mPaymentService != null) {
-                    Message msg =
-                        Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-                    msg.arg1 = 1;
-                    msg.replyTo = mMessenger;
-                    try {
-                        mPaymentService.send(msg);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Remote service has died", e);
-                    }
-                }
             }
         }
 
@@ -1425,19 +1352,6 @@ public class HostEmulationManager {
                 }
 
                 Log.d(TAG, "Service bound: " + name);
-                if (android.nfc.Flags.nfcEventListener()
-                        && name.equals(preferredServiceName)
-                        && messenger != null) {
-                    Message msg =
-                            Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-                    msg.arg1 = 1;
-                    msg.replyTo = mMessenger;
-                    try {
-                        messenger.send(msg);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Remote service has died", e);
-                    }
-                }
                 // Send pending select APDU
                 if (mSelectApdu != null) {
                     if (mStatsdUtils != null) {
