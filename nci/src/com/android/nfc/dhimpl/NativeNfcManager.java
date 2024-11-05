@@ -31,10 +31,11 @@ import android.util.Log;
 
 import com.android.nfc.DeviceHost;
 import com.android.nfc.NfcDiscoveryParameters;
+import com.android.nfc.NfcProprietaryCaps;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 import com.android.nfc.NfcVendorNciResponse;
-import com.android.nfc.NfcProprietaryCaps;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.nio.ByteBuffer;
@@ -42,6 +43,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.List;
 
@@ -100,7 +102,7 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public boolean initialize() {
         boolean ret = doInitialize();
-        if (isProprietaryGetCapsSupported()) {
+        if (ret && isProprietaryGetCapsSupported()) {
             mProprietaryCaps = NfcProprietaryCaps.createFromByteArray(getProprietaryCaps());
             Log.i(TAG, "mProprietaryCaps: " + mProprietaryCaps);
             logProprietaryCaps(mProprietaryCaps);
@@ -437,6 +439,27 @@ public class NativeNfcManager implements DeviceHost {
         mListener.onHwErrorReported();
     }
 
+    private void notifyEeAidSelected(byte[] aid, String eventSrc) {
+        Log.i(TAG, "AID: " + HexFormat.of().formatHex(aid) + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
+    private void notifyEeProtocolSelected(int protocol, String eventSrc) {
+        Log.i(TAG, "Protocol: " + protocol + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
+    private void notifyEeTechSelected(int tech, String eventSrc) {
+        Log.i(TAG, "Tech: " + tech + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
     public void notifyPollingLoopFrame(int data_len, byte[] p_data) {
         if (data_len < MIN_POLLING_FRAME_TLV_SIZE) {
             return;
@@ -549,7 +572,10 @@ public class NativeNfcManager implements DeviceHost {
     public native void setIsoDepProtocolRoute(int route);
 
     @Override
-    public native void setTechnologyABFRoute(int route);
+    public native void setTechnologyABFRoute(int route, int felicaRoute);
+
+    @Override
+    public native void setSystemCodeRoute(int route);
 
     private native byte[] getProprietaryCaps();
 

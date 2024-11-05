@@ -164,7 +164,7 @@ public abstract class BaseEmulatorActivity extends Activity {
                                             cardEmulation
                                                     .getDescriptionForPreferredPaymentService()
                                                     .toString()));
-        } catch (Exception e) {
+        } catch (Exception|AssertionError e) {
             Log.e(TAG, "Default service not updated. This may cause tests to fail", e);
         }
     }
@@ -197,7 +197,7 @@ public abstract class BaseEmulatorActivity extends Activity {
         try {
             CommonTestUtils.waitUntil("Observe mode has not been set", 6,
                     () -> mAdapter.isObserveModeEnabled() == enabled);
-        } catch (Exception e) {
+        } catch (Exception|AssertionError e) {
             Log.e(TAG, "Observe mode not set to " + enabled + ". This may cause tests to fail", e);
         }
     }
