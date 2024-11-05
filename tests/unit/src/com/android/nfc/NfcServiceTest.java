@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
@@ -97,9 +98,13 @@ import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.test.TestLooper;
+import android.platform.test.annotations.RequiresFlagsEnabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
+import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.se.omapi.ISecureElementService;
 import android.sysprop.NfcProperties;
 import android.nfc.INfcOemExtensionCallback;
@@ -119,6 +124,7 @@ import android.nfc.INfcVendorNciCallback;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -195,10 +201,21 @@ public final class NfcServiceTest {
     NfcService mNfcService;
     private MockitoSession mStaticMockSession;
     private ContentObserver mContentObserver;
+    private TestClock mClock = new TestClock();
+
+    class TestClock implements TestLooper.Clock {
+        long mOffset = 0;
+        public long uptimeMillis() {
+            return SystemClock.uptimeMillis() + mOffset;
+        }
+    }
+
+    @Rule
+    public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
 
     @Before
     public void setUp() throws PackageManager.NameNotFoundException {
-        mLooper = new TestLooper();
+        mLooper = new TestLooper(mClock);
         mStaticMockSession = ExtendedMockito.mockitoSession()
                 .mockStatic(NfcProperties.class)
                 .mockStatic(android.nfc.Flags.class)
@@ -1331,11 +1348,36 @@ public final class NfcServiceTest {
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         mNfcService.onRemoteFieldDeactivated();
         verify(callback, atLeastOnce()).onRfFieldActivated(anyBoolean());
+        mClock.mOffset += 60;
         mLooper.dispatchAll();
         verify(mCardEmulationManager).onFieldChangeDetected(anyBoolean());
         verify(mApplication).sendBroadcastAsUser(any(), any());
         verify(mStatsdUtils).logFieldChanged(anyBoolean(), anyInt());
-        verify(mNfcEventLog, times(2)).logEvent(any());
+        verify(mNfcEventLog, atLeast(2)).logEvent(any());
+    }
+
+    @Test
+    @RequiresFlagsEnabled(Flags.FLAG_COALESCE_RF_EVENTS)
+    public void testOnRemoteFieldCoalessing() throws RemoteException {
+        createNfcServiceWithoutStatsdUtils();
+        List<String> userlist = new ArrayList<>();
+        userlist.add("com.android.nfc");
+        mNfcService.mIsSecureNfcEnabled = true;
+        mNfcService.mIsRequestUnlockShowed = false;
+        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        mNfcService.mNfcEventInstalledPackages.put(1, userlist);
+        when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
+        mNfcService.onRemoteFieldActivated();
+        mNfcService.onRemoteFieldDeactivated();
+        mNfcService.onRemoteFieldActivated();
+        mNfcService.onRemoteFieldDeactivated();
+        mClock.mOffset += 60;
+        mLooper.dispatchAll();
+        verify(mCardEmulationManager).onFieldChangeDetected(true);
+        verify(mCardEmulationManager).onFieldChangeDetected(false);
+        verify(mApplication, times(2)).sendBroadcastAsUser(any(), any());
+        verify(mStatsdUtils, times(4)).logFieldChanged(anyBoolean(), anyInt());
+        verify(mNfcEventLog, atLeast(2)).logEvent(any());
     }
 
     @Test
