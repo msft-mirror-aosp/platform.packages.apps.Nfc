@@ -4264,7 +4264,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 @Override
                                 public void onTagDisconnected() {
                                     mCookieUpToDate = -1;
-                                    executeOemOnTagConnectedCallback(false, null);
+                                    executeOemOnTagConnectedCallback(false);
                                     applyRouting(false);
                                 }
                             };
@@ -4277,6 +4277,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         tag.startPresenceChecking(presenceCheckDelay, callback);
                         break;
                     }
+                    executeOemOnTagConnectedCallback(true);
                     if (readerParams != null) {
                         presenceCheckDelay = readerParams.presenceCheckDelay;
                         if ((readerParams.flags & NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK) != 0) {
@@ -4312,7 +4313,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         if (!tag.reconnect()) {
                             tag.disconnect();
                             if (DBG) Log.d(TAG, "Read NDEF error");
-                            executeOemOnTagConnectedCallback(false, null);
+                            executeOemOnTagConnectedCallback(false);
                             if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
                                 if (mReadErrorCount < mReadErrorCountMax) {
                                     mReadErrorCount++;
@@ -4792,7 +4793,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Tag tag = new Tag(tagEndpoint.getUid(), tagEndpoint.getTechList(),
                         tagEndpoint.getTechExtras(), tagEndpoint.getHandle(),
                         mCookieUpToDate, mNfcTagService);
-                executeOemOnTagConnectedCallback(true, tag);
                 registerTagObject(tagEndpoint);
                 if (readerParams != null) {
                     try {
@@ -4823,7 +4823,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 int dispatchResult = mNfcDispatcher.dispatchTag(tag);
                 if (dispatchResult == NfcDispatcher.DISPATCH_FAIL) {
                     if (DBG) Log.d(TAG, "Tag dispatch failed");
-                    executeOemOnTagConnectedCallback(false, null);
+                    executeOemOnTagConnectedCallback(false);
                     unregisterObject(tagEndpoint.getHandle());
                     if (mPollDelayTime > NO_POLL_DELAY) {
                         tagEndpoint.stopPresenceChecking();
@@ -4873,14 +4873,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
-    private void executeOemOnTagConnectedCallback(boolean connected, @Nullable Tag tag) {
+    private void executeOemOnTagConnectedCallback(boolean connected) {
         if (mNfcOemExtensionCallback != null) {
             try {
-                if (tag == null) {
-                    tag = Tag.createMockTag(new byte[]{0x00},
-                        new int[]{TagTechnology.NDEF}, new Bundle[]{}, mCookieUpToDate);
-                }
-                mNfcOemExtensionCallback.onTagConnected(connected, tag);
+                mNfcOemExtensionCallback.onTagConnected(connected);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
