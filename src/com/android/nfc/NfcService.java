@@ -4282,13 +4282,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     synchronized (NfcService.this) {
                         readerParams = mReaderModeParams;
                     }
+                    executeOemOnTagConnectedCallback(true);
                     if (mNfcOemExtensionCallback != null
                             && receiveOemCallbackResult(ACTION_ON_READ_NDEF)) {
                         Log.d(TAG, "MSG_NDEF_TAG: skip due to oem callback");
                         tag.startPresenceChecking(presenceCheckDelay, callback);
                         break;
                     }
-                    executeOemOnTagConnectedCallback(true);
                     if (readerParams != null) {
                         presenceCheckDelay = readerParams.presenceCheckDelay;
                         if ((readerParams.flags & NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK) != 0) {
