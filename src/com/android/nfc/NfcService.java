@@ -3181,6 +3181,26 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "getRoutingTableEntry");
             NfcPermissions.enforceAdminPermissions(mContext);
             return mRoutingTableParser.getRoutingTableEntryList(mDeviceHost);
+	}
+
+        @Override
+        public void indicateDataMigration(boolean inProgress, String pkg) throws RemoteException {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
+            }
+            if (DBG) Log.i(TAG, "indicateDataMigration inProgress: " + inProgress);
+            NfcPermissions.enforceAdminPermissions(mContext);
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setDataMigrationInProgress(NfcEventProto.NfcDataMigrationInProgress
+                                    .newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setPackageName(pkg)
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setInProgress(inProgress)
+                                    .build())
+                            .build());
         }
 
         private void updateNfCState() {
