@@ -53,10 +53,12 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.nfc.DeviceConfigFacade;
+import com.android.nfc.NfcEventLog;
 import com.android.nfc.ForegroundUtils;
 import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
+import com.android.nfc.proto.NfcEventProto;
 import com.android.nfc.R;
 
 import java.io.FileDescriptor;
@@ -129,6 +131,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     final byte[] mOffHostRouteUicc;
     final byte[] mOffHostRouteEse;
     private INfcOemExtensionCallback mNfcOemExtensionCallback;
+    private final NfcEventLog mNfcEventLog;
 
     // TODO: Move this object instantiation and dependencies to NfcInjector.
     public CardEmulationManager(Context context, NfcInjector nfcInjector,
@@ -158,6 +161,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mEnabledNfcFServices = new EnabledNfcFServices(
                 context, mNfcFServicesCache, mT3tIdentifiersCache, this);
         mPowerManager = context.getSystemService(PowerManager.class);
+        mNfcEventLog = nfcInjector.getNfcEventLog();
         initialize();
     }
 
@@ -174,7 +178,8 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             PreferredServices preferredServices,
             EnabledNfcFServices enabledNfcFServices,
             RoutingOptionManager routingOptionManager,
-            PowerManager powerManager) {
+            PowerManager powerManager,
+            NfcEventLog nfcEventLog) {
         mContext = context;
         mCardEmulationInterface = new CardEmulationInterface();
         mNfcFCardEmulationInterface = new NfcFCardEmulationInterface();
@@ -192,6 +197,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mRoutingOptionManager = routingOptionManager;
         mOffHostRouteEse = mRoutingOptionManager.getOffHostRouteEse();
         mOffHostRouteUicc = mRoutingOptionManager.getOffHostRouteUicc();
+        mNfcEventLog = nfcEventLog;
         initialize();
     }
 
@@ -717,6 +723,23 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             }
             NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setAidRegistration(NfcEventProto.NfcAidRegistration.newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                service.getPackageName())
+                                            .setClassName(
+                                                service.getClassName())
+                                            .build())
+                                    .setIsRegistration(true)
+                                    .addAllAids(aidGroup.getAids())
+                                    .build())
+                            .build());
             return true;
         }
 
@@ -730,8 +753,29 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "service ("+ service + ") isn't registered for user " + userId);
                 return false;
             }
-            return mServiceCache.registerPollingLoopFilterForService(userId, Binder.getCallingUid(),
-                    service, pollingLoopFilter, autoTransact);
+            if (!mServiceCache.registerPollingLoopFilterForService(userId, Binder.getCallingUid(),
+                    service, pollingLoopFilter, autoTransact)) {
+                return false;
+            }
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPollingLoopRegistration(NfcEventProto.NfcPollingLoopRegistration
+                                                            .newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                service.getPackageName())
+                                            .setClassName(
+                                                service.getClassName())
+                                            .build())
+                                    .setIsRegistration(true)
+                                    .setPollingLoopFilter(pollingLoopFilter)
+                                    .build())
+                            .build());
+            return true;
         }
 
         @Override
@@ -744,8 +788,29 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "service ("+ service + ") isn't registered for user " + userId);
                 return false;
             }
-            return mServiceCache.removePollingLoopFilterForService(userId, Binder.getCallingUid(),
-                    service, pollingLoopFilter);
+            if (!mServiceCache.removePollingLoopFilterForService(userId, Binder.getCallingUid(),
+                    service, pollingLoopFilter)) {
+                return false;
+            }
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPollingLoopRegistration(NfcEventProto.NfcPollingLoopRegistration
+                                                            .newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                service.getPackageName())
+                                            .setClassName(
+                                                service.getClassName())
+                                            .build())
+                                    .setIsRegistration(false)
+                                    .setPollingLoopFilter(pollingLoopFilter)
+                                    .build())
+                            .build());
+            return true;
         }
 
         @Override
@@ -758,8 +823,29 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "service ("+ service + ") isn't registed for user " + userId);
                 return false;
             }
-            return mServiceCache.registerPollingLoopPatternFilterForService(userId,
-                    Binder.getCallingUid(), service, pollingLoopPatternFilter, autoTransact);
+            if (!mServiceCache.registerPollingLoopPatternFilterForService(userId,
+                    Binder.getCallingUid(), service, pollingLoopPatternFilter, autoTransact)) {
+                return false;
+            }
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPollingLoopRegistration(NfcEventProto.NfcPollingLoopRegistration
+                                                            .newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                service.getPackageName())
+                                            .setClassName(
+                                                service.getClassName())
+                                            .build())
+                                    .setIsRegistration(true)
+                                    .setPollingLoopFilter(pollingLoopPatternFilter)
+                                    .build())
+                            .build());
+            return true;
         }
 
         @Override
@@ -772,8 +858,29 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
                 Log.e(TAG, "service ("+ service + ") isn't registed for user " + userId);
                 return false;
             }
-            return mServiceCache.removePollingLoopPatternFilterForService(userId,
-                    Binder.getCallingUid(), service, pollingLoopPatternFilter);
+            if (!mServiceCache.removePollingLoopPatternFilterForService(userId,
+                    Binder.getCallingUid(), service, pollingLoopPatternFilter)) {
+                return false;
+            }
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPollingLoopRegistration(NfcEventProto.NfcPollingLoopRegistration
+                                                            .newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                service.getPackageName())
+                                            .setClassName(
+                                                service.getClassName())
+                                            .build())
+                                    .setIsRegistration(false)
+                                    .setPollingLoopFilter(pollingLoopPatternFilter)
+                                    .build())
+                            .build());
+            return true;
         }
 
         @Override
@@ -833,6 +940,22 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             }
             NfcService.getInstance().onPreferredPaymentChanged(
                     NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setAidRegistration(NfcEventProto.NfcAidRegistration.newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                service.getPackageName())
+                                            .setClassName(
+                                                service.getClassName())
+                                            .build())
+                                    .setIsRegistration(false)
+                                    .build())
+                            .build());
             return true;
         }
 
