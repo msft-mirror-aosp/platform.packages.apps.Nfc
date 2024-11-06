@@ -322,6 +322,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
 
+    private static final long TIME_TO_MONITOR_AFTER_FIELD_ON_MS = 10000L;
+
     private final Looper mLooper;
     private final UserManager mUserManager;
     private final ActivityManager mActivityManager;
@@ -414,6 +416,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private PowerManager.WakeLock mRoutingWakeLock;
     private PowerManager.WakeLock mRequireUnlockWakeLock;
+
+    private long mLastFieldOnTimestamp = 0;
 
     int mEndSound;
     int mErrorSound;
@@ -608,6 +612,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onRemoteFieldActivated() {
         mRfFieldActivated = true;
+        mLastFieldOnTimestamp = mNfcInjector.getWallClockMillis();
+        mNfcInjector.ensureWatchdogMonitoring();
         try {
             if (mNfcOemExtensionCallback != null) {
                 mNfcOemExtensionCallback.onRfFieldActivated(mRfFieldActivated);
@@ -4523,6 +4529,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 case MSG_WATCHDOG_PING:
                     NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
                     watchdog.notifyHasReturned();
+                    if (mLastFieldOnTimestamp + TIME_TO_MONITOR_AFTER_FIELD_ON_MS >
+                            mNfcInjector.getWallClockMillis()) {
+                        watchdog.stopMonitoring();
+                    }
                     break;
                 case MSG_UPDATE_SYSTEM_CODE_ROUTE:
                     if (DBG) Log.d(TAG, "Update system code");
