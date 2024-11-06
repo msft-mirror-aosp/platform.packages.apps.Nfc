@@ -25,7 +25,6 @@ import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_LOCKED;
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.Application;
@@ -234,6 +233,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MAX_TOAST_DEBOUNCE_TIME = 10000;
 
     static final int DISABLE_POLLING_FLAGS = 0x1000;
+
+    static final int RF_COALESCING_WINDOW = 50;
 
     static final int TASK_ENABLE = 1;
     static final int TASK_DISABLE = 2;
@@ -614,8 +615,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send onRemoteFieldActivated", e);
         }
-        sendMessage(NfcService.MSG_RF_FIELD_ACTIVATED, null);
-
+        if (Flags.coalesceRfEvents() && mHandler.hasMessages(NfcService.MSG_RF_FIELD_DEACTIVATED)) {
+            mHandler.removeMessages(NfcService.MSG_RF_FIELD_DEACTIVATED);
+        } else {
+            sendMessage(NfcService.MSG_RF_FIELD_ACTIVATED, null);
+        }
         if (mStatsdUtils != null) {
             mStatsdUtils.logFieldChanged(true, 0);
         }
@@ -640,8 +644,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to send onRemoteFieldDeactivated", e);
         }
-        sendMessage(NfcService.MSG_RF_FIELD_DEACTIVATED, null);
-
+        if (Flags.coalesceRfEvents()) {
+            mHandler.sendMessageDelayed(
+                    mHandler.obtainMessage(NfcService.MSG_RF_FIELD_DEACTIVATED),
+                    RF_COALESCING_WINDOW);
+        } else {
+            sendMessage(NfcService.MSG_RF_FIELD_DEACTIVATED, null);
+        }
         if (mStatsdUtils != null) {
             mStatsdUtils.logFieldChanged(false, 0);
         }
