@@ -482,12 +482,12 @@ class PN532:
     def mute(self):
         """Turns off device's RF antenna."""
         self.log.debug("Muting")
-        self.rf_configuration(RFConfigItem.RF_FIELD, [0x02])
+        self.rf_configuration(RFConfigItem.RF_FIELD, [0b10])
 
-    def unmute(self):
+    def unmute(self, auto_rf_ca=False):
         """Turns on device's RF antenna."""
         self.log.debug("Unmuting")
-        self.rf_configuration(RFConfigItem.RF_FIELD, [0x03])
+        self.rf_configuration(RFConfigItem.RF_FIELD, [(auto_rf_ca << 1) + 0b01])
 
     # PN532 defined commands
 
