@@ -54,6 +54,7 @@ import android.media.SoundPool.OnLoadCompleteListener;
 import android.net.Uri;
 import android.nfc.AvailableNfcAntenna;
 import android.nfc.Constants;
+import android.nfc.Entry;
 import android.nfc.ErrorCodes;
 import android.nfc.FormatException;
 import android.nfc.IAppCallback;
@@ -3175,6 +3176,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             return NfcService.this.isTagPresent();
         }
 
+        @Override
+        public List<Entry> getRoutingTableEntryList() throws RemoteException {
+            if (DBG) Log.i(TAG, "getRoutingTableEntry");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return mRoutingTableParser.getRoutingTableEntryList(mDeviceHost);
+        }
+
         private void updateNfCState() {
             if (mNfcOemExtensionCallback != null) {
                 try {
@@ -4165,6 +4173,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_ROUTE_AID: {
+                    if (!isNfcEnabled())
+                        break;
                     int route = msg.arg1;
                     int aidInfo = msg.arg2;
                     String aid = (String) msg.obj;
@@ -4280,13 +4290,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     synchronized (NfcService.this) {
                         readerParams = mReaderModeParams;
                     }
+                    executeOemOnTagConnectedCallback(true);
                     if (mNfcOemExtensionCallback != null
                             && receiveOemCallbackResult(ACTION_ON_READ_NDEF)) {
                         Log.d(TAG, "MSG_NDEF_TAG: skip due to oem callback");
                         tag.startPresenceChecking(presenceCheckDelay, callback);
                         break;
                     }
-                    executeOemOnTagConnectedCallback(true);
                     if (readerParams != null) {
                         presenceCheckDelay = readerParams.presenceCheckDelay;
                         if ((readerParams.flags & NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK) != 0) {
