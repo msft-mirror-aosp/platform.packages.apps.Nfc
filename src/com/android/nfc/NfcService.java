@@ -3982,6 +3982,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private void StopPresenceChecking() {
         Object[] objectValues = mObjectMap.values().toArray();
+        if (!ArrayUtils.isEmpty(objectValues)) {
+            // If there are some tags connected, we need to execute the callback to indicate
+            // the tag is being forcibly disconnected.
+            executeOemOnTagConnectedCallback(false);
+        }
         for (Object object : objectValues) {
             if (object instanceof TagEndpoint) {
                 TagEndpoint tag = (TagEndpoint)object;
