@@ -93,18 +93,24 @@ public class SharedPreferencesMigration {
         Log.i(TAG, "Migrating preferences: " + mSharedPreferences.getAll()
                 + ", " + mTagAppPrefListPreferences.getAll());
         if (mSharedPreferences.contains(PREF_NFC_ON)) {
-            if (mSharedPreferences.getBoolean(PREF_NFC_ON, false)) {
+            boolean enableNfc = mSharedPreferences.getBoolean(PREF_NFC_ON, false);
+            Log.d(TAG, "enableNfc: " + enableNfc);
+            if (enableNfc) {
                 mNfcAdapter.enable();
             } else {
                 mNfcAdapter.disable();
             }
         }
         if (mSharedPreferences.contains(PREF_SECURE_NFC_ON)) {
-            mNfcAdapter.enableSecureNfc(mSharedPreferences.getBoolean(PREF_SECURE_NFC_ON, false));
+            boolean enableSecureNfc = mSharedPreferences.getBoolean(PREF_SECURE_NFC_ON, false);
+            Log.d(TAG, "enableSecureNfc: " + enableSecureNfc);
+            mNfcAdapter.enableSecureNfc(enableSecureNfc);
         }
         if (mSharedPreferences.contains(PREF_NFC_READER_OPTION_ON)) {
-            mNfcAdapter.enableReaderOption(
-                    mSharedPreferences.getBoolean(PREF_NFC_READER_OPTION_ON, false));
+            boolean enableReaderOption =
+                mSharedPreferences.getBoolean(PREF_NFC_READER_OPTION_ON, false);
+            Log.d(TAG, "enableSecureNfc: " + enableReaderOption);
+            mNfcAdapter.enableReaderOption(enableReaderOption);
         }
         if (mTagAppPrefListPreferences != null) {
             try {
@@ -118,6 +124,7 @@ public class SharedPreferencesMigration {
                         while (keysItr.hasNext()) {
                             String pkg = keysItr.next();
                             Boolean allow = jsonObject.getBoolean(pkg);
+                            Log.d(TAG, "setTagIntentAppPreferenceForUser: " + pkg + " = " + allow);
                             mNfcAdapter.setTagIntentAppPreferenceForUser(userId, pkg, allow);
                         }
                     }

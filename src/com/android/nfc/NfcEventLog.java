@@ -157,7 +157,7 @@ public final class NfcEventLog {
                 // Cleanup the proto string output to make it more readable.
                 String eventTypeString = event.getEventType().toString()
                     .replaceAll("# com.android.nfc.proto.*", "")
-                    .replaceAll("\n", "");
+                    .replaceAll("\\s+", " ");
                 pw.println(event.getTimestamp() + ": " + eventTypeString);
             }
         }
