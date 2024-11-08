@@ -39,7 +39,7 @@ class RoutingManager {
   bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route, int aidInfo,
                      int power);
   bool removeAidRouting(const uint8_t* aid, uint8_t aidLen);
-  bool commitRouting();
+  tNFA_STATUS commitRouting();
   int registerT3tIdentifier(uint8_t* t3tId, uint8_t t3tIdLen);
   void deregisterT3tIdentifier(int handle);
   void onNfccShutdown();

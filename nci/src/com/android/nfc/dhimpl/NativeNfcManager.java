@@ -185,7 +185,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean unrouteAid(byte[] aid);
 
     @Override
-    public native boolean commitRouting();
+    public native int commitRouting();
 
     public native int doRegisterT3tIdentifier(byte[] t3tIdentifier);
 
