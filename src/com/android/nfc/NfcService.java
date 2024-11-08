@@ -54,6 +54,7 @@ import android.media.SoundPool.OnLoadCompleteListener;
 import android.net.Uri;
 import android.nfc.AvailableNfcAntenna;
 import android.nfc.Constants;
+import android.nfc.Entry;
 import android.nfc.ErrorCodes;
 import android.nfc.FormatException;
 import android.nfc.IAppCallback;
@@ -322,6 +323,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
 
+    private static final long TIME_TO_MONITOR_AFTER_FIELD_ON_MS = 10000L;
+
     private final Looper mLooper;
     private final UserManager mUserManager;
     private final ActivityManager mActivityManager;
@@ -414,6 +417,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private PowerManager.WakeLock mRoutingWakeLock;
     private PowerManager.WakeLock mRequireUnlockWakeLock;
+
+    private long mLastFieldOnTimestamp = 0;
 
     int mEndSound;
     int mErrorSound;
@@ -608,6 +613,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onRemoteFieldActivated() {
         mRfFieldActivated = true;
+        mLastFieldOnTimestamp = mNfcInjector.getWallClockMillis();
+        mNfcInjector.ensureWatchdogMonitoring();
         try {
             if (mNfcOemExtensionCallback != null) {
                 mNfcOemExtensionCallback.onRfFieldActivated(mRfFieldActivated);
@@ -3175,6 +3182,33 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             return NfcService.this.isTagPresent();
         }
 
+        @Override
+        public List<Entry> getRoutingTableEntryList() throws RemoteException {
+            if (DBG) Log.i(TAG, "getRoutingTableEntry");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return mRoutingTableParser.getRoutingTableEntryList(mDeviceHost);
+	}
+
+        @Override
+        public void indicateDataMigration(boolean inProgress, String pkg) throws RemoteException {
+            if (Flags.checkPassedInPackage()) {
+                mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
+            }
+            if (DBG) Log.i(TAG, "indicateDataMigration inProgress: " + inProgress);
+            NfcPermissions.enforceAdminPermissions(mContext);
+            mNfcEventLog.logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setDataMigrationInProgress(NfcEventProto.NfcDataMigrationInProgress
+                                    .newBuilder()
+                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
+                                            .setPackageName(pkg)
+                                            .setUid(Binder.getCallingUid())
+                                            .build())
+                                    .setInProgress(inProgress)
+                                    .build())
+                            .build());
+        }
+
         private void updateNfCState() {
             if (mNfcOemExtensionCallback != null) {
                 try {
@@ -3948,6 +3982,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private void StopPresenceChecking() {
         Object[] objectValues = mObjectMap.values().toArray();
+        if (!ArrayUtils.isEmpty(objectValues)) {
+            // If there are some tags connected, we need to execute the callback to indicate
+            // the tag is being forcibly disconnected.
+            executeOemOnTagConnectedCallback(false);
+        }
         for (Object object : objectValues) {
             if (object instanceof TagEndpoint) {
                 TagEndpoint tag = (TagEndpoint)object;
@@ -4282,13 +4321,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     synchronized (NfcService.this) {
                         readerParams = mReaderModeParams;
                     }
+                    executeOemOnTagConnectedCallback(true);
                     if (mNfcOemExtensionCallback != null
                             && receiveOemCallbackResult(ACTION_ON_READ_NDEF)) {
                         Log.d(TAG, "MSG_NDEF_TAG: skip due to oem callback");
                         tag.startPresenceChecking(presenceCheckDelay, callback);
                         break;
                     }
-                    executeOemOnTagConnectedCallback(true);
                     if (readerParams != null) {
                         presenceCheckDelay = readerParams.presenceCheckDelay;
                         if ((readerParams.flags & NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK) != 0) {
@@ -4523,6 +4562,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 case MSG_WATCHDOG_PING:
                     NfcWatchdog watchdog = (NfcWatchdog) msg.obj;
                     watchdog.notifyHasReturned();
+                    if (mLastFieldOnTimestamp + TIME_TO_MONITOR_AFTER_FIELD_ON_MS >
+                            mNfcInjector.getWallClockMillis()) {
+                        watchdog.stopMonitoring();
+                    }
                     break;
                 case MSG_UPDATE_SYSTEM_CODE_ROUTE:
                     if (DBG) Log.d(TAG, "Update system code");
