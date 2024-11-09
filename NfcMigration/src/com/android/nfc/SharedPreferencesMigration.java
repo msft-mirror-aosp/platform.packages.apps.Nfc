@@ -19,9 +19,14 @@ package com.android.nfc;
 import static android.content.Context.MODE_PRIVATE;
 
 import android.app.ActivityManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.nfc.NfcAdapter;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Log;
@@ -32,6 +37,9 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Used to migrate shared preferences files stored by
@@ -78,6 +86,10 @@ public class SharedPreferencesMigration {
                 mSharedPreferences.getBoolean(PREF_MIGRATION_TO_MAINLINE_COMPLETE, false);
     }
 
+    public void markMigrationComplete() {
+        mSharedPreferences.edit().putBoolean(PREF_MIGRATION_TO_MAINLINE_COMPLETE, true).apply();
+    }
+
     private List<Integer> getEnabledUserIds() {
         List<Integer> userIds = new ArrayList<Integer>();
         UserManager um =
@@ -89,28 +101,68 @@ public class SharedPreferencesMigration {
         }
         return userIds;
     }
+
+    private boolean setNfcEnabled(boolean enable) {
+        try {
+            if (mNfcAdapter.isEnabled() == enable) return true;
+            CountDownLatch countDownLatch = new CountDownLatch(1);
+            AtomicInteger state = new AtomicInteger(NfcAdapter.STATE_OFF);
+            BroadcastReceiver nfcChangeListener = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    int s = intent.getIntExtra(NfcAdapter.EXTRA_ADAPTER_STATE, NfcAdapter.STATE_OFF);
+                    if (s == NfcAdapter.STATE_TURNING_ON || s == NfcAdapter.STATE_TURNING_OFF) {
+                        return;
+                    }
+                    context.unregisterReceiver(this);
+                    state.set(s);
+                    countDownLatch.countDown();
+                }
+            };
+            HandlerThread handlerThread = new HandlerThread("nfc_migration_state_listener");
+            handlerThread.start();
+            Handler handler = new Handler(handlerThread.getLooper());
+            IntentFilter intentFilter = new IntentFilter();
+            intentFilter.addAction(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
+            mContext.getApplicationContext().registerReceiver(
+                    nfcChangeListener, intentFilter, null, handler);
+            if (enable) {
+                if (!mNfcAdapter.enable()) return false;
+            } else {
+                if (!mNfcAdapter.disable()) return false;
+            }
+            if (!countDownLatch.await(2000, TimeUnit.MILLISECONDS)) return false;
+            return state.get() == (enable ? NfcAdapter.STATE_ON : NfcAdapter.STATE_OFF);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     public void handleMigration() {
         Log.i(TAG, "Migrating preferences: " + mSharedPreferences.getAll()
                 + ", " + mTagAppPrefListPreferences.getAll());
         if (mSharedPreferences.contains(PREF_NFC_ON)) {
             boolean enableNfc = mSharedPreferences.getBoolean(PREF_NFC_ON, false);
             Log.d(TAG, "enableNfc: " + enableNfc);
-            if (enableNfc) {
-                mNfcAdapter.enable();
-            } else {
-                mNfcAdapter.disable();
+            if (!setNfcEnabled(enableNfc)) {
+                Log.e(TAG, "Failed to set NFC " + (enableNfc ? "enabled" : "disabled"));
             }
         }
         if (mSharedPreferences.contains(PREF_SECURE_NFC_ON)) {
             boolean enableSecureNfc = mSharedPreferences.getBoolean(PREF_SECURE_NFC_ON, false);
             Log.d(TAG, "enableSecureNfc: " + enableSecureNfc);
-            mNfcAdapter.enableSecureNfc(enableSecureNfc);
+            if (!mNfcAdapter.enableSecureNfc(enableSecureNfc)) {
+                Log.e(TAG, "enableSecureNfc failed");
+            }
         }
         if (mSharedPreferences.contains(PREF_NFC_READER_OPTION_ON)) {
             boolean enableReaderOption =
                 mSharedPreferences.getBoolean(PREF_NFC_READER_OPTION_ON, false);
             Log.d(TAG, "enableSecureNfc: " + enableReaderOption);
-            mNfcAdapter.enableReaderOption(enableReaderOption);
+            if (!mNfcAdapter.enableReaderOption(enableReaderOption)) {
+                Log.e(TAG, "enableReaderOption failed");
+            }
         }
         if (mTagAppPrefListPreferences != null) {
             try {
@@ -125,7 +177,10 @@ public class SharedPreferencesMigration {
                             String pkg = keysItr.next();
                             Boolean allow = jsonObject.getBoolean(pkg);
                             Log.d(TAG, "setTagIntentAppPreferenceForUser: " + pkg + " = " + allow);
-                            mNfcAdapter.setTagIntentAppPreferenceForUser(userId, pkg, allow);
+                            if (mNfcAdapter.setTagIntentAppPreferenceForUser(userId, pkg, allow)
+                                    != NfcAdapter.TAG_INTENT_APP_PREF_RESULT_SUCCESS) {
+                                Log.e(TAG, "setTagIntentAppPreferenceForUser failed");
+                            }
                         }
                     }
                 }
@@ -133,7 +188,6 @@ public class SharedPreferencesMigration {
                 Log.e(TAG, "JSONException: " + e);
             }
         }
-        mSharedPreferences.edit().putBoolean(PREF_MIGRATION_TO_MAINLINE_COMPLETE, true).apply();
     }
 
 }

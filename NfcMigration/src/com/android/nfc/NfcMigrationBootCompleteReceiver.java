@@ -66,18 +66,19 @@ public class NfcMigrationBootCompleteReceiver extends BroadcastReceiver {
                if (!preferencesMigration.hasAlreadyMigrated()) {
                    Handler handler = new Handler();
                    // Let NFC stack handle user unlock before doing the migration.
-                   handler.postDelayed(()  -> {
+                   handler.post(()  -> {
                        Log.d(TAG, "Starting NFC data Migration");
                        indicateDataMigration(true);
                        preferencesMigration.handleMigration();
                        RegisteredServicesCacheMigration cacheMigration =
                                new RegisteredServicesCacheMigration(context);
                        cacheMigration.handleMigration();
+                       preferencesMigration.markMigrationComplete();
                        indicateDataMigration(false);
                        pm.setComponentEnabledSetting(new ComponentName(context, this.getClass()),
                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                            PackageManager.DONT_KILL_APP);
-                   }, 1_000);
+                   });
                }
             }
         }
