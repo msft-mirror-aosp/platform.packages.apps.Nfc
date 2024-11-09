@@ -30,6 +30,7 @@ import android.content.pm.PackageManager;
 import android.nfc.ComponentNameAndUser;
 import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NfcAdapter;
+import android.nfc.OemLogItems;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
@@ -1074,6 +1075,10 @@ public class HostEmulationManager {
         msg.setData(dataBundle);
         msg.replyTo = mMessenger;
         try {
+            NfcService.getInstance().notifyOemLogEvent(new OemLogItems
+                    .Builder(OemLogItems.LOG_ACTION_HCE_DATA)
+                    .setApduCommand(data)
+                    .build());
             mActiveService.send(msg);
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping APDU", e);
