@@ -218,21 +218,27 @@ public class RegisteredServicesCacheMigration {
             } else {
                 for (AidGroup group : dynamicSettings.aidGroups.values()) {
                     Log.d(TAG, "registerAidsForService: " + component + " = " + group.getAids());
-                    mCardEmulation.registerAidsForService(
-                            component, group.getCategory(), group.getAids());
+                    if (!mCardEmulation.registerAidsForService(
+                            component, group.getCategory(), group.getAids())) {
+                        Log.e(TAG, "registerAidsForService failed");
+                    }
                 }
                 if (dynamicSettings.offHostSE != null) {
                     Log.d(TAG, "setOffHostForService: " + component + " = "
                         + dynamicSettings.offHostSE);
-                    mCardEmulation.setOffHostForService(component, dynamicSettings.offHostSE);
+                    if (!mCardEmulation.setOffHostForService(component, dynamicSettings.offHostSE)) {
+                        Log.e(TAG, "setOffHostForService failed");
+                    }
                 }
                 if (dynamicSettings.shouldDefaultToObserveModeStr != null) {
                     boolean shouldDefaultToObserveMode =
                         convertValueToBoolean(dynamicSettings.shouldDefaultToObserveModeStr, false);
                     Log.d(TAG, "setShouldDefaultToObserveModeForService: " + component
                         + " = " + shouldDefaultToObserveMode);
-                    mCardEmulation.setShouldDefaultToObserveModeForService(
-                            component, shouldDefaultToObserveMode);
+                    if (!mCardEmulation.setShouldDefaultToObserveModeForService(
+                            component, shouldDefaultToObserveMode)) {
+                        Log.e(TAG, "setShouldDefaultToObserveModeForService failed");
+                    }
                 }
             }
         }
