@@ -17,6 +17,8 @@
 package com.android.nfc;
 
 import static android.Manifest.permission.BIND_NFC_SERVICE;
+import static android.nfc.OemLogItems.EVENT_DISABLE;
+import static android.nfc.OemLogItems.EVENT_ENABLE;
 
 import static com.android.nfc.NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
 import static com.android.nfc.NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
@@ -74,6 +76,7 @@ import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
 import android.nfc.NfcOemExtension;
+import android.nfc.OemLogItems;
 import android.nfc.Tag;
 import android.nfc.TechListParcel;
 import android.nfc.TransceiveResult;
@@ -140,6 +143,7 @@ import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -2024,6 +2028,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         NfcProperties.initialized().orElse(Boolean.FALSE)) ;
                 return false;
             }
+
+            notifyOemLogEvent(new OemLogItems.Builder(OemLogItems.LOG_ACTION_NFC_TOGGLE)
+                    .setCallingPid(Binder.getCallingPid())
+                    .setCallingEvent(EVENT_ENABLE)
+                    .build());
+
             Log.i(TAG, "Enabling Nfc service. Package:" + pkg);
             List<String> allowlist = new ArrayList<>(
                     Arrays.asList(mContext.getResources().getStringArray(R.array.nfc_allow_list)));
@@ -2067,6 +2077,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (!isDeviceOrProfileOwner && mIsNfcUserChangeRestricted) {
                 throw new SecurityException("Change nfc state by system app is not allowed!");
             }
+
+            notifyOemLogEvent(new OemLogItems.Builder(OemLogItems.LOG_ACTION_NFC_TOGGLE)
+                    .setCallingPid(Binder.getCallingPid())
+                    .setCallingEvent(EVENT_DISABLE)
+                    .build());
 
             Log.i(TAG, "Disabling Nfc service. Package:" + pkg);
             if (saveState) {
@@ -4142,6 +4157,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     public boolean sendData(byte[] data) {
+        notifyOemLogEvent(new OemLogItems.Builder(OemLogItems.LOG_ACTION_HCE_DATA)
+                .setApduResponse(data).build());
         return mDeviceHost.sendRawFrame(data);
     }
 
@@ -4436,6 +4453,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     break;
 
                 case MSG_RF_FIELD_ACTIVATED:
+                    notifyOemLogEvent(new OemLogItems
+                            .Builder(OemLogItems.LOG_ACTION_RF_FIELD_STATE_CHANGED)
+                            .setRfFieldOnTime(Instant.now()).build());
                     if (mCardEmulationManager != null) {
                         mCardEmulationManager.onFieldChangeDetected(true);
                     }
@@ -4446,6 +4466,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     }
                     break;
                 case MSG_RF_FIELD_DEACTIVATED:
+                    notifyOemLogEvent(new OemLogItems
+                            .Builder(OemLogItems.LOG_ACTION_RF_FIELD_STATE_CHANGED)
+                            .setRfFieldOnTime(Instant.now()).build());
                     if (mCardEmulationManager != null) {
                         mCardEmulationManager.onFieldChangeDetected(false);
                     }
@@ -4485,6 +4508,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         if (mState == NfcAdapter.STATE_TURNING_OFF)
                             return;
                     }
+                    notifyOemLogEvent(
+                            new OemLogItems.Builder(OemLogItems.LOG_ACTION_SCREEN_STATE_CHANGED)
+                                    .build());
 
                     mRoutingWakeLock.acquire();
                     try {
@@ -4919,6 +4945,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mDispatchFailedCount = 0;
                     mVibrator.vibrate(mVibrationEffect, HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES);
                     playSound(SOUND_END);
+                    notifyOemLogEvent(new OemLogItems.Builder(OemLogItems.LOG_ACTION_TAG_DETECTED)
+                            .setTag(tag).build());
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Tag creation exception, not dispatching.", e);
@@ -5385,4 +5413,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     public Handler getHandler() {
         return mHandler;
     }
+
+    public void notifyOemLogEvent(OemLogItems item) {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onLogEventNotified(item);
+            } catch (RemoteException e) {
+                Log.e(TAG, "notifyOemLogEvent failed e = " + e.toString());
+            }
+
+        }
+    }
+
 }
