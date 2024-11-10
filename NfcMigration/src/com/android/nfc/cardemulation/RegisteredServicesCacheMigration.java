@@ -20,23 +20,12 @@ import static android.nfc.cardemulation.CardEmulation.CATEGORY_OTHER;
 import static android.nfc.cardemulation.CardEmulation.CATEGORY_PAYMENT;
 
 import android.app.ActivityManager;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
-import android.content.pm.PackageManager.ResolveInfoFlags;
-import android.content.pm.ResolveInfo;
-import android.content.pm.ServiceInfo;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.AidGroup;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
-import android.nfc.cardemulation.HostApduService;
-import android.nfc.cardemulation.OffHostApduService;
-import android.os.ParcelFileDescriptor;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.text.TextUtils;
@@ -45,27 +34,18 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.util.Xml;
-import android.util.proto.ProtoOutputStream;
 
 import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlSerializer;
 
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -237,16 +217,28 @@ public class RegisteredServicesCacheMigration {
                 continue;
             } else {
                 for (AidGroup group : dynamicSettings.aidGroups.values()) {
-                    mCardEmulation.registerAidsForService(
-                            component, group.getCategory(), group.getAids());
+                    Log.d(TAG, "registerAidsForService: " + component + " = " + group.getAids());
+                    if (!mCardEmulation.registerAidsForService(
+                            component, group.getCategory(), group.getAids())) {
+                        Log.e(TAG, "registerAidsForService failed");
+                    }
                 }
                 if (dynamicSettings.offHostSE != null) {
-                    mCardEmulation.setOffHostForService(component, dynamicSettings.offHostSE);
+                    Log.d(TAG, "setOffHostForService: " + component + " = "
+                        + dynamicSettings.offHostSE);
+                    if (!mCardEmulation.setOffHostForService(component, dynamicSettings.offHostSE)) {
+                        Log.e(TAG, "setOffHostForService failed");
+                    }
                 }
                 if (dynamicSettings.shouldDefaultToObserveModeStr != null) {
-                    mCardEmulation.setShouldDefaultToObserveModeForService(
-                            component, convertValueToBoolean(
-                                    dynamicSettings.shouldDefaultToObserveModeStr, false));
+                    boolean shouldDefaultToObserveMode =
+                        convertValueToBoolean(dynamicSettings.shouldDefaultToObserveModeStr, false);
+                    Log.d(TAG, "setShouldDefaultToObserveModeForService: " + component
+                        + " = " + shouldDefaultToObserveMode);
+                    if (!mCardEmulation.setShouldDefaultToObserveModeForService(
+                            component, shouldDefaultToObserveMode)) {
+                        Log.e(TAG, "setShouldDefaultToObserveModeForService failed");
+                    }
                 }
             }
         }
@@ -274,6 +266,8 @@ public class RegisteredServicesCacheMigration {
                             CardEmulation.class.getMethod(
                                     "setServiceEnabledForCategoryOther", ComponentName.class,
                                     boolean.class, int.class);
+                    Log.d(TAG, "setServiceEnabledForCategoryOther: " + component + " = "
+                        + status.checked);
                     setServiceEnabledForCategoryOtherMethod.invoke(
                             mCardEmulation, component, status.checked, userId);
                     // TODO: Add formal API

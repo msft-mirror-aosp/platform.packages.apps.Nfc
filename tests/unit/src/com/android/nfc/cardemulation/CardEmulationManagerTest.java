@@ -38,6 +38,7 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Resources;
+import android.nfc.ComponentNameAndUser;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.AidGroup;
 import android.nfc.cardemulation.ApduServiceInfo;
@@ -52,6 +53,7 @@ import android.os.UserManager;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.ForegroundUtils;
+import com.android.nfc.NfcEventLog;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 import com.android.nfc.R;
@@ -132,6 +134,7 @@ public class CardEmulationManagerTest {
     @Mock private NfcService mNfcService;
     @Mock private UserManager mUserManager;
     @Mock private NfcAdapter mNfcAdapter;
+    @Mock private NfcEventLog mNfcEventLog;
     @Captor private ArgumentCaptor<List<PollingFrame>> mPollingLoopFrameCaptor;
     @Captor private ArgumentCaptor<byte[]> mDataCaptor;
     @Captor private ArgumentCaptor<List<ApduServiceInfo>> mServiceListCaptor;
@@ -2250,6 +2253,7 @@ public class CardEmulationManagerTest {
                 mPreferredServices,
                 mEnabledNfcFServices,
                 mRoutingOptionManager,
-                mPowerManager);
+                mPowerManager,
+                mNfcEventLog);
     }
 }
