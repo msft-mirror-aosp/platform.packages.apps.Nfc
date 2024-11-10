@@ -49,6 +49,8 @@ message EventType {
     NfcReaderOptionChange reader_option_change = 13;
     NfcClearPreference clear_preference = 14;
     NfcCeRoutedAid ce_routed_aid = 15;
+    NfcAidRegistration aid_registration = 16;
+    NfcPollingLoopRegistration polling_loop_registration = 17;
   }
 }
 
@@ -102,7 +104,7 @@ message NfcHostCardEmulationData {
 }
 
 message NfcRemoteFieldStateChange {
-  required bool enable = 1;
+  required bool field_on = 1;
 }
 
 message NfcDiscoveryTechnologyUpdate {
@@ -129,4 +131,18 @@ message NfcClearPreference {}
 message NfcCeRoutedAid {
   required string aid = 1;
   required NfcComponentInfo component_info = 2;
+}
+
+message NfcAidRegistration {
+  required NfcAppInfo app_info = 1;
+  required NfcComponentInfo component_info = 2;
+  required bool is_registration = 3;
+  repeated string aids = 4;
+}
+
+message NfcPollingLoopRegistration {
+  required NfcAppInfo app_info = 1;
+  required NfcComponentInfo component_info = 2;
+  required bool is_registration = 3;
+  required string polling_loop_filter = 4;
 }
