@@ -3894,15 +3894,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.d(TAG, "applyRouting: skip due to oem callback");
                 return;
             }
-            if (mInProvisionMode) {
-                mInProvisionMode = Settings.Global.getInt(mContentResolver,
-                        Settings.Global.DEVICE_PROVISIONED, 0) == 0;
-                if (!mInProvisionMode) {
-                    // Notify dispatcher it's fine to dispatch to any package now
-                    // and allow handover transfers.
-                    mNfcDispatcher.disableProvisioningMode();
-                }
-            }
+            refreshTagDispatcherInProvisionMode();
             if (mPollingPaused) {
                 Log.d(TAG, "Not updating discovery parameters, polling paused.");
                 return;
@@ -3993,6 +3985,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
         }
         return false;
+    }
+
+    private void refreshTagDispatcherInProvisionMode() {
+        if (mInProvisionMode) {
+            mInProvisionMode = mNfcInjector.isInProvisionMode();
+            if (!mInProvisionMode) {
+                mNfcDispatcher.disableProvisioningMode();
+            }
+        }
     }
 
     private void StopPresenceChecking() {
@@ -4900,6 +4901,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         return;
                     }
                 }
+                refreshTagDispatcherInProvisionMode();
                 int dispatchResult = mNfcDispatcher.dispatchTag(tag);
                 if (dispatchResult == NfcDispatcher.DISPATCH_FAIL) {
                     if (DBG) Log.d(TAG, "Tag dispatch failed");
