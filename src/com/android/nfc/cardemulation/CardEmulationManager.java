@@ -204,6 +204,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     public void setOemExtension(@Nullable INfcOemExtensionCallback nfcOemExtensionCallback) {
         mNfcOemExtensionCallback = nfcOemExtensionCallback;
         mHostEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+        mAidCache.setOemExtension(nfcOemExtensionCallback);
     }
 
     private void initialize() {
