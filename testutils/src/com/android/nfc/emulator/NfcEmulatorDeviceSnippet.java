@@ -418,6 +418,7 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
     public void asyncWaitForPollingFrameOff(String callbackId, String eventName) {
         registerSnippetBroadcastReceiver(
                 callbackId, eventName, PollingFrameEmulatorActivity.POLLING_FRAME_OFF_DETECTED);
+        Log.i("PollingFrameEmulatorActivity", "register for polling frame off");
     }
 
     /** Registers receiver for polling loop action */
