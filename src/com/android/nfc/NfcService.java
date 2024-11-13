@@ -525,6 +525,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private boolean mCardEmulationActivated = false;
     private boolean mRfFieldActivated = false;
     private boolean mRfDiscoveryStarted = false;
+    private boolean mEeListenActivated = false;
 
     private static final int STATUS_OK = NfcOemExtension.STATUS_OK;
     private static final int STATUS_UNKNOWN_ERROR = NfcOemExtension.STATUS_UNKNOWN_ERROR;
@@ -736,6 +737,18 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (mCardEmulationManager != null) {
                 mCardEmulationManager.onObserveModeStateChange(enable);
             }
+        }
+    }
+
+    @Override
+    public void onEeListenActivated(boolean isActivated) {
+        mEeListenActivated = isActivated;
+        try {
+            if (mNfcOemExtensionCallback != null) {
+                mNfcOemExtensionCallback.onEeListenActivated(isActivated);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to send onEeListenActivated", e);
         }
     }
 
@@ -3231,6 +3244,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     mNfcOemExtensionCallback.onCardEmulationActivated(mCardEmulationActivated);
                     mNfcOemExtensionCallback.onRfFieldActivated(mRfFieldActivated);
                     mNfcOemExtensionCallback.onRfDiscoveryStarted(mRfDiscoveryStarted);
+                    mNfcOemExtensionCallback.onEeListenActivated(mEeListenActivated);
                 } catch (RemoteException e) {
                     Log.e(TAG, "Failed to update OemExtension with updateNfCState", e);
                 }
@@ -3894,15 +3908,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.d(TAG, "applyRouting: skip due to oem callback");
                 return;
             }
-            if (mInProvisionMode) {
-                mInProvisionMode = Settings.Global.getInt(mContentResolver,
-                        Settings.Global.DEVICE_PROVISIONED, 0) == 0;
-                if (!mInProvisionMode) {
-                    // Notify dispatcher it's fine to dispatch to any package now
-                    // and allow handover transfers.
-                    mNfcDispatcher.disableProvisioningMode();
-                }
-            }
+            refreshTagDispatcherInProvisionMode();
             if (mPollingPaused) {
                 Log.d(TAG, "Not updating discovery parameters, polling paused.");
                 return;
@@ -3993,6 +3999,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
         }
         return false;
+    }
+
+    private void refreshTagDispatcherInProvisionMode() {
+        if (mInProvisionMode) {
+            mInProvisionMode = mNfcInjector.isInProvisionMode();
+            if (!mInProvisionMode) {
+                mNfcDispatcher.disableProvisioningMode();
+            }
+        }
     }
 
     private void StopPresenceChecking() {
@@ -4900,6 +4915,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         return;
                     }
                 }
+                refreshTagDispatcherInProvisionMode();
                 int dispatchResult = mNfcDispatcher.dispatchTag(tag);
                 if (dispatchResult == NfcDispatcher.DISPATCH_FAIL) {
                     if (DBG) Log.d(TAG, "Tag dispatch failed");

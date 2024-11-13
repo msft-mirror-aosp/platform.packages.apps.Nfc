@@ -559,6 +559,10 @@ public class NativeNfcManager implements DeviceHost {
         mListener.onRfDiscoveryEvent(isDiscoveryStarted);
     }
 
+    private void notifyEeListenActivated(boolean isActivated) {
+        mListener.onEeListenActivated(isActivated);
+    }
+
     @Override
     public native void setDiscoveryTech(int pollTech, int listenTech);
 
