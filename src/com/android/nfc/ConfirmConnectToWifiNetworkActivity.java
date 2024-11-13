@@ -38,6 +38,7 @@ public class ConfirmConnectToWifiNetworkActivity extends Activity
                 intent.getParcelableExtra(NfcWifiProtectedSetup.EXTRA_WIFI_CONFIG);
 
         if (mCurrentWifiConfiguration == null) {
+            super.onCreate(savedInstanceState);
             Log.e(TAG, "mCurrentWifiConfiguration is null.");
             finish();
             return;
