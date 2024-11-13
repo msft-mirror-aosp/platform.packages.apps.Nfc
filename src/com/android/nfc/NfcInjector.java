@@ -302,6 +302,13 @@ public class NfcInjector {
     }
 
     /**
+     * Ensure that the watchdog is monitoring the NFC process.
+     */
+    public void ensureWatchdogMonitoring() {
+        mNfcWatchdog.ensureWatchdogMonitoring();
+    }
+
+    /**
      * Temporary location to store nfc properties being added in Android 16 for OEM convergence.
      * Will move all of these together to libsysprop later to avoid multiple rounds of API reviews.
      */

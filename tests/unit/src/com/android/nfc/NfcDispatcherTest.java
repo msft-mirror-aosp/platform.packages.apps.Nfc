@@ -31,7 +31,9 @@ import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothProtoEnums;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -50,7 +52,7 @@ import android.os.Bundle;
 import android.os.PowerManager;
 import android.os.UserManager;
 import android.os.test.TestLooper;
-import android.util.Log;
+import android.os.RemoteException;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -73,7 +75,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import android.nfc.INfcOemExtensionCallback;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcDispatcherTest {
@@ -291,4 +293,63 @@ public final class NfcDispatcherTest {
                 BluetoothProtoEnums.MAJOR_CLASS_UNCATEGORIZED,
                 ""));
     }
+
+    @Test
+    public void testExtractAarPackages() {
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = mock(NdefRecord.class);
+        when(ndefRecord.getTnf()).thenReturn(NdefRecord.TNF_EXTERNAL_TYPE);
+        when(ndefRecord.getType()).thenReturn(NdefRecord.RTD_ANDROID_APP);
+        when(ndefRecord.getPayload())
+                .thenReturn("com.android.test".getBytes(StandardCharsets.US_ASCII));
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        List<String> aarPackages = NfcDispatcher.extractAarPackages(ndefMessage);
+        assertThat(aarPackages).isNotNull();
+        assertThat(aarPackages.size()).isGreaterThan(0);
+        assertThat(aarPackages.get(0)).isEqualTo("com.android.test");
+    }
+
+    @Test
+    public void testFinalize() throws Throwable {
+        mNfcDispatcher.finalize();
+        ArgumentCaptor<BroadcastReceiver> receiverArgumentCaptor = ArgumentCaptor.forClass(
+                BroadcastReceiver.class);
+        verify(mockContext).unregisterReceiver(receiverArgumentCaptor.capture());
+        BroadcastReceiver broadcastReceiver = receiverArgumentCaptor.getValue();
+        assertThat(broadcastReceiver).isNotNull();
+    }
+
+    @Test
+    public void testGetAppSearchIntent() {
+        Intent intent = NfcDispatcher.getAppSearchIntent("com.android.test");
+        assertThat(intent).isNotNull();
+        assertThat(intent.getAction()).isEqualTo(Intent.ACTION_VIEW);
+    }
+
+    @Test
+    public void testGetOemAppSearchIntent() throws RemoteException {
+        INfcOemExtensionCallback nfcOemExtensionCallback = mock(INfcOemExtensionCallback.class);
+        mNfcDispatcher.setOemExtension(nfcOemExtensionCallback);
+        Intent intent = mNfcDispatcher.getOemAppSearchIntent("com.android.test");
+        ArgumentCaptor<NfcCallbackResultReceiver> argumentCaptor = ArgumentCaptor.forClass(
+                NfcCallbackResultReceiver.class);
+        verify(nfcOemExtensionCallback).onGetOemAppSearchIntent(any(), argumentCaptor.capture());
+        NfcCallbackResultReceiver nfcCallbackResultReceiver = argumentCaptor.getValue();
+        assertThat(nfcCallbackResultReceiver).isNotNull();
+    }
+
+    @Test
+    public void testIsComponentEnabled() throws PackageManager.NameNotFoundException {
+        PackageManager packageManager = mock(PackageManager.class);
+        ResolveInfo resolveInfo = mock(ResolveInfo.class);
+        ActivityInfo activityInfo = mock(ActivityInfo.class);
+        activityInfo.packageName = "com.android.test";
+        activityInfo.name = "test";
+        resolveInfo.activityInfo = activityInfo;
+        when(packageManager.getActivityInfo(any(), anyInt())).thenReturn(activityInfo);
+        boolean result = NfcDispatcher.isComponentEnabled(packageManager, resolveInfo);
+        assertThat(result).isTrue();
+    }
+
+
 }
