@@ -426,7 +426,6 @@ public final class NfcServiceTest {
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_ROUTE_AID);
-        mNfcService.mState = NfcAdapter.STATE_ON;
         msg.arg1 = 1;
         msg.arg2 = 2;
         msg.obj = "test";

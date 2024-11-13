@@ -4156,8 +4156,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_ROUTE_AID: {
-                    if (!isNfcEnabled())
-                        break;
                     int route = msg.arg1;
                     int aidInfo = msg.arg2;
                     String aid = (String) msg.obj;
