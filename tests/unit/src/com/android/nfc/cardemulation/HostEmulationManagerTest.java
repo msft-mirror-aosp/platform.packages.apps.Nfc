@@ -852,6 +852,7 @@ public class HostEmulationManagerTest {
         assertTrue(bundle.containsKey(HostEmulationManager.DATA_KEY));
         assertEquals(data, bundle.getByteArray(HostEmulationManager.DATA_KEY));
         assertEquals(mHostEmulationManager.getLocalMessenger(), message.replyTo);
+        verify(mNfcService).notifyOemLogEvent(any());
         verifyNoMoreInteractions(mNfcService);
         verifyNoMoreInteractions(mContext);
     }

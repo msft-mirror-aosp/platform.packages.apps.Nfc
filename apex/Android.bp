@@ -63,9 +63,19 @@ custom_apex {
         // does not ship one in /product
         "libnfc-nci.conf-default",
     ],
+    file_contexts: ":com.android.nfcservices-file_contexts",
     key: "com.android.nfcservices.key",
     certificate: ":com.android.nfcservices.certificate",
     updatable: false,
+}
+
+sdk {
+    name: "nfcservices-module-sdk",
+    apexes: [
+        // Adds exportable dependencies of the APEX to the sdk,
+        // e.g. *classpath_fragments.
+        "com.android.nfcservices",
+    ],
 }
 
 soong_config_module_type {

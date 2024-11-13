@@ -16,39 +16,9 @@
 """Utility classes and functions used for testing polling frame notifications
 """
 
-from dataclasses import dataclass
 import time
-import functools
-
-
-class TimedWrapper:
-    """Proxies attribute access operation target
-    If accessed attribute is callable, wraps the original callable
-    into a function which tracks execution time
-    """
-
-    def __init__(self, target):
-        self._target = target
-        self.timings = []
-
-    def __getattr__(self, name):
-        attr = getattr(self._target, name)
-
-        if not callable(attr):
-            return attr
-
-        @functools.wraps(attr)
-        def wrapped_method(*args, **kwargs):
-            start_time = time.monotonic_ns()
-            result = attr(*args, **kwargs)
-            end_time = time.monotonic_ns()
-
-            # Store the timing
-            self.timings.append((start_time, end_time))
-
-            return result
-
-        return wrapped_method
+from typing import Collection
+from dataclasses import dataclass
 
 
 @dataclass
@@ -71,8 +41,29 @@ class PollingFrameTestCase:
     configuration: TransceiveConfiguration
     data: str
 
-    expected_types: list
-    expected_data: list
+    success_types: Collection = ()
+    success_data: Collection = ()
+    warning_data: Collection = ()
+
+    def __init__(
+        self,
+        configuration,
+        data,
+        success_types=(),
+        success_data=(),
+        warning_data=()
+    ):
+        self.configuration = configuration
+        self.data = data
+        if len(success_types) == 0:
+            success_types = (configuration.type,)
+        # If no success data variations were given,
+        # assume only original is allowed
+        if len(success_data) == 0:
+            success_data = (data,)
+        self.success_types = success_types
+        self.success_data = success_data
+        self.warning_data = warning_data
 
     def format_for_error(self, **kwargs):
         """Formats testcase value for pretty reporting in errors"""
@@ -190,36 +181,38 @@ POLLING_FRAME_OFF = PollingFrameTestCase(_X, "00", ["X"], ["00"])
 
 # Type A
 # 1)
-POLLING_FRAME_REQA = PollingFrameTestCase(_A_SHORT, "26", ["A"], ["52", ""])
-POLLING_FRAME_WUPA = PollingFrameTestCase(_A_SHORT, "52", ["A"], ["26", ""])
 POLLING_FRAMES_TYPE_A_SPECIAL = [
-    POLLING_FRAME_REQA,
-    POLLING_FRAME_WUPA,
+    # WUPA
+    PollingFrameTestCase(_A_SHORT, "26", ["A"], ["26"], ["52"]),
+    # REQA
+    PollingFrameTestCase(_A_SHORT, "52", ["A"], ["52"], ["26"]),
+    # Some readers send SLP_REQ in the polling loop
+    PollingFrameTestCase(_A, "5000", ["A"], ["5000"]),
 ]
 # 2) 7-bit short frames
 POLLING_FRAMES_TYPE_A_SHORT = [
-    PollingFrameTestCase(_A_SHORT, "20", ["U"], [""]),
-    PollingFrameTestCase(_A_SHORT, "06", ["U"], [""]),
-    PollingFrameTestCase(_A_SHORT, "50", ["U"], [""]),
-    PollingFrameTestCase(_A_SHORT, "02", ["U"], [""]),
-    PollingFrameTestCase(_A_SHORT, "70", ["U"], [""]),
-    PollingFrameTestCase(_A_SHORT, "7a", ["U"], [""]),
+    PollingFrameTestCase(_A_SHORT, "20", ["U"]),
+    PollingFrameTestCase(_A_SHORT, "06", ["U"]),
+    PollingFrameTestCase(_A_SHORT, "50", ["U"]),
+    PollingFrameTestCase(_A_SHORT, "02", ["U"]),
+    PollingFrameTestCase(_A_SHORT, "70", ["U"]),
+    PollingFrameTestCase(_A_SHORT, "7a", ["U"]),
 ]
 # 3)
 POLLING_FRAMES_TYPE_A_NOCRC = [
-    PollingFrameTestCase(_A_NOCRC, "aa", ["U"], [""]),
-    PollingFrameTestCase(_A_NOCRC, "55aa", ["U"], [""]),
-    PollingFrameTestCase(_A_NOCRC, "aa55aa", ["U"], [""]),
-    PollingFrameTestCase(_A_NOCRC, "55aa55aa", ["U"], [""]),
+    PollingFrameTestCase(_A_NOCRC, "aa", ["U"], ["aa"], [""]),
+    PollingFrameTestCase(_A_NOCRC, "55aa", ["U"], ["55aa"], [""]),
+    PollingFrameTestCase(_A_NOCRC, "aa55aa", ["U"], ["aa55aa"], ["aa"]),
+    PollingFrameTestCase(_A_NOCRC, "55aa55aa", ["U"], ["55aa55aa"], ["55aa"]),
 ]
 # 4)
 POLLING_FRAMES_TYPE_A_LONG = [
-    PollingFrameTestCase(_A, "02f1", ["U"], []),
-    PollingFrameTestCase(_A, "ff00", ["U"], []),
-    PollingFrameTestCase(_A, "ff001122", ["U"], []),
-    PollingFrameTestCase(_A, "ff00112233445566", ["U"], []),
-    PollingFrameTestCase(_A, "ff00112233445566778899aa", ["U"], []),
-    PollingFrameTestCase(_A, "ff00112233445566778899aabbccddee", ["U"], []),
+    PollingFrameTestCase(_A, "02f1", ["U"]),
+    PollingFrameTestCase(_A, "ff00", ["U"]),
+    PollingFrameTestCase(_A, "ff001122", ["U"]),
+    PollingFrameTestCase(_A, "ff00112233445566", ["U"]),
+    PollingFrameTestCase(_A, "ff00112233445566778899aa", ["U"]),
+    PollingFrameTestCase(_A, "ff00112233445566778899aabbccddee", ["U"]),
 ]
 
 # Type B
@@ -227,40 +220,40 @@ POLLING_FRAMES_TYPE_A_LONG = [
 POLLING_FRAMES_TYPE_B_SPECIAL = [
     # 1.1) Common cases
     #   REQB, AFI 0x00, TS 0x00
-    PollingFrameTestCase(_B, "050000", ["B"], []),
+    PollingFrameTestCase(_B, "050000", ["B"]),
     #   WUPB, AFI 0x00, TS 0x00
-    PollingFrameTestCase(_B, "050008", ["B"], []),
+    PollingFrameTestCase(_B, "050008", ["B"]),
     # 1.2) Different AFI values
     #   REQB, AFI 0x01, TS 0x00
-    PollingFrameTestCase(_B, "050100", ["B"], []),
+    PollingFrameTestCase(_B, "050100", ["B"]),
     #   WUPB, AFI 0x02, TS 0x00
-    PollingFrameTestCase(_B, "050208", ["B"], []),
+    PollingFrameTestCase(_B, "050208", ["B"]),
     # 1.3) Different Timeslot counts
     #   REQB, AFI 0x00, TS 0x01 (2)
-    PollingFrameTestCase(_B, "050001", ["B"], []),
+    PollingFrameTestCase(_B, "050001", ["B"]),
     #   WUPB, AFI 0x00, TS 0x02 (4)
-    PollingFrameTestCase(_B, "05000a", ["B"], []),
+    PollingFrameTestCase(_B, "05000a", ["B"]),
 ]
 # 3)
 POLLING_FRAMES_TYPE_B_NOCRC = [
-    PollingFrameTestCase(_B_NOCRC, "aa", ["U"], [""]),
-    PollingFrameTestCase(_B_NOCRC, "55aa", ["U"], [""]),
-    PollingFrameTestCase(_B_NOCRC, "aa55aa", ["U"], [""]),
-    PollingFrameTestCase(_B_NOCRC, "55aa55aa", ["U"], [""]),
+    PollingFrameTestCase(_B_NOCRC, "aa", ["U"]),
+    PollingFrameTestCase(_B_NOCRC, "55aa", ["U"]),
+    PollingFrameTestCase(_B_NOCRC, "aa55aa", ["U"]),
+    PollingFrameTestCase(_B_NOCRC, "55aa55aa", ["U"]),
 ]
 # 4)
 POLLING_FRAMES_TYPE_B_LONG = [
-    PollingFrameTestCase(_B, "02f1", ["U"], []),
+    PollingFrameTestCase(_B, "02f1", ["U"]),
     # 2 bytes
-    PollingFrameTestCase(_B, "ff00", ["U"], []),
+    PollingFrameTestCase(_B, "ff00", ["U"]),
     # 4 bytes
-    PollingFrameTestCase(_B, "ff001122", ["U"], []),
+    PollingFrameTestCase(_B, "ff001122", ["U"]),
     # 8 bytes
-    PollingFrameTestCase(_B, "ff00112233445566", ["U"], []),
+    PollingFrameTestCase(_B, "ff00112233445566", ["U"]),
     # 12 bytes
-    PollingFrameTestCase(_B, "ff00112233445566778899aa", ["U"], []),
+    PollingFrameTestCase(_B, "ff00112233445566778899aa", ["U"]),
     # 16 bytes
-    PollingFrameTestCase(_B, "ff00112233445566778899aabbccddee", ["U"], []),
+    PollingFrameTestCase(_B, "ff00112233445566778899aabbccddee", ["U"]),
 ]
 
 # Type F
@@ -268,39 +261,39 @@ POLLING_FRAMES_TYPE_B_LONG = [
 POLLING_FRAMES_TYPE_F_SPECIAL = [
     # 1.0) Common
     #   SENSF_REQ, SC, 0xffff, RC 0x00, TS 0x00
-    PollingFrameTestCase(_F, "00ffff0000", ["F"], []),
+    PollingFrameTestCase(_F, "00ffff0000", ["F"]),
     #   SENSF_REQ, SC, 0x0003, RC 0x00, TS 0x00
-    PollingFrameTestCase(_F, "0000030000", ["F"], []),
+    PollingFrameTestCase(_F, "0000030000", ["F"]),
     # 1.1) Different request codes
     #   SENSF_REQ, SC, 0xffff, RC 0x01, TS 0x00
-    PollingFrameTestCase(_F, "00ffff0100", ["F"], []),
+    PollingFrameTestCase(_F, "00ffff0100", ["F"]),
     #   SENSF_REQ, SC, 0x0003, RC 0x01, TS 0x00
-    PollingFrameTestCase(_F, "0000030100", ["F"], []),
+    PollingFrameTestCase(_F, "0000030100", ["F"]),
     # 1.2) Different Timeslot counts
     #   SENSF_REQ, SC, 0xffff, RC 0x00, TS 0x01 (2)
-    PollingFrameTestCase(_F, "00ffff0001", ["F"], []),
+    PollingFrameTestCase(_F, "00ffff0001", ["F"]),
     #   SENSF_REQ, SC, 0x0003, RC 0x00, TS 0x02 (4)
-    PollingFrameTestCase(_F, "0000030002", ["F"], []),
+    PollingFrameTestCase(_F, "0000030002", ["F"]),
     # 2) 424 kbps
     #   SENSF_REQ, SC, 0xffff
-    PollingFrameTestCase(_F_424, "00ffff0100", ["F"], []),
+    PollingFrameTestCase(_F_424, "00ffff0100", ["F"]),
     #   SENSF_REQ, SC, 0x0003
-    PollingFrameTestCase(_F_424, "00ffff0100", ["F"], []),
+    PollingFrameTestCase(_F_424, "00ffff0100", ["F"]),
 ]
 # 4)
 POLLING_FRAMES_TYPE_F_LONG = [
-    PollingFrameTestCase(_F, "ffaabbccdd", ["U"], []),
-    PollingFrameTestCase(_F, "ff00112233", ["U"], []),
+    PollingFrameTestCase(_F, "ffaabbccdd", ["F", "U"]),
+    PollingFrameTestCase(_F, "ff00112233", ["F", "U"]),
     # 2 bytes
-    PollingFrameTestCase(_F, "ff00", ["U"], []),
+    PollingFrameTestCase(_F, "ff00", ["F", "U"]),
     # 4 bytes
-    PollingFrameTestCase(_F, "ff001122", ["U"], []),
+    PollingFrameTestCase(_F, "ff001122", ["F", "U"]),
     # 8 bytes
-    PollingFrameTestCase(_F, "ff00112233445566", ["U"], []),
+    PollingFrameTestCase(_F, "ff00112233445566", ["F", "U"]),
     # 12 bytes
-    PollingFrameTestCase(_F, "ff00112233445566778899aa", ["U"], []),
+    PollingFrameTestCase(_F, "ff00112233445566778899aa", ["F", "U"]),
     # 16 bytes
-    PollingFrameTestCase(_F, "ff00112233445566778899aabbccddee", ["U"], []),
+    PollingFrameTestCase(_F, "ff00112233445566778899aabbccddee", ["F", "U"]),
 ]
 
 
@@ -319,7 +312,7 @@ POLLING_FRAME_ALL_TEST_CASES = [
 ]
 
 
-EXPEDITED_POLLING_LOOP_EVENT_TYPES = ["F", "U"]
+EXPEDITABLE_POLLING_LOOP_EVENT_TYPES = ["F", "U"]
 
 
 def get_expedited_frames(frames):
@@ -330,7 +323,7 @@ def get_expedited_frames(frames):
     expedited_frames = []
     # Expedited frames come at the beginning
     for frame in frames:
-        if frame.type not in EXPEDITED_POLLING_LOOP_EVENT_TYPES:
+        if frame.type not in EXPEDITABLE_POLLING_LOOP_EVENT_TYPES:
             break
         expedited_frames.append(frame)
     return expedited_frames
@@ -363,7 +356,7 @@ def apply_expedited_frame_ordering(frames, limit=3):
     leave, expedite = [], []
 
     for frame in frames:
-        if frame.type in EXPEDITED_POLLING_LOOP_EVENT_TYPES \
+        if frame.type in EXPEDITABLE_POLLING_LOOP_EVENT_TYPES \
             and len(expedite) < limit:
             expedite.append(frame)
         else:
@@ -455,17 +448,53 @@ def _test_apply_original_frame_ordering():
 _test_apply_original_frame_ordering()
 
 
-# Time conversion
-def ns_to_ms(t):
-    """Converts nanoseconds (10^−9) to milliseconds (10^−3)"""
-    return t / 1000000
+_FRAME_EVENT_TIMEOUT_SEC = 1
 
 
-def ns_to_us(t):
-    """Converts nanoseconds (10^−9) to microseconds (10^−6)"""
-    return t / 1000
+def poll_and_observe_frames(pn532, emulator, testcases, **kwargs):
+    """Handles broadcasting polling loop events for provided list of test cases.
+    Provided set of test cases MUST contain a complete polling loop, starting
+    with 'O' and ending with 'X' event.
+    """
 
+    assert len(testcases) > 2
+    assert testcases[0].configuration.type == "O"
+    assert testcases[-1].configuration.type == "X"
 
-def us_to_ms(t):
-    """Converts microseconds (10^−6) to milliseconds (10^−3)"""
-    return t / 1000
+    off_event_handler = None
+    for idx, testcase in enumerate(testcases):
+        configuration = testcase.configuration
+
+        # On last 'X' Event, create handler
+        if idx == len(testcases) - 1 and configuration.type == "X":
+            off_event_handler = emulator.asyncWaitForPollingFrameOff("XEvent")
+
+        time.sleep(GUARD_TIME_PER_TECH[configuration.type])
+
+        if configuration.type == "O":
+            pn532.unmute()
+        elif configuration.type == "X":
+            pn532.mute()
+        else:
+            pn532.transceive_raw(
+                data=bytes.fromhex(testcase.data),
+                type_=configuration.type,
+                crc=configuration.crc,
+                bitrate=configuration.bitrate,
+                bits=configuration.bits,
+                timeout=configuration.timeout or 0.025,
+                **kwargs
+            )
+
+        if configuration.type in {"O", "X"}:
+            time.sleep(GUARD_TIME_PER_TECH[configuration.type])
+
+    try:
+        if off_event_handler is not None:
+            off_event_handler.waitAndGet("XEvent", _FRAME_EVENT_TIMEOUT_SEC)
+    except (Exception, ) as e:
+        emulator.log.warning( f"Timed out waiting for 'X' event due to {e}")
+
+    frames = [PollingFrame.from_dict(f) for f in emulator.getPollingFrames()]
+
+    return frames
