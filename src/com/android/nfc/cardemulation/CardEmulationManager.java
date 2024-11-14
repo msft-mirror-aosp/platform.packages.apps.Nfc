@@ -1187,18 +1187,20 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     private void callNfcEventListeners(ListenerCall call) {
-        int numListeners = mNfcEventListeners.beginBroadcast();
-        try {
-            IntStream.range(0, numListeners).forEach(i -> {
-                try {
-                    call.invoke(mNfcEventListeners.getBroadcastItem(i));
-                } catch (RemoteException re) {
-                    Log.i(TAG, "Service died", re);
-                }
-            });
+        synchronized (mNfcEventListeners) {
+            int numListeners = mNfcEventListeners.beginBroadcast();
+            try {
+                IntStream.range(0, numListeners).forEach(i -> {
+                    try {
+                        call.invoke(mNfcEventListeners.getBroadcastItem(i));
+                    } catch (RemoteException re) {
+                        Log.i(TAG, "Service died", re);
+                    }
+                });
 
-        } finally {
-            mNfcEventListeners.finishBroadcast();
+            } finally {
+                mNfcEventListeners.finishBroadcast();
+            }
         }
     }
 
