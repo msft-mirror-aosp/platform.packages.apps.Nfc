@@ -16,6 +16,9 @@
 
 package com.android.nfc.cardemulation;
 
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_OK;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -1456,12 +1459,13 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mResources.getBoolean(R.bool.enable_service_for_category_other)).thenReturn(true);
         when(mRegisteredServicesCache.registerOtherForService(anyInt(), any(), anyBoolean()))
-                .thenReturn(true);
+                .thenReturn(SET_SERVICE_ENABLED_STATUS_OK);
 
-        assertTrue(
+        assertEquals(SET_SERVICE_ENABLED_STATUS_OK,
                 mCardEmulationManager
                         .getNfcCardEmulationInterface()
-                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true));
+                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true)
+        );
 
         ExtendedMockito.verify(
                 () -> {
@@ -1478,12 +1482,13 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mResources.getBoolean(R.bool.enable_service_for_category_other)).thenReturn(false);
         when(mRegisteredServicesCache.registerOtherForService(anyInt(), any(), anyBoolean()))
-                .thenReturn(true);
+                .thenReturn(SET_SERVICE_ENABLED_STATUS_OK);
 
-        assertFalse(
+        assertEquals(SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED,
                 mCardEmulationManager
                         .getNfcCardEmulationInterface()
-                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true));
+                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true)
+        );
 
         verify(mRegisteredServicesCache).initialize();
         verifyNoMoreInteractions(mRegisteredServicesCache);
