@@ -117,7 +117,6 @@ public final class NfcEventLog {
             }
         }
         byte[] bytes = eventListBuilder.build().toByteArray();
-        Log.d(TAG, "writeListToLogFile: " + HexEncoding.encodeToString(bytes));
         try {
             writeLogFile(bytes);
         } catch (IOException e) {
