@@ -69,6 +69,15 @@ custom_apex {
     updatable: false,
 }
 
+sdk {
+    name: "nfcservices-module-sdk",
+    apexes: [
+        // Adds exportable dependencies of the APEX to the sdk,
+        // e.g. *classpath_fragments.
+        "com.android.nfcservices",
+    ],
+}
+
 soong_config_module_type {
     name: "custom_bootclasspath_fragment",
     module_type: "bootclasspath_fragment",
