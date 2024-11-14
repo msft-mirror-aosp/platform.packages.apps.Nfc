@@ -15,6 +15,8 @@
  */
 package com.android.nfc.cardemulation;
 
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
+
 import android.annotation.FlaggedApi;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -1003,10 +1005,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        public boolean setServiceEnabledForCategoryOther(int userId,
+        public int setServiceEnabledForCategoryOther(int userId,
                 ComponentName app, boolean status) throws RemoteException {
             if (!mContext.getResources().getBoolean(R.bool.enable_service_for_category_other))
-              return false;
+              return SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
             NfcPermissions.enforceUserPermissions(mContext);
 
             return mServiceCache.registerOtherForService(userId, app, status);
