@@ -3,7 +3,7 @@ container: "system"
 
 flag {
     name: "coalesce_rf_events"
-    namespace: "wallet_integrations"
-    description: "Allow HostEmulationManager to bind to multiple non-payment services at a time"
+    namespace: "wallet_integration"
+    description: "Combine RF field activated and deactivated events to reduce excessive broadcasts."
     bug: "365533082"
 }
