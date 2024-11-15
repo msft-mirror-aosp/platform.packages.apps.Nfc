@@ -360,7 +360,7 @@ class PN532:
         self.log.debug("Polling B")
         afi = 0x00
         tag = self.in_list_passive_target(
-            br_ty=BrTy.TYPE_B_106, initiator_data=(afi)
+            br_ty=BrTy.TYPE_B_106, initiator_data=(afi,)
         )
         if tag:
             self.log.debug(f"Got Type B tag {tag.sensb_res}")
