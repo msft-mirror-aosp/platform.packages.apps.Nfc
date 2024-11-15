@@ -1391,7 +1391,8 @@ static jboolean nativeNfcTag_doPresenceCheck(JNIEnv*, jobject) {
            ((sPresCheckStatus == NFA_STATUS_RF_FRAME_CORRUPTED) &&
             ((sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T1T) ||
              (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T2T) ||
-             (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T5T))) ||
+             (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T5T) ||
+             (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_CI))) ||
            (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T3T))) {
         sPresCheckErrCnt++;
 
