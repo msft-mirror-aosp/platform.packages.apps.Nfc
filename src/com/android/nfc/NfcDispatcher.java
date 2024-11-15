@@ -86,6 +86,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import androidx.annotation.VisibleForTesting;
 
 /**
  * Dispatch of NFC events to start activities
@@ -110,7 +111,7 @@ class NfcDispatcher {
     private final NfcInjector mNfcInjector;
     private final Handler mMessageHandler = new MessageHandler();
     private final Messenger mMessenger = new Messenger(mMessageHandler);
-    private AtomicBoolean mBluetoothEnabledByNfc = new AtomicBoolean();
+    private final AtomicBoolean mBluetoothEnabledByNfc;
 
     // Locked on this
     private PendingIntent mOverrideIntent;
@@ -143,6 +144,7 @@ class NfcDispatcher {
         synchronized (this) {
             mProvisioningOnly = provisionOnly;
         }
+        mBluetoothEnabledByNfc = mNfcInjector.createAtomicBoolean();
         String[] provisionMimes = null;
         if (provisionOnly) {
             try {
@@ -1277,6 +1279,11 @@ class NfcDispatcher {
                     break;
             }
         }
+    }
+
+    @VisibleForTesting
+    public Handler getHandler() {
+        return mMessageHandler;
     }
 
     final BroadcastReceiver mBluetoothStatusReceiver = new BroadcastReceiver() {
