@@ -33,6 +33,7 @@ import android.os.Binder;
 import android.os.RemoteException;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
+import com.android.nfc.cardemulation.CardEmulationManager;
 
 import org.junit.After;
 import org.junit.Before;
@@ -45,6 +46,7 @@ import org.mockito.quality.Strictness;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import static org.mockito.ArgumentMatchers.isNull;
 import android.nfc.INfcDta;
+import android.nfc.INfcCardEmulation;
 
 
 import java.io.FileDescriptor;
@@ -184,6 +186,79 @@ public class NfcShellCommandTest {
         verify(mPrintWriter).println("  configure-dta");
         verify(mPrintWriter).println("  enableDta()");
         verify(dtaService).enableDta();
+        assertThat(status).isEqualTo(0);
+    }
+
+    @Test
+    public void testOnCommandSetOffHostSe() throws RemoteException {
+        NfcService.NfcAdapterService nfcAdapterService = mock(NfcService.NfcAdapterService.class);
+        mNfcService.mNfcAdapter = nfcAdapterService;
+        mNfcShellCommand
+                .init(mBinder, mFileDescriptorIn, mFileDescriptorOut,
+                        mFileDescriptorErr, new String[]{"1", "com.android.test",
+                                "NfcTest", "test"}, 0);
+        CardEmulationManager cardEmulationManager = mock(CardEmulationManager.class);
+        INfcCardEmulation iNfcCardEmulation = mock(INfcCardEmulation.class);
+        when(cardEmulationManager.getNfcCardEmulationInterface()).thenReturn(iNfcCardEmulation);
+        mNfcService.mCardEmulationManager = cardEmulationManager;
+        int status = mNfcShellCommand.onCommand("set-offhost-se");
+        verify(cardEmulationManager).getNfcCardEmulationInterface();
+        verify(iNfcCardEmulation).setOffHostForService(anyInt(), any(), anyString());
+        assertThat(status).isEqualTo(0);
+    }
+
+    @Test
+    public void testOnCommandResetOffHostSe() throws RemoteException {
+        NfcService.NfcAdapterService nfcAdapterService = mock(NfcService.NfcAdapterService.class);
+        mNfcService.mNfcAdapter = nfcAdapterService;
+        mNfcShellCommand
+                .init(mBinder, mFileDescriptorIn, mFileDescriptorOut,
+                        mFileDescriptorErr, new String[]{"1", "com.android.test",
+                                "NfcTest"}, 0);
+        CardEmulationManager cardEmulationManager = mock(CardEmulationManager.class);
+        INfcCardEmulation iNfcCardEmulation = mock(INfcCardEmulation.class);
+        when(cardEmulationManager.getNfcCardEmulationInterface()).thenReturn(iNfcCardEmulation);
+        mNfcService.mCardEmulationManager = cardEmulationManager;
+        int status = mNfcShellCommand.onCommand("reset-offhost-se");
+        verify(cardEmulationManager).getNfcCardEmulationInterface();
+        verify(iNfcCardEmulation).unsetOffHostForService(anyInt(), any());
+        assertThat(status).isEqualTo(0);
+    }
+
+    @Test
+    public void testOnCommandRegisterAidGroup() throws RemoteException {
+        NfcService.NfcAdapterService nfcAdapterService = mock(NfcService.NfcAdapterService.class);
+        mNfcService.mNfcAdapter = nfcAdapterService;
+        mNfcShellCommand
+                .init(mBinder, mFileDescriptorIn, mFileDescriptorOut,
+                        mFileDescriptorErr, new String[]{"1", "com.android.test",
+                                "NfcTest", "325041592E5359532E4444463031", "payment"}, 0);
+        CardEmulationManager cardEmulationManager = mock(CardEmulationManager.class);
+        INfcCardEmulation iNfcCardEmulation = mock(INfcCardEmulation.class);
+        when(cardEmulationManager.getNfcCardEmulationInterface()).thenReturn(iNfcCardEmulation);
+        mNfcService.mCardEmulationManager = cardEmulationManager;
+        int status = mNfcShellCommand.onCommand("register-aid-group");
+        verify(cardEmulationManager).getNfcCardEmulationInterface();
+        verify(iNfcCardEmulation).registerAidGroupForService(anyInt(), any(), any());
+        assertThat(status).isEqualTo(0);
+    }
+
+
+    @Test
+    public void testOnCommandRemoveAidGroup() throws RemoteException {
+        NfcService.NfcAdapterService nfcAdapterService = mock(NfcService.NfcAdapterService.class);
+        mNfcService.mNfcAdapter = nfcAdapterService;
+        mNfcShellCommand
+                .init(mBinder, mFileDescriptorIn, mFileDescriptorOut,
+                        mFileDescriptorErr, new String[]{"1", "com.android.test",
+                                "NfcTest", "payment"}, 0);
+        CardEmulationManager cardEmulationManager = mock(CardEmulationManager.class);
+        INfcCardEmulation iNfcCardEmulation = mock(INfcCardEmulation.class);
+        when(cardEmulationManager.getNfcCardEmulationInterface()).thenReturn(iNfcCardEmulation);
+        mNfcService.mCardEmulationManager = cardEmulationManager;
+        int status = mNfcShellCommand.onCommand("remove-aid-group");
+        verify(cardEmulationManager).getNfcCardEmulationInterface();
+        verify(iNfcCardEmulation).removeAidGroupForService(anyInt(), any(), any());
         assertThat(status).isEqualTo(0);
     }
 }
