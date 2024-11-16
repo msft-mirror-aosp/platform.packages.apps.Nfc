@@ -1062,15 +1062,17 @@ static jboolean nfcManager_unrouteAid(JNIEnv* e, jobject, jbyteArray aid) {
 **                  e: JVM environment.
 **                  o: Java object.
 **
-** Returns:         True if ok.
+** Returns:         NFA_STATUS_OK if successfully initiated
+**                  NFA_STATUS_SEMANTIC_ERROR is update is currently in progress
+**                  NFA_STATUS_FAILED otherwise
 **
 *******************************************************************************/
-static jboolean nfcManager_commitRouting(JNIEnv* e, jobject) {
+static jint nfcManager_commitRouting(JNIEnv* e, jobject) {
   if (sRfEnabled) {
     /*Update routing table only in Idle state.*/
     startRfDiscovery(false);
   }
-  jboolean commitStatus = RoutingManager::getInstance().commitRouting();
+  jint commitStatus = RoutingManager::getInstance().commitRouting();
   startRfDiscovery(true);
   return commitStatus;
 }
@@ -2464,7 +2466,7 @@ static JNINativeMethod gMethods[] = {
 
     {"unrouteAid", "([B)Z", (void*)nfcManager_unrouteAid},
 
-    {"commitRouting", "()Z", (void*)nfcManager_commitRouting},
+    {"commitRouting", "()I", (void*)nfcManager_commitRouting},
 
     {"doRegisterT3tIdentifier", "([B)I",
      (void*)nfcManager_doRegisterT3tIdentifier},

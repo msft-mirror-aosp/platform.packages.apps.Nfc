@@ -160,7 +160,7 @@ public interface DeviceHost {
 
     public boolean unrouteAid(byte[] aid);
 
-    public boolean commitRouting();
+    public int commitRouting();
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 

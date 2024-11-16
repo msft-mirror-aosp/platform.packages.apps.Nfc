@@ -535,6 +535,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int ACTION_ON_TAG_DISPATCH = 2;
     private static final int ACTION_ON_READ_NDEF = 3;
     private static final int ACTION_ON_APPLY_ROUTING = 4;
+    private static final int ACTION_ON_ROUTING_CHANGED = 5;
 
     public static NfcService getInstance() {
         return sService;
@@ -931,6 +932,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     break;
                 case ACTION_ON_APPLY_ROUTING:
                     mNfcOemExtensionCallback.onApplyRouting(receiver);
+                    break;
+                case ACTION_ON_ROUTING_CHANGED:
+                    mNfcOemExtensionCallback.onRoutingChanged(receiver);
                     break;
             }
         } catch (RemoteException remoteException) {
@@ -3237,6 +3241,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             .build());
         }
 
+        @Override
+        public int commitRouting() throws RemoteException {
+            if (DBG) Log.i(TAG, "commitRouting");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            return mDeviceHost.commitRouting();
+        }
+
         private void updateNfCState() {
             if (mNfcOemExtensionCallback != null) {
                 try {
@@ -4288,10 +4299,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         }
                         if (mCurrentDiscoveryParameters.shouldEnableDiscovery()) {
                             if (mNfcOemExtensionCallback != null) {
-                                try {
-                                    mNfcOemExtensionCallback.onRoutingChanged();
-                                } catch (RemoteException e) {
-                                    Log.e(TAG, "onRoutingChanged failed",e);
+                                if (receiveOemCallbackResult(ACTION_ON_ROUTING_CHANGED)) {
+                                    Log.e(TAG, "Oem skip commitRouting");
+                                    return;
                                 }
                             }
                             mDeviceHost.commitRouting();
