@@ -841,8 +841,8 @@ class NfcDispatcher {
         if (intent == null) return false;
 
         // Try to start AAR activity with matching filter
-        List<String> aarPackages = extractAarPackages(message);
-        for (String pkg : aarPackages) {
+        List<String> packages = extractAarPackages(message);
+        for (String pkg : packages) {
             dispatch.intent.setPackage(pkg);
             if (dispatch.tryStartActivity()) {
                 if (DBG) Log.i(TAG, "matched AAR to NDEF");
@@ -850,10 +850,20 @@ class NfcDispatcher {
             }
         }
 
+        // Try to start AAR activity (OEM proprietary format) with matching filter
+        packages = extractOemPackages(message);
+        for (String pkg : packages) {
+            dispatch.intent.setPackage(pkg);
+            if (dispatch.tryStartActivity()) {
+                if (DBG) Log.i(TAG, "matched OEM package to NDEF");
+                return true;
+            }
+        }
+
         List<UserHandle> luh = dispatch.getCurrentActiveUserHandles();
         // Try to perform regular launch of the first AAR
-        if (aarPackages.size() > 0) {
-            String firstPackage = aarPackages.get(0);
+        if (packages.size() > 0) {
+            String firstPackage = packages.get(0);
             PackageManager pm;
             for (UserHandle uh : luh) {
                 try {
@@ -1286,6 +1296,36 @@ class NfcDispatcher {
             }
         }
     };
+
+    List<String> extractOemPackages(NdefMessage message) {
+        if (mNfcOemExtensionCallback != null) {
+            CountDownLatch latch = new CountDownLatch(1);
+            NfcCallbackResultReceiver.OnReceiveResultListener listener =
+                    new NfcCallbackResultReceiver.OnReceiveResultListener();
+            ResultReceiver receiver = new NfcCallbackResultReceiver(latch, listener);
+            try {
+                mNfcOemExtensionCallback.onExtractOemPackages(message, receiver);
+            } catch (RemoteException remoteException) {
+                return new LinkedList<String>();
+            }
+            try {
+                boolean success = latch.await(
+                        WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                if (!success) {
+                    return new LinkedList<String>();
+                } else {
+                    Bundle bundle = listener.getResultData();
+                    String[] packageNames = bundle.getStringArray("packageNames");
+                    if (packageNames != null) {
+                        return List.of(packageNames);
+                    }
+                }
+            } catch (InterruptedException ie) {
+                return new LinkedList<String>();
+            }
+        }
+        return new LinkedList<String>();
+    }
 
     boolean receiveOemCallbackResult(Tag tag, NdefMessage message) {
         if (mNfcOemExtensionCallback == null) {
