@@ -404,8 +404,20 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
     mTechList[mNumTechList] =
         TARGET_TYPE_ISO14443_3A;  // is TagTechnology.NFC_A by Java API
   } else {
-    LOG(ERROR) << StringPrintf("%s: unknown protocol ????", fn);
-    mTechList[mNumTechList] = TARGET_TYPE_UNKNOWN;
+    if ((NCI_PROTOCOL_UNKNOWN == rfDetail.protocol) &&
+        (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_B)) {
+      mTechHandles[mNumTechList] = rfDetail.rf_disc_id;
+      mTechLibNfcTypes[mNumTechList] = rfDetail.protocol;
+      LOG(DEBUG) << StringPrintf("%s; Tech type B, unknown ", fn);
+      mTechList[mNumTechList] =
+          TARGET_TYPE_ISO14443_3B;  // is TagTechnology.NFC_B by Java API
+      // save the stack's data structure for interpretation later
+      memcpy(&(mTechParams[mNumTechList]), &(rfDetail.rf_tech_param),
+             sizeof(rfDetail.rf_tech_param));
+    } else {
+      LOG(ERROR) << StringPrintf("%s; unknown protocol ????", fn);
+      mTechList[mNumTechList] = TARGET_TYPE_UNKNOWN;
+    }
   }
 
   mNumTechList++;
@@ -933,8 +945,17 @@ void NfcTag::fillNativeNfcTagMembers4(JNIEnv* e, jclass tag_cls, jobject tag,
       actBytes.reset(e->NewByteArray(2));
       e->SetByteArrayRegion(actBytes.get(), 0, 2, (jbyte*)data);
     } else {
-      LOG(DEBUG) << StringPrintf("%s: tech unknown ????", fn);
-      actBytes.reset(e->NewByteArray(0));
+      if ((NCI_PROTOCOL_UNKNOWN == mTechLibNfcTypes[i]) &&
+          (mTechParams[i].mode == NFC_DISCOVERY_TYPE_POLL_B)) {
+        LOG(DEBUG) << StringPrintf("%s; Chinese Id Card - MBI = %02X", fn,
+                                   activationData.params.ci.mbi);
+        actBytes.reset(e->NewByteArray(1));
+        e->SetByteArrayRegion(actBytes.get(), 0, 1,
+                              (jbyte*)&activationData.params.ci.mbi);
+      } else {
+        LOG(DEBUG) << StringPrintf("%s: tech unknown ????", fn);
+        actBytes.reset(e->NewByteArray(0));
+      }
     }
     e->SetObjectArrayElement(techActBytes.get(), i, actBytes.get());
   }  // for: every technology in the array of current selected tag
