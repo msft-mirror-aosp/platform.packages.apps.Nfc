@@ -15,6 +15,8 @@
  */
 package com.android.nfc.cardemulation;
 
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
+
 import android.annotation.FlaggedApi;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -204,6 +206,7 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     public void setOemExtension(@Nullable INfcOemExtensionCallback nfcOemExtensionCallback) {
         mNfcOemExtensionCallback = nfcOemExtensionCallback;
         mHostEmulationManager.setOemExtension(mNfcOemExtensionCallback);
+        mAidCache.setOemExtension(nfcOemExtensionCallback);
     }
 
     private void initialize() {
@@ -1002,10 +1005,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         }
 
         @Override
-        public boolean setServiceEnabledForCategoryOther(int userId,
+        public int setServiceEnabledForCategoryOther(int userId,
                 ComponentName app, boolean status) throws RemoteException {
             if (!mContext.getResources().getBoolean(R.bool.enable_service_for_category_other))
-              return false;
+              return SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
             NfcPermissions.enforceUserPermissions(mContext);
 
             return mServiceCache.registerOtherForService(userId, app, status);
@@ -1184,18 +1187,20 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     private void callNfcEventListeners(ListenerCall call) {
-        int numListeners = mNfcEventListeners.beginBroadcast();
-        try {
-            IntStream.range(0, numListeners).forEach(i -> {
-                try {
-                    call.invoke(mNfcEventListeners.getBroadcastItem(i));
-                } catch (RemoteException re) {
-                    Log.i(TAG, "Service died", re);
-                }
-            });
+        synchronized (mNfcEventListeners) {
+            int numListeners = mNfcEventListeners.beginBroadcast();
+            try {
+                IntStream.range(0, numListeners).forEach(i -> {
+                    try {
+                        call.invoke(mNfcEventListeners.getBroadcastItem(i));
+                    } catch (RemoteException re) {
+                        Log.i(TAG, "Service died", re);
+                    }
+                });
 
-        } finally {
-            mNfcEventListeners.finishBroadcast();
+            } finally {
+                mNfcEventListeners.finishBroadcast();
+            }
         }
     }
 

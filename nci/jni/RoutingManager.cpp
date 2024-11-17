@@ -397,7 +397,7 @@ bool RoutingManager::removeAidRouting(const uint8_t* aid, uint8_t aidLen) {
   }
 }
 
-bool RoutingManager::commitRouting() {
+tNFA_STATUS RoutingManager::commitRouting() {
   static const char fn[] = "RoutingManager::commitRouting";
   tNFA_STATUS nfaStat = 0;
   LOG(DEBUG) << fn;
@@ -412,7 +412,7 @@ bool RoutingManager::commitRouting() {
       mEeUpdateEvent.wait();  // wait for NFA_EE_UPDATED_EVT
     }
   }
-  return (nfaStat == NFA_STATUS_OK);
+  return nfaStat;
 }
 
 void RoutingManager::onNfccShutdown() {
@@ -566,6 +566,14 @@ void RoutingManager::notifyDeactivated(uint8_t technology) {
   if (e == NULL) {
     LOG(ERROR) << "jni env is null";
     return;
+  }
+
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyEeListenActivated,
+                    JNI_FALSE);
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
+    LOG(ERROR) << StringPrintf("Fail to notify Ee listen active status.");
   }
 
   e->CallVoidMethod(mNativeData->manager,

@@ -185,7 +185,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean unrouteAid(byte[] aid);
 
     @Override
-    public native boolean commitRouting();
+    public native int commitRouting();
 
     public native int doRegisterT3tIdentifier(byte[] t3tIdentifier);
 
@@ -557,6 +557,10 @@ public class NativeNfcManager implements DeviceHost {
 
     private void notifyRFDiscoveryEvent(boolean isDiscoveryStarted) {
         mListener.onRfDiscoveryEvent(isDiscoveryStarted);
+    }
+
+    private void notifyEeListenActivated(boolean isActivated) {
+        mListener.onEeListenActivated(isActivated);
     }
 
     @Override

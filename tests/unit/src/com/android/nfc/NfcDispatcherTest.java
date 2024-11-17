@@ -31,7 +31,9 @@ import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothProtoEnums;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -48,9 +50,10 @@ import android.nfc.tech.NfcBarcode;
 import android.nfc.tech.TagTechnology;
 import android.os.Bundle;
 import android.os.PowerManager;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.test.TestLooper;
-import android.util.Log;
+import android.os.RemoteException;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -73,7 +76,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+import android.nfc.INfcOemExtensionCallback;
+import com.android.nfc.flags.FeatureFlags;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcDispatcherTest {
@@ -290,5 +294,146 @@ public final class NfcDispatcherTest {
                 tag.getTechCodeList(),
                 BluetoothProtoEnums.MAJOR_CLASS_UNCATEGORIZED,
                 ""));
+    }
+
+    @Test
+    public void testExtractAarPackages() {
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = mock(NdefRecord.class);
+        when(ndefRecord.getTnf()).thenReturn(NdefRecord.TNF_EXTERNAL_TYPE);
+        when(ndefRecord.getType()).thenReturn(NdefRecord.RTD_ANDROID_APP);
+        when(ndefRecord.getPayload())
+                .thenReturn("com.android.test".getBytes(StandardCharsets.US_ASCII));
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        List<String> aarPackages = NfcDispatcher.extractAarPackages(ndefMessage);
+        assertThat(aarPackages).isNotNull();
+        assertThat(aarPackages.size()).isGreaterThan(0);
+        assertThat(aarPackages.get(0)).isEqualTo("com.android.test");
+    }
+
+    @Test
+    public void testFinalize() throws Throwable {
+        mNfcDispatcher.finalize();
+        ArgumentCaptor<BroadcastReceiver> receiverArgumentCaptor = ArgumentCaptor.forClass(
+                BroadcastReceiver.class);
+        verify(mockContext).unregisterReceiver(receiverArgumentCaptor.capture());
+        BroadcastReceiver broadcastReceiver = receiverArgumentCaptor.getValue();
+        assertThat(broadcastReceiver).isNotNull();
+    }
+
+    @Test
+    public void testGetAppSearchIntent() {
+        Intent intent = NfcDispatcher.getAppSearchIntent("com.android.test");
+        assertThat(intent).isNotNull();
+        assertThat(intent.getAction()).isEqualTo(Intent.ACTION_VIEW);
+    }
+
+    @Test
+    public void testGetOemAppSearchIntent() throws RemoteException {
+        INfcOemExtensionCallback nfcOemExtensionCallback = mock(INfcOemExtensionCallback.class);
+        mNfcDispatcher.setOemExtension(nfcOemExtensionCallback);
+        Intent intent = mNfcDispatcher.getOemAppSearchIntent("com.android.test");
+        ArgumentCaptor<NfcCallbackResultReceiver> argumentCaptor = ArgumentCaptor.forClass(
+                NfcCallbackResultReceiver.class);
+        verify(nfcOemExtensionCallback).onGetOemAppSearchIntent(any(), argumentCaptor.capture());
+        NfcCallbackResultReceiver nfcCallbackResultReceiver = argumentCaptor.getValue();
+        assertThat(nfcCallbackResultReceiver).isNotNull();
+    }
+
+    @Test
+    public void testIsComponentEnabled() throws PackageManager.NameNotFoundException {
+        PackageManager packageManager = mock(PackageManager.class);
+        ResolveInfo resolveInfo = mock(ResolveInfo.class);
+        ActivityInfo activityInfo = mock(ActivityInfo.class);
+        activityInfo.packageName = "com.android.test";
+        activityInfo.name = "test";
+        resolveInfo.activityInfo = activityInfo;
+        when(packageManager.getActivityInfo(any(), anyInt())).thenReturn(activityInfo);
+        boolean result = NfcDispatcher.isComponentEnabled(packageManager, resolveInfo);
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testQueryNfcIntentActivitiesAsUser() {
+        when(mResources.getBoolean(eq(R.bool.tag_intent_app_pref_supported)))
+                .thenReturn(true);
+        Tag tag = mock(Tag.class);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = NdefRecord.createUri("https://www.example.com");
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        NfcDispatcher.DispatchInfo dispatchInfo = new NfcDispatcher
+                .DispatchInfo(mockContext, tag, ndefMessage);
+        UserHandle userHandle = mock(UserHandle.class);
+        List<UserHandle> luh = new ArrayList<>();
+        luh.add(userHandle);
+        when(mUserManager.getEnabledProfiles()).thenReturn(luh);
+        when(mUserManager.isQuietModeEnabled(userHandle)).thenReturn(true);
+        dispatchInfo.hasIntentReceiver();
+        verify(mPackageManager).queryIntentActivitiesAsUser(any(), any(), any());
+    }
+
+    @Test
+    public void testReceiveOemCallbackResult() throws  RemoteException {
+        Tag tag = mock(Tag.class);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = NdefRecord.createUri("https://www.example.com");
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        INfcOemExtensionCallback nfcOemExtensionCallback = mock(INfcOemExtensionCallback.class);
+        mNfcDispatcher.setOemExtension(nfcOemExtensionCallback);
+        mNfcDispatcher.receiveOemCallbackResult(tag, ndefMessage);
+        verify(nfcOemExtensionCallback).onNdefMessage(any(), any(), any());
+    }
+
+    @Test
+    public void testTryNdef() {
+        when(mResources.getBoolean(eq(R.bool.tag_intent_app_pref_supported)))
+                .thenReturn(true);
+        Tag tag = mock(Tag.class);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = NdefRecord.createUri("https://www.example.com");
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        UserHandle userHandle = mock(UserHandle.class);
+        List<UserHandle> luh = new ArrayList<>();
+        luh.add(userHandle);
+        when(mUserManager.getEnabledProfiles()).thenReturn(luh);
+        when(mUserManager.isQuietModeEnabled(userHandle)).thenReturn(false);
+        NfcDispatcher.DispatchInfo dispatchInfo = new NfcDispatcher
+                .DispatchInfo(mockContext, tag, ndefMessage);
+        FeatureFlags featureFlags = mock(FeatureFlags.class);
+        when(featureFlags.sendViewIntentForUrlTagDispatch()).thenReturn(false);
+        when(mNfcInjector.getFeatureFlags()).thenReturn(featureFlags);
+        ResolveInfo ri = mock(ResolveInfo.class);
+        when(mPackageManager.resolveActivity(any(), anyInt())).thenReturn(ri);
+        mNfcDispatcher.tryNdef(dispatchInfo, ndefMessage);
+        verify(mPackageManager).resolveActivity(any(), anyInt());
+    }
+
+    @Test
+    public void testGetUri() {
+        when(mResources.getBoolean(eq(R.bool.tag_intent_app_pref_supported)))
+                .thenReturn(true);
+        Tag tag = mock(Tag.class);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = NdefRecord.createUri("https://www.example.com");
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        NfcDispatcher.DispatchInfo dispatchInfo = new NfcDispatcher
+                .DispatchInfo(mockContext, tag, ndefMessage);
+        String uri = dispatchInfo.getUri();
+        assertThat(uri).isNotNull();
+        assertThat(uri).isEqualTo("https://www.example.com");
+    }
+
+    @Test
+    public void testIsWebIntent() {
+        when(mResources.getBoolean(eq(R.bool.tag_intent_app_pref_supported)))
+                .thenReturn(true);
+        Tag tag = mock(Tag.class);
+        NdefMessage ndefMessage = mock(NdefMessage.class);
+        NdefRecord ndefRecord = NdefRecord.createUri("https://www.example.com");
+        when(ndefMessage.getRecords()).thenReturn(new NdefRecord[]{ndefRecord});
+        NfcDispatcher.DispatchInfo dispatchInfo = new NfcDispatcher
+                .DispatchInfo(mockContext, tag, ndefMessage);
+        boolean webIntent = dispatchInfo.isWebIntent();
+        assertThat(webIntent).isTrue();
     }
 }
