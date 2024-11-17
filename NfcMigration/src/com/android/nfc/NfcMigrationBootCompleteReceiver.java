@@ -21,15 +21,32 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.nfc.NfcAdapter;
+import android.nfc.cardemulation.CardEmulation;
 import android.os.Handler;
 import android.util.Log;
 
 import com.android.nfc.SharedPreferencesMigration;
 import com.android.nfc.cardemulation.RegisteredServicesCacheMigration;
 
+import java.lang.reflect.Method;
+
 public class NfcMigrationBootCompleteReceiver extends BroadcastReceiver {
     private static final String TAG = "NfcMigrationBootCompletedReceiver";
     private static final String FEATURE_NFC_ANY = "android.hardware.nfc.any";
+
+    private NfcAdapter mNfcAdapter;
+
+    private void indicateDataMigration(boolean inProgress) {
+        try {
+            Method indicateDataMirationMethod =
+                    NfcAdapter.class.getMethod("indicateDataMigration", boolean.class);
+            indicateDataMirationMethod.invoke(mNfcAdapter, inProgress);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to indicate nfc data migration", e);
+        }
+    }
+
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
@@ -40,21 +57,28 @@ public class NfcMigrationBootCompleteReceiver extends BroadcastReceiver {
                 pm.setApplicationEnabledSetting(context.getPackageName(),
                         PackageManager.COMPONENT_ENABLED_STATE_DISABLED, 0);
             } else {
+                mNfcAdapter = NfcAdapter.getDefaultAdapter(context);
+                if (mNfcAdapter == null) {
+                    throw new IllegalStateException("Failed to get NFC adapter");
+                }
                 SharedPreferencesMigration preferencesMigration =
                         new SharedPreferencesMigration(context);
                if (!preferencesMigration.hasAlreadyMigrated()) {
                    Handler handler = new Handler();
                    // Let NFC stack handle user unlock before doing the migration.
-                   handler.postDelayed(()  -> {
+                   handler.post(()  -> {
                        Log.d(TAG, "Starting NFC data Migration");
+                       indicateDataMigration(true);
                        preferencesMigration.handleMigration();
                        RegisteredServicesCacheMigration cacheMigration =
                                new RegisteredServicesCacheMigration(context);
                        cacheMigration.handleMigration();
+                       preferencesMigration.markMigrationComplete();
+                       indicateDataMigration(false);
                        pm.setComponentEnabledSetting(new ComponentName(context, this.getClass()),
                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                            PackageManager.DONT_KILL_APP);
-                   }, 1_000);
+                   });
                }
             }
         }

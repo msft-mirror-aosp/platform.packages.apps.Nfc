@@ -40,20 +40,17 @@ public class NfcWatchdog extends BroadcastReceiver {
 
     CountDownLatch mCountDownLatch;
     private Intent mWatchdogIntent = new Intent(ACTION_WATCHDOG);
+    private AlarmManager mAlarmManager;
+    private PendingIntent mPendingIntent;
 
     NfcWatchdog(Context context) {
         if (android.nfc.Flags.nfcWatchdog()) {
-            PendingIntent pendingIntent =
+            mPendingIntent =
                     PendingIntent.getBroadcast(
                             context, 0, mWatchdogIntent, PendingIntent.FLAG_IMMUTABLE);
             context.registerReceiver(this, new IntentFilter(ACTION_WATCHDOG),
                     Context.RECEIVER_EXPORTED);
-            AlarmManager alarmManager = context.getSystemService(AlarmManager.class);
-            alarmManager.setInexactRepeating(
-                    AlarmManager.ELAPSED_REALTIME,
-                    SystemClock.elapsedRealtime() + NFC_MONITOR_INTERVAL,
-                    NFC_MONITOR_INTERVAL,
-                    pendingIntent);
+            mAlarmManager = context.getSystemService(AlarmManager.class);
         }
     }
 
@@ -120,6 +117,24 @@ public class NfcWatchdog extends BroadcastReceiver {
             } catch (InterruptedException e) {
                 Log.wtf(TAG, e);
             }
+        }
+    }
+
+    void ensureWatchdogMonitoring() {
+        if (android.nfc.Flags.nfcWatchdog()) {
+            if (mAlarmManager != null && mAlarmManager.getNextAlarmClock() == null) {
+                mAlarmManager.setInexactRepeating(
+                    AlarmManager.ELAPSED_REALTIME,
+                    SystemClock.elapsedRealtime() + NFC_MONITOR_INTERVAL,
+                    NFC_MONITOR_INTERVAL,
+                    mPendingIntent);
+            }
+        }
+    }
+
+    void stopMonitoring() {
+        if (mAlarmManager != null) {
+            mAlarmManager.cancelAll();
         }
     }
 }
