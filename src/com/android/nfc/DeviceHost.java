@@ -55,6 +55,8 @@ public interface DeviceHost {
 
         public void onRfDiscoveryEvent(boolean isDiscoveryStarted);
 
+        public void onEeListenActivated(boolean isActivated);
+
         public void onSeSelected();
     }
 
@@ -158,7 +160,7 @@ public interface DeviceHost {
 
     public boolean unrouteAid(byte[] aid);
 
-    public boolean commitRouting();
+    public int commitRouting();
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 
