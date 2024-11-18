@@ -1365,6 +1365,33 @@ bool NfcTag::isNdefDetectionTimedOut() { return mNdefDetectionTimedOut; }
 
 /*******************************************************************************
 **
+** Function:        notifyTagDiscovered
+**
+** Description:     Notify NFC service about tag discovery.
+**                  discovered: true if tag is discovered, false if tag is lost.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void NfcTag::notifyTagDiscovered(bool discovered) {
+  JNIEnv* e = NULL;
+  ScopedAttach attach(mNativeData->vm, &e);
+  if (e == NULL) {
+    LOG(ERROR) << "jni env is null";
+    return;
+  }
+  LOG(DEBUG) << StringPrintf("%s: %d", __func__, discovered);
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyTagDiscovered,
+                    discovered);
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
+    LOG(ERROR) << StringPrintf("fail notify");
+  }
+}
+
+/*******************************************************************************
+**
 ** Function:        connectionEventHandler
 **
 ** Description:     Handle connection-related events.
@@ -1381,6 +1408,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
     case NFA_DISC_RESULT_EVT: {
       tNFA_DISC_RESULT& disc_result = data->disc_result;
       if ((disc_result.status == NFA_STATUS_OK) && !mIsReselecting) {
+        notifyTagDiscovered(true);
         discoverTechnologies(disc_result);
       }
     } break;
@@ -1392,6 +1420,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
               NCI_DISCOVERY_TYPE_LISTEN_A &&
           data->activated.activate_ntf.intf_param.type !=
               NFC_INTERFACE_EE_DIRECT_RF) {
+        notifyTagDiscovered(true);
         tNFA_ACTIVATED& activated = data->activated;
         if (IsSameKovio(activated)) break;
         mIsActivated = true;
@@ -1410,6 +1439,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
       if (!mIsReselecting) {
         resetTechnologies();
       }
+      notifyTagDiscovered(false);
       break;
 
     case NFA_READ_CPLT_EVT: {

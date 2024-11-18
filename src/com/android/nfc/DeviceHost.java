@@ -49,6 +49,8 @@ public interface DeviceHost {
 
         public void onWlcStopped(int wpt_end_condition);
 
+        public void onTagRfDiscovered(boolean discovered);
+
         public void onVendorSpecificEvent(int gid, int oid, byte[] payload);
 
         public void onObserveModeStateChanged(boolean enable);
