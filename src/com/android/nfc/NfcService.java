@@ -856,6 +856,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mNfcCharging.onWlcStopped(wpt_end_condition);
     }
 
+    public void onTagRfDiscovered(boolean discovered) {
+        Log.d(TAG, "onTagRfDiscovered: " + discovered);
+        executeOemOnTagConnectedCallback(discovered);
+    }
+
     final class ReaderModeParams {
         public int flags;
         public IAppCallback callback;
