@@ -689,7 +689,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         break;
       }
 
-      if (sReconnectEvent.wait(1000) == false)  // if timeout occurred
+      if (sReconnectEvent.wait(natTag.getTransceiveTimeout(
+              sCurrentConnectedTargetType)) == false)  // if timeout occurred
       {
         LOG(ERROR) << StringPrintf("%s: timeout waiting for deactivate",
                                    __func__);
