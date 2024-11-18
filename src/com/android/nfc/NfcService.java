@@ -26,6 +26,7 @@ import static com.android.nfc.NfcStatsLog.NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGE
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_LOCKED;
 import static com.android.nfc.ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED;
 
+import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
@@ -646,6 +647,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                             .build())
                             .build());
         }
+        if (android.nfc.Flags.nfcEventListener() && mCardEmulationManager != null) {
+            mCardEmulationManager.onRemoteFieldChanged(true);
+        }
     }
 
     @Override
@@ -676,6 +680,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                             .setFieldOn(false)
                                             .build())
                             .build());
+        }
+
+        if (android.nfc.Flags.nfcEventListener() && mCardEmulationManager != null) {
+            mCardEmulationManager.onRemoteFieldChanged(false);
         }
     }
 
@@ -726,7 +734,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onHwErrorReported() {
+        if (android.nfc.Flags.nfcEventListener() && mCardEmulationManager != null) {
+            mCardEmulationManager.onInternalErrorReported(
+                    CardEmulation.NFC_INTERNAL_ERROR_NFC_HARDWARE_ERROR);
+        }
         restartStack();
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    @Override
+    public void onCommandTimeout() {
+        if (android.nfc.Flags.nfcEventListener() && mCardEmulationManager != null) {
+            mCardEmulationManager.onInternalErrorReported(
+                    CardEmulation.NFC_INTERNAL_ERROR_COMMAND_TIMEOUT);
+        }
     }
 
     @Override
@@ -1888,6 +1909,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     return;
                 }
                 mState = newState;
+                if (android.nfc.Flags.nfcEventListener() && mCardEmulationManager != null) {
+                    mCardEmulationManager.onNfcStateChanged(newState);
+                }
                 if (mState == NfcAdapter.STATE_ON && mCardEmulationManager != null) {
                     mCardEmulationManager.updateForShouldDefaultToObserveMode(getUserId());
                 }
@@ -3857,6 +3881,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             Log.e(TAG, "Watchdog triggered, aborting.");
             NfcStatsLog.write(NfcStatsLog.NFC_STATE_CHANGED,
                     NfcStatsLog.NFC_STATE_CHANGED__STATE__CRASH_RESTART);
+            if (android.nfc.Flags.nfcEventListener() && mCardEmulationManager != null) {
+                mCardEmulationManager.onInternalErrorReported(
+                        CardEmulation.NFC_INTERNAL_ERROR_NFC_CRASH_RESTART);
+            }
             storeNativeCrashLogs();
             mDeviceHost.doAbort(getName());
         }
