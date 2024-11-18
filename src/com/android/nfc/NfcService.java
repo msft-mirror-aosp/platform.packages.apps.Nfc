@@ -702,6 +702,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onEeUpdated() {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onEeUpdated();
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to send onEeUpdated", e);
+            }
+        }
         new ApplyRoutingTask().execute();
     }
 
