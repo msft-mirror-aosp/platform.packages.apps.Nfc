@@ -541,7 +541,7 @@ public class RegisteredServicesCache {
                 ComponentName component = entry.getKey();
                 DynamicSettings dynamicSettings = entry.getValue();
                 ApduServiceInfo serviceInfo = userServices.services.get(component);
-                if (serviceInfo == null || (serviceInfo.getUid() != dynamicSettings.uid)) {
+                if (serviceInfo == null) {
                     toBeRemovedComponent.add(component);
                     continue;
                 } else {
@@ -1069,7 +1069,7 @@ public class RegisteredServicesCache {
 
             DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
             if (dynSettings == null) {
-                dynSettings = new DynamicSettings(uid);
+                dynSettings = new DynamicSettings(serviceInfo.getUid());
             }
             dynSettings.offHostSE = offHostSE;
             boolean success = writeDynamicSettingsLocked();
@@ -1149,7 +1149,7 @@ public class RegisteredServicesCache {
             serviceInfo.setShouldDefaultToObserveMode(enable);
             DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
             if (dynSettings == null) {
-                dynSettings = new DynamicSettings(uid);
+                dynSettings = new DynamicSettings(serviceInfo.getUid());
                 dynSettings.offHostSE = null;
                 services.dynamicSettings.put(componentName, dynSettings);
             }
@@ -1182,7 +1182,8 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
-            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            DynamicSettings dynamicSettings =
+                getOrCreateSettings(services, componentName, serviceInfo.getUid());
             dynamicSettings.pollingLoopFilters.put(pollingLoopFilter,
                     autoTransact);
             serviceInfo.addPollingLoopFilter(pollingLoopFilter, autoTransact);
@@ -1243,7 +1244,8 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
-            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            DynamicSettings dynamicSettings =
+                getOrCreateSettings(services, componentName, serviceInfo.getUid());
             dynamicSettings.pollingLoopPatternFilters
                     .put(pollingLoopPatternFilter, autoTransact);
             serviceInfo.addPollingLoopPatternFilter(pollingLoopPatternFilter, autoTransact);
@@ -1314,7 +1316,7 @@ public class RegisteredServicesCache {
             serviceInfo.setDynamicAidGroup(aidGroup);
             DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
             if (dynSettings == null) {
-                dynSettings = new DynamicSettings(uid);
+                dynSettings = new DynamicSettings(serviceInfo.getUid());
                 dynSettings.offHostSE = null;
                 services.dynamicSettings.put(componentName, dynSettings);
             }
