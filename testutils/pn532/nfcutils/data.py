@@ -30,22 +30,22 @@ def snake_to_camel(string, lower=True) -> str:
 # Time conversion
 def ns_to_ms(t):
     """Converts nanoseconds (10^−9) to milliseconds (10^−3)"""
-    return t / 1000000
+    return round(t / 1000000)
 
 
 def ns_to_us(t):
     """Converts nanoseconds (10^−9) to microseconds (10^−6)"""
-    return t / 1000
+    return round(t / 1000)
 
 
 def us_to_ms(t):
     """Converts microseconds (10^−6) to milliseconds (10^−3)"""
-    return t / 1000
+    return round(t / 1000)
 
 
 def s_to_us(t):
     """Converts seconds (10^0) to microseconds (10^−6)"""
-    return t * 1000000
+    return round(t * 1000000)
 
 
 class ByteStruct(int):
