@@ -52,6 +52,7 @@ extern tNFA_DM_DISC_FREQ_CFG* p_nfa_dm_rf_disc_freq_cfg;  // defined in stack
 namespace android {
 extern bool gIsTagDeactivating;
 extern bool gIsSelectingRfInterface;
+extern bool gTagJustActivated;
 extern void nativeNfcTag_doTransceiveStatus(tNFA_STATUS status, uint8_t* buf,
                                             uint32_t buflen);
 extern void nativeNfcTag_notifyRfTimeout();
@@ -99,6 +100,7 @@ jmethodID gCachedNfcManagerNotifyHostEmuDeactivated;
 jmethodID gCachedNfcManagerNotifyRfFieldActivated;
 jmethodID gCachedNfcManagerNotifyRfFieldDeactivated;
 jmethodID gCachedNfcManagerNotifyEeUpdated;
+jmethodID gCachedNfcManagerNotifyTagDiscovered;
 jmethodID gCachedNfcManagerNotifyHwErrorReported;
 jmethodID gCachedNfcManagerNotifyPollingLoopFrame;
 jmethodID gCachedNfcManagerNotifyWlcStopped;
@@ -414,6 +416,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
           (tNFA_INTF_TYPE)eventData->activated.activate_ntf.protocol;
       uint8_t activatedMode =
           eventData->activated.activate_ntf.rf_tech_param.mode;
+      gTagJustActivated = true;
       if (NFC_PROTOCOL_T5T == activatedProtocol &&
           NfcTag::getInstance().getNumDiscNtf()) {
         /* T5T doesn't support multiproto detection logic */
@@ -714,6 +717,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyWlcStopped =
       e->GetMethodID(cls.get(), "notifyWlcStopped", "(I)V");
+
+  gCachedNfcManagerNotifyTagDiscovered =
+      e->GetMethodID(cls.get(), "notifyTagDiscovered", "(Z)V");
 
   gCachedNfcManagerNotifyCommandTimeout =
       e->GetMethodID(cls.get(), "notifyCommandTimeout", "()V");

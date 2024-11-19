@@ -50,8 +50,8 @@ android_test {
         "framework-nfc.impl",
         "compatibility-device-util-axt",
         "nfc-multidevice-utils",
+        "android.nfc.flags-aconfig-java",
         "androidx.test.runner",
-
     ],
     min_sdk_version: "35",
 }

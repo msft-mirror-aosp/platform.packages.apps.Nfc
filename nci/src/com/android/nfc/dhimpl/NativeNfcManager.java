@@ -544,6 +544,9 @@ public class NativeNfcManager implements DeviceHost {
     private void notifyWlcStopped(int wpt_end_condition) {
         mListener.onWlcStopped(wpt_end_condition);
     }
+    private void notifyTagDiscovered(boolean discovered) {
+        mListener.onTagRfDiscovered(discovered);
+    }
     private void notifyVendorSpecificEvent(int event, int dataLen, byte[] pData) {
         if (pData.length < NCI_HEADER_MIN_LEN || dataLen != pData.length) {
             Log.e(TAG, "Invalid data");
@@ -587,6 +590,9 @@ public class NativeNfcManager implements DeviceHost {
     public native void enableVendorNciNotifications(boolean enabled);
 
     private void notifyCommandTimeout() {
+        if (android.nfc.Flags.nfcEventListener()) {
+            mListener.onCommandTimeout();
+        }
         NfcService.getInstance().storeNativeCrashLogs();
     }
 

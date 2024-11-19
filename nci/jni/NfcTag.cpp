@@ -349,16 +349,21 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
     // type-4 tag uses technology ISO-DEP and technology A or B
     mTechList[mNumTechList] =
         TARGET_TYPE_ISO14443_4;  // is TagTechnology.ISO_DEP by Java API
+    uint8_t fwi = 0;
     if (NFC_DISCOVERY_TYPE_POLL_A == rfDetail.rf_tech_param.mode) {
-      uint8_t fwi = rfDetail.intf_param.intf_param.pa_iso.fwi;
-      if (fwi >= MIN_FWI && fwi <= MAX_FWI) {
-        //2^MIN_FWI * 256 * 16 * 1000 / 13560000 is approximately 618
-        int fwt = (1 << (fwi - MIN_FWI)) * 618;
-        LOG(DEBUG) << StringPrintf(
-            "Setting the transceive timeout = %d, fwi = %0#x", fwt, fwi);
-        setTransceiveTimeout(mTechList[mNumTechList], fwt);
-      }
+      fwi = rfDetail.intf_param.intf_param.pa_iso.fwi;
+    } else {
+      fwi = rfDetail.rf_tech_param.param.pb.fwi;
     }
+    if (fwi >= MIN_FWI && fwi <= MAX_FWI) {
+      // 2^MIN_FWI * 256 * 16 * 1000 / 13560000 is approximately 618
+      int fwt = (1 << (fwi - MIN_FWI)) * 618;
+      LOG(DEBUG) << StringPrintf(
+          "%s; Setting the transceive timeout = %d(x2), fwi = %0#x", fn, fwt,
+          fwi);
+      setTransceiveTimeout(mTechList[mNumTechList], fwt * 2);
+    }
+
     if ((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
         (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_LISTEN_A)) {
       mNumTechList++;
@@ -1365,6 +1370,33 @@ bool NfcTag::isNdefDetectionTimedOut() { return mNdefDetectionTimedOut; }
 
 /*******************************************************************************
 **
+** Function:        notifyTagDiscovered
+**
+** Description:     Notify NFC service about tag discovery.
+**                  discovered: true if tag is discovered, false if tag is lost.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void NfcTag::notifyTagDiscovered(bool discovered) {
+  JNIEnv* e = NULL;
+  ScopedAttach attach(mNativeData->vm, &e);
+  if (e == NULL) {
+    LOG(ERROR) << "jni env is null";
+    return;
+  }
+  LOG(DEBUG) << StringPrintf("%s: %d", __func__, discovered);
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyTagDiscovered,
+                    discovered);
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
+    LOG(ERROR) << StringPrintf("fail notify");
+  }
+}
+
+/*******************************************************************************
+**
 ** Function:        connectionEventHandler
 **
 ** Description:     Handle connection-related events.
@@ -1381,6 +1413,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
     case NFA_DISC_RESULT_EVT: {
       tNFA_DISC_RESULT& disc_result = data->disc_result;
       if ((disc_result.status == NFA_STATUS_OK) && !mIsReselecting) {
+        notifyTagDiscovered(true);
         discoverTechnologies(disc_result);
       }
     } break;
@@ -1392,6 +1425,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
               NCI_DISCOVERY_TYPE_LISTEN_A &&
           data->activated.activate_ntf.intf_param.type !=
               NFC_INTERFACE_EE_DIRECT_RF) {
+        notifyTagDiscovered(true);
         tNFA_ACTIVATED& activated = data->activated;
         if (IsSameKovio(activated)) break;
         mIsActivated = true;
@@ -1410,6 +1444,7 @@ void NfcTag::connectionEventHandler(uint8_t event, tNFA_CONN_EVT_DATA* data) {
       if (!mIsReselecting) {
         resetTechnologies();
       }
+      notifyTagDiscovered(false);
       break;
 
     case NFA_READ_CPLT_EVT: {
