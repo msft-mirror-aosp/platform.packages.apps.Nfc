@@ -84,6 +84,7 @@ class Casimir:
         self.id = id
         self.host = 'localhost'
         self.conn = None
+        self.rf_on = False
         self.log = mobly_logger.PrefixLoggerAdapter(
             logging.getLogger(),
             {
@@ -92,6 +93,9 @@ class Casimir:
                 )
             },
         )
+
+    def __del__(self):
+        self.mute()
 
     def verify_firmware_version(self):
         return True
@@ -149,6 +153,7 @@ class Casimir:
         bits=8,
         bitrate=106,
         *,
+        power_level=100,
         timeout=1,
         cache_configuration=True
     ):
@@ -157,6 +162,8 @@ class Casimir:
         :param timeout: Timeout in seconds
         :param cache_configuration: if true, prevents redundant register write and read commands
         """
+        if power_level is not 100:
+            self.send_command("SetPowerLevel", {"power_level": power_level/10})
         return self.transceive(data)
 
     def transceive(self, apdu):
@@ -165,16 +172,18 @@ class Casimir:
             return ret[0]
         return None
 
+    def ensure_connected(self):
+        if self.conn is None:
+            self.conn = HTTPSConnection(self.host, 1443, context=ssl._create_unverified_context())
+            self.send_command("Init", {})
+            self.rf_on = False
+
 
     def send_command(self, command, data):
         json_data = json.dumps(data)
-        path = '/devices/cvd_' + self.id + '/services/CasimirControlService/' + command
+        path = '/devices/' + self.id + '/services/CasimirControlService/' + command
         headers = {'Content-type': 'application/json'}
-        if self.conn is None:
-            self.log.debug("Not connected, connecting to local host")
-            self.conn = HTTPSConnection(self.host, 1443, context=ssl._create_unverified_context())
-        else:
-            self.log.debug("Already connected, reusing connection")
+        self.ensure_connected()
         self.conn.request("POST", path, json_data, headers)
         response = self.conn.getresponse()
         rsp_json = response.read()
@@ -185,6 +194,7 @@ class Casimir:
         return json.loads(rsp_str)
 
     def transceive_multiple(self, senderId, command_apdus):
+        self.unmute()
         command_apdus_hex = []
         for c in command_apdus:
             command_apdus_hex.append(c.hex())
@@ -201,15 +211,24 @@ class Casimir:
             response_apdus_hex.append(bytearray.fromhex(r))
         return response_apdus_hex
 
+    def unmute(self):
+        """Turns on device's RF antenna."""
+        self.ensure_connected()
+        if not self.rf_on:
+            self.rf_on = True
+            self.send_command('SetRadioState', {"radio_on": True})
+
     def mute(self):
         """Turns off device's RF antenna."""
         if not self.conn is None:
-            self.send_command('Close', {})
+            if self.rf_on:
+                self.rf_on = False
+                self.send_command('SetRadioState', {"radio_on": False})
+            self.send_command("Close", {})
             self.conn.close()
             self.conn = None
-
-    def unmute(self):
-        """Turns on device's RF antenna."""
+        else:
+            self.rf_on = False
 
     def execute_command(self, command, data=b'', timeout=0.5):
         raise RuntimeError("not implemented")
