@@ -31,6 +31,7 @@ import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Xml;
@@ -42,6 +43,7 @@ import com.android.nfc.utils.HceUtils;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.IOException;
+import java.util.concurrent.Executors;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -84,6 +86,13 @@ public abstract class BaseEmulatorActivity extends Activity {
         mRoleManager = getSystemService(RoleManager.class);
         IntentFilter filter = new IntentFilter(HceService.ACTION_APDU_SEQUENCE_COMPLETE);
         registerReceiver(mReceiver, filter, RECEIVER_EXPORTED);
+    }
+
+    public void registerEventListener(CardEmulation.NfcEventListener eventListener) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            Log.d(TAG, "registering event listener...");
+            mCardEmulation.registerNfcEventListener(getMainExecutor(), eventListener);
+        }
     }
 
     @Override

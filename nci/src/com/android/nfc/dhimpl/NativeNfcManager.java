@@ -587,6 +587,9 @@ public class NativeNfcManager implements DeviceHost {
     public native void enableVendorNciNotifications(boolean enabled);
 
     private void notifyCommandTimeout() {
+        if (android.nfc.Flags.nfcEventListener()) {
+            mListener.onCommandTimeout();
+        }
         NfcService.getInstance().storeNativeCrashLogs();
     }
 

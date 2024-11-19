@@ -58,6 +58,8 @@ public interface DeviceHost {
         public void onEeListenActivated(boolean isActivated);
 
         public void onSeSelected();
+
+        public void onCommandTimeout();
     }
 
     public interface TagEndpoint {
