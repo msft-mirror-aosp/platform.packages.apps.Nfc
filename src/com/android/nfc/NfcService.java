@@ -324,6 +324,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int NCI_GID_PROP = 0x0F;
     private static final int NCI_MSG_PROP_ANDROID = 0x0C;
     private static final int NCI_MSG_PROP_ANDROID_POWER_SAVING = 0x01;
+    private static final int NCI_PROP_ANDROID_QUERY_POWER_SAVING_STATUS_CMD = 0x05;
 
     public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
 
@@ -702,6 +703,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onEeUpdated() {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onEeUpdated();
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to send onEeUpdated", e);
+            }
+        }
         new ApplyRoutingTask().execute();
     }
 
@@ -2901,11 +2909,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             mAlwaysOnListeners.remove(listener);
         }
+
         @Override
         public boolean isTagIntentAppPreferenceSupported() throws RemoteException {
-            NfcPermissions.enforceAdminPermissions(mContext);
             return mIsTagAppPrefSupported;
         }
+
         @Override
         public Map getTagIntentAppPreferenceForUser(int userId) throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
@@ -2914,6 +2923,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return mTagAppPrefList.getOrDefault(userId, new HashMap<>());
             }
         }
+
         @Override
         public int setTagIntentAppPreferenceForUser(int userId,
                 String pkg, boolean allow) throws RemoteException {
@@ -2923,6 +2933,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
+        public boolean isTagIntentAllowed(String pkg, int userId) throws RemoteException {
+            if (!android.nfc.Flags.nfcCheckTagIntentPreference()) {
+                return true;
+            }
+            if (!mIsTagAppPrefSupported) {
+                return true;
+            }
+            HashMap<String, Boolean> map;
+            synchronized (NfcService.this) {
+                map = mTagAppPrefList.getOrDefault(userId, new HashMap<>());
+            }
+            return map.getOrDefault(pkg, true);
+        }
+
         public boolean enableReaderOption(boolean enable, String pkg) {
             Log.d(TAG, "enableReaderOption enabled = " + enable + " calling uid = "
                     + Binder.getCallingUid());
@@ -3072,6 +3096,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     && payload[0] == NCI_MSG_PROP_ANDROID_POWER_SAVING;
         }
 
+        private static boolean isQueryPowerSavingStatusCmd(int gid, int oid, byte[] payload) {
+          return gid == NCI_GID_PROP && oid == NCI_MSG_PROP_ANDROID && payload.length > 0
+                    && payload[0] == NCI_PROP_ANDROID_QUERY_POWER_SAVING_STATUS_CMD;
+        }
+
         @Override
         public synchronized int sendVendorNciMessage(int mt, int gid, int oid, byte[] payload)
                 throws RemoteException {
@@ -3083,18 +3112,30 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
             FutureTask<Integer> sendVendorCmdTask = new FutureTask<>(
                 () -> {
-                   if(isPowerSavingModeCmd(gid, oid, payload)) {
-                        boolean status = setPowerSavingMode(payload[1] == 0x01 ? true : false);
-                        return status? NCI_STATUS_OK : NCI_STATUS_FAILED;
-                    } else {
-                       NfcVendorNciResponse response =
-                               mDeviceHost.sendRawVendorCmd(mt, gid, oid, payload);
-                       if (response.status == NCI_STATUS_OK) {
-                           mHandler.post(() -> mNfcAdapter.sendVendorNciResponse(
-                                             response.gid, response.oid, response.payload));
-                       }
-                       return Integer.valueOf(response.status);
-                   }
+                        if (isPowerSavingModeCmd(gid, oid, payload)) {
+                            boolean status = setPowerSavingMode(payload[1] == 0x01);
+                            return status ? NCI_STATUS_OK : NCI_STATUS_FAILED;
+                        } else if (isQueryPowerSavingStatusCmd(gid, oid, payload)) {
+                            NfcVendorNciResponse response = new NfcVendorNciResponse(
+                                    (byte) NCI_STATUS_OK, NCI_GID_PROP, NCI_MSG_PROP_ANDROID,
+                                    new byte[] {
+                                            (byte) NCI_PROP_ANDROID_QUERY_POWER_SAVING_STATUS_CMD,
+                                            0x00,
+                                            mIsPowerSavingModeEnabled ? (byte) 0x01 : (byte) 0x00});
+                            if (response.status == NCI_STATUS_OK) {
+                                mHandler.post(() -> mNfcAdapter.sendVendorNciResponse(
+                                        response.gid, response.oid, response.payload));
+                            }
+                            return Integer.valueOf(response.status);
+                        } else {
+                            NfcVendorNciResponse response =
+                                    mDeviceHost.sendRawVendorCmd(mt, gid, oid, payload);
+                            if (response.status == NCI_STATUS_OK) {
+                                mHandler.post(() -> mNfcAdapter.sendVendorNciResponse(
+                                        response.gid, response.oid, response.payload));
+                            }
+                            return Integer.valueOf(response.status);
+                        }
                 });
             int status = NCI_STATUS_FAILED;
             try {
