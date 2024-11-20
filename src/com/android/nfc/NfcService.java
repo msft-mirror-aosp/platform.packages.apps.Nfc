@@ -461,6 +461,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     boolean mIsWlcCapable;
     boolean mIsWlcEnabled;
     boolean mIsRWCapable;
+    boolean mIsRDCapable;
     WlcListenerDeviceInfo mWlcListenerDeviceInfo;
     public NfcDiagnostics  mNfcDiagnostics;
 
@@ -1169,6 +1170,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             // Register ThermalStatusChangedListener
             addThermalStatusListener();
         }
+
+        mIsRDCapable = Flags.removalDetection() &&
+                mContext.getResources().getBoolean(R.bool.removal_detection_default);
 
         mIsHceCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION) ||

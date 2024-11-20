@@ -81,3 +81,10 @@ flag {
     description: "Notify user when tag app launched for the first time"
     bug: "312390070"
 }
+
+flag {
+    name: "removal_detection"
+    namespace: "nfc"
+    description: "Use removal detection to replace legacy presence check"
+    bug: "357505987"
+}
