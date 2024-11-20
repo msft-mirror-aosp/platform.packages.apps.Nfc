@@ -142,4 +142,5 @@ int nfc_jni_get_nfc_socket_handle(JNIEnv* e, jobject o);
 struct nfc_jni_native_data* nfc_jni_get_nat(JNIEnv* e, jobject o);
 int register_com_android_nfc_NativeNfcManager(JNIEnv* e);
 int register_com_android_nfc_NativeNfcTag(JNIEnv* e);
+int register_com_android_nfc_NativeT4tNfcee(JNIEnv* e);
 }  // namespace android
