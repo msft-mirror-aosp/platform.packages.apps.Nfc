@@ -52,6 +52,7 @@ extern tNFA_DM_DISC_FREQ_CFG* p_nfa_dm_rf_disc_freq_cfg;  // defined in stack
 namespace android {
 extern bool gIsTagDeactivating;
 extern bool gIsSelectingRfInterface;
+extern bool gTagJustActivated;
 extern void nativeNfcTag_doTransceiveStatus(tNFA_STATUS status, uint8_t* buf,
                                             uint32_t buflen);
 extern void nativeNfcTag_notifyRfTimeout();
@@ -99,6 +100,7 @@ jmethodID gCachedNfcManagerNotifyHostEmuDeactivated;
 jmethodID gCachedNfcManagerNotifyRfFieldActivated;
 jmethodID gCachedNfcManagerNotifyRfFieldDeactivated;
 jmethodID gCachedNfcManagerNotifyEeUpdated;
+jmethodID gCachedNfcManagerNotifyTagDiscovered;
 jmethodID gCachedNfcManagerNotifyHwErrorReported;
 jmethodID gCachedNfcManagerNotifyPollingLoopFrame;
 jmethodID gCachedNfcManagerNotifyWlcStopped;
@@ -414,6 +416,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
           (tNFA_INTF_TYPE)eventData->activated.activate_ntf.protocol;
       uint8_t activatedMode =
           eventData->activated.activate_ntf.rf_tech_param.mode;
+      gTagJustActivated = true;
       if (NFC_PROTOCOL_T5T == activatedProtocol &&
           NfcTag::getInstance().getNumDiscNtf()) {
         /* T5T doesn't support multiproto detection logic */
@@ -714,6 +717,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyWlcStopped =
       e->GetMethodID(cls.get(), "notifyWlcStopped", "(I)V");
+
+  gCachedNfcManagerNotifyTagDiscovered =
+      e->GetMethodID(cls.get(), "notifyTagDiscovered", "(Z)V");
 
   gCachedNfcManagerNotifyCommandTimeout =
       e->GetMethodID(cls.get(), "notifyCommandTimeout", "()V");
@@ -1062,15 +1068,17 @@ static jboolean nfcManager_unrouteAid(JNIEnv* e, jobject, jbyteArray aid) {
 **                  e: JVM environment.
 **                  o: Java object.
 **
-** Returns:         True if ok.
+** Returns:         NFA_STATUS_OK if successfully initiated
+**                  NFA_STATUS_SEMANTIC_ERROR is update is currently in progress
+**                  NFA_STATUS_FAILED otherwise
 **
 *******************************************************************************/
-static jboolean nfcManager_commitRouting(JNIEnv* e, jobject) {
+static jint nfcManager_commitRouting(JNIEnv* e, jobject) {
   if (sRfEnabled) {
     /*Update routing table only in Idle state.*/
     startRfDiscovery(false);
   }
-  jboolean commitStatus = RoutingManager::getInstance().commitRouting();
+  jint commitStatus = RoutingManager::getInstance().commitRouting();
   startRfDiscovery(true);
   return commitStatus;
 }
@@ -1435,6 +1443,8 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
   tNFA_STATUS stat = NFA_STATUS_OK;
   sIsRecovering = false;
 
+  struct nfc_jni_native_data* nat = getNative(e, o);
+
   PowerSwitch& powerSwitch = PowerSwitch::getInstance();
 
   if (sIsNfaEnabled) {
@@ -1488,7 +1498,6 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         /////////////////////////////////////////////////////////////////////////////////
         // Add extra configuration here (work-arounds, etc.)
 
-        struct nfc_jni_native_data* nat = getNative(e, o);
         if (nat) {
           nat->tech_mask =
               NfcConfig::getUnsigned(NAME_POLLING_TECH_MASK, DEFAULT_TECH_MASK);
@@ -2464,7 +2473,7 @@ static JNINativeMethod gMethods[] = {
 
     {"unrouteAid", "([B)Z", (void*)nfcManager_unrouteAid},
 
-    {"commitRouting", "()Z", (void*)nfcManager_commitRouting},
+    {"commitRouting", "()I", (void*)nfcManager_commitRouting},
 
     {"doRegisterT3tIdentifier", "([B)I",
      (void*)nfcManager_doRegisterT3tIdentifier},

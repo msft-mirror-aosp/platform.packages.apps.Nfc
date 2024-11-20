@@ -49,6 +49,7 @@ import com.android.nfc.wlc.NfcCharging;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * To be used for dependency injection (especially helps mocking static dependencies).
@@ -306,6 +307,10 @@ public class NfcInjector {
      */
     public void ensureWatchdogMonitoring() {
         mNfcWatchdog.ensureWatchdogMonitoring();
+    }
+
+    public AtomicBoolean createAtomicBoolean() {
+        return new AtomicBoolean();
     }
 
     /**
