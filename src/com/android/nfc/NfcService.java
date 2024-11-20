@@ -2262,28 +2262,29 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public void pausePolling(int timeoutInMs) {
+        public int pausePolling(int timeoutInMs) {
             NfcPermissions.enforceAdminPermissions(mContext);
             synchronized (mDiscoveryLock) {
                 if (!mRfDiscoveryStarted) {
                     if (DBG) Log.d(TAG, "Polling is already disabled!");
-                    return;
+                    return NfcOemExtension.POLLING_STATE_CHANGE_ALREADY_IN_REQUESTED_STATE;
                 }
             }
             synchronized (NfcService.this) {
                 mPollingPaused = true;
                 mDeviceHost.disableDiscovery();
                 if (timeoutInMs <= 0 || timeoutInMs > MAX_POLLING_PAUSE_TIMEOUT) {
-                    Log.d(TAG, "Invalid timeout " + timeoutInMs + "ms, hence no resume polling!");
-                    return;
+                    throw new IllegalArgumentException(
+                        "Invalid timeout " + timeoutInMs + " ms!");
                 }
                 mHandler.sendMessageDelayed(
                         mHandler.obtainMessage(MSG_RESUME_POLLING), timeoutInMs);
+                return NfcOemExtension.POLLING_STATE_CHANGE_SUCCEEDED;
             }
         }
 
         @Override
-        public void resumePolling() {
+        public int resumePolling() {
             NfcPermissions.enforceAdminPermissions(mContext);
             boolean rfDiscoveryStarted;
             synchronized (mDiscoveryLock) {
@@ -2293,7 +2294,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 if (!mPollingPaused) {
                     if (rfDiscoveryStarted) {
                         if (DBG) Log.d(TAG, "Polling is already enabled!");
-                        return;
+                        return NfcOemExtension.POLLING_STATE_CHANGE_ALREADY_IN_REQUESTED_STATE;
                     } else {
                         if (DBG) Log.d(TAG, "Enable polling explicitly!");
                     }
@@ -2301,8 +2302,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mHandler.removeMessages(MSG_RESUME_POLLING);
                 mPollingPaused = false;
                 new ApplyRoutingTask().execute();
+                if (DBG) Log.d(TAG, "Polling is resumed");
+                return NfcOemExtension.POLLING_STATE_CHANGE_SUCCEEDED;
             }
-            if (DBG) Log.d(TAG, "Polling is resumed");
         }
 
         @Override
