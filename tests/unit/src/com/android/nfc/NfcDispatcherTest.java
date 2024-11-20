@@ -42,6 +42,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.hardware.display.DisplayManager;
+import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
@@ -53,15 +54,17 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.os.PowerManager;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.test.TestLooper;
-import android.os.RemoteException;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
+import com.android.nfc.flags.FeatureFlags;
 import com.android.nfc.handover.HandoverDataParser;
+import com.android.nfc.handover.PeripheralHandoverService;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -81,9 +84,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import android.nfc.INfcOemExtensionCallback;
-import com.android.nfc.flags.FeatureFlags;
-import com.android.nfc.handover.PeripheralHandoverService;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcDispatcherTest {
@@ -123,6 +123,7 @@ public final class NfcDispatcherTest {
         mStaticMockSession = ExtendedMockito.mockitoSession()
                 .mockStatic(NfcStatsLog.class)
                 .mockStatic(android.nfc.Flags.class)
+                .mockStatic(com.android.nfc.flags.Flags.class)
                 .mockStatic(NfcAdapter.class)
                 .mockStatic(Ndef.class)
                 .mockStatic(ForegroundUtils.class)
@@ -143,6 +144,7 @@ public final class NfcDispatcherTest {
                 .thenReturn(mockContext);
         when(mockContext.createContextAsUser(any(), anyInt())).thenReturn(mockContext);
         when(mockContext.getPackageManager()).thenReturn(mPackageManager);
+        when(mPackageManager.getApplicationLabel(any())).thenReturn("");
         when(mockContext.getApplicationContext()).thenReturn(mockContext);
         when(mResources.getBoolean(R.bool.tag_intent_app_pref_supported)).thenReturn(true);
         when(mockContext.getResources()).thenReturn(mResources);
@@ -272,6 +274,7 @@ public final class NfcDispatcherTest {
         Assert.assertNotNull(dispatchInfo.intent);
         dispatchInfo.intent.setAction(NfcAdapter.ACTION_TECH_DISCOVERED);
         when(android.nfc.Flags.enableNfcMainline()).thenReturn(true);
+        when(com.android.nfc.flags.Flags.nfcAlertTagAppLaunch()).thenReturn(false);
         dispatchInfo.checkPrefList(activities, 0);
 
         assertThat(dispatchInfo.rootIntent).isNotNull();
