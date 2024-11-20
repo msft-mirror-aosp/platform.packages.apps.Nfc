@@ -18,6 +18,7 @@ package com.android.nfc.cardemulation;
 import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
 
 import android.annotation.FlaggedApi;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.role.RoleManager;
@@ -89,7 +90,8 @@ import java.util.stream.IntStream;
  */
 public class CardEmulationManager implements RegisteredServicesCache.Callback,
         RegisteredNfcFServicesCache.Callback, PreferredServices.Callback,
-        EnabledNfcFServices.Callback, WalletRoleObserver.Callback {
+        EnabledNfcFServices.Callback, WalletRoleObserver.Callback,
+        HostEmulationManager.NfcAidRoutingListener {
     static final String TAG = "CardEmulationManager";
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
 
@@ -217,6 +219,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             int currentUser = ActivityManager.getCurrentUser();
             onWalletRoleHolderChanged(
                     mWalletRoleObserver.getDefaultWalletRoleHolder(currentUser), currentUser);
+        }
+
+        if (android.nfc.Flags.nfcEventListener()) {
+            mHostEmulationManager.setAidRoutingListener(this);
         }
     }
 
@@ -1187,18 +1193,20 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
     }
 
     private void callNfcEventListeners(ListenerCall call) {
-        int numListeners = mNfcEventListeners.beginBroadcast();
-        try {
-            IntStream.range(0, numListeners).forEach(i -> {
-                try {
-                    call.invoke(mNfcEventListeners.getBroadcastItem(i));
-                } catch (RemoteException re) {
-                    Log.i(TAG, "Service died", re);
-                }
-            });
+        synchronized (mNfcEventListeners) {
+            int numListeners = mNfcEventListeners.beginBroadcast();
+            try {
+                IntStream.range(0, numListeners).forEach(i -> {
+                    try {
+                        call.invoke(mNfcEventListeners.getBroadcastItem(i));
+                    } catch (RemoteException re) {
+                        Log.i(TAG, "Service died", re);
+                    }
+                });
 
-        } finally {
-            mNfcEventListeners.finishBroadcast();
+            } finally {
+                mNfcEventListeners.finishBroadcast();
+            }
         }
     }
 
@@ -1207,6 +1215,38 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             return;
         }
         callNfcEventListeners(listener -> listener.onPreferredServiceChanged(preferredService));
+    }
+
+    @Override
+    public void onAidConflict(@NonNull String aid) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            callNfcEventListeners(listener -> listener.onAidConflictOccurred(aid));
+        }
+    }
+
+    @Override
+    public void onAidNotRouted(@NonNull String aid) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            callNfcEventListeners(listener -> listener.onAidNotRouted(aid));
+        }
+    }
+
+    public void onNfcStateChanged(int state) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            callNfcEventListeners(listener -> listener.onNfcStateChanged(state));
+        }
+    }
+
+    public void onRemoteFieldChanged(boolean isDetected) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            callNfcEventListeners(listener -> listener.onRemoteFieldChanged(isDetected));
+        }
+    }
+
+    public void onInternalErrorReported(@CardEmulation.NfcInternalErrorType int errorType) {
+        if (android.nfc.Flags.nfcEventListener()) {
+            callNfcEventListeners(listener -> listener.onInternalErrorReported(errorType));
+        }
     }
 
     final ForegroundUtils.Callback mForegroundCallback = new ForegroundCallbackImpl();

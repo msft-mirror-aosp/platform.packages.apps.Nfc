@@ -49,6 +49,8 @@ public interface DeviceHost {
 
         public void onWlcStopped(int wpt_end_condition);
 
+        public void onTagRfDiscovered(boolean discovered);
+
         public void onVendorSpecificEvent(int gid, int oid, byte[] payload);
 
         public void onObserveModeStateChanged(boolean enable);
@@ -58,6 +60,8 @@ public interface DeviceHost {
         public void onEeListenActivated(boolean isActivated);
 
         public void onSeSelected();
+
+        public void onCommandTimeout();
     }
 
     public interface TagEndpoint {
@@ -160,7 +164,7 @@ public interface DeviceHost {
 
     public boolean unrouteAid(byte[] aid);
 
-    public boolean commitRouting();
+    public int commitRouting();
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 
