@@ -59,6 +59,7 @@ public class NativeNfcManager implements DeviceHost {
 
     private int mIsoDepMaxTransceiveLength;
     private final DeviceHostListener mListener;
+    private final NativeT4tNfceeManager mT4tNfceeMgr;
     private final Context mContext;
 
     private final Object mLock = new Object();
@@ -84,6 +85,7 @@ public class NativeNfcManager implements DeviceHost {
         loadLibrary();
         initializeNativeStructure();
         mContext = context;
+        mT4tNfceeMgr = new NativeT4tNfceeManager();
     }
 
     public native boolean initializeNativeStructure();
@@ -227,6 +229,41 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native boolean isObserveModeEnabled();
+
+    @Override
+    public int   getT4TNfceePowerState() {
+        return mT4tNfceeMgr.getT4TNfceePowerState();
+    }
+
+    @Override
+    public int getNdefNfceeRouteId() {
+        return mT4tNfceeMgr.getNdefNfceeRouteId();
+    }
+
+    @Override
+    public int doWriteData(byte[] fileId, byte[] data) {
+        return mT4tNfceeMgr.doWriteData(fileId, data);
+    }
+
+    @Override
+    public byte[] doReadData(byte[] fileId) {
+        return mT4tNfceeMgr.doReadData(fileId);
+    }
+
+    @Override
+    public boolean doClearNdefData() {
+        return mT4tNfceeMgr.doClearNdefData();
+    }
+
+    @Override
+    public boolean isNdefOperationOngoing() {
+        return mT4tNfceeMgr.isNdefOperationOngoing();
+    }
+
+    @Override
+    public boolean isNdefNfceeEmulationSupported() {
+        return mT4tNfceeMgr.isNdefNfceeEmulationSupported();
+    }
 
     @Override
     public void registerT3tIdentifier(byte[] t3tIdentifier) {
