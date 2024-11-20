@@ -30,7 +30,7 @@ extern jmethodID gCachedNfcManagerNotifyHostEmuDeactivated;
 extern jmethodID gCachedNfcManagerNotifyEeListenActivated;
 
 extern jmethodID gCachedNfcManagerNotifyEeUpdated;
-
+extern jmethodID gCachedNfcManagerNotifyTagDiscovered;
 extern jmethodID gCachedNfcManagerNotifyWlcStopped;
 
 extern jmethodID gCachedNfcManagerNotifyEeAidSelected;

@@ -18,6 +18,7 @@ package com.android.nfc.cardemulation;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import android.bluetooth.BluetoothProtoEnums;
 import android.content.Context;
@@ -62,6 +63,7 @@ public final class NfcAidConflictOccurredTest {
     private static final String TAG = NfcAidConflictOccurredTest.class.getSimpleName();
     private MockitoSession mStaticMockSession;
     private HostEmulationManager mHostEmulation;
+    private HostEmulationManager.NfcAidRoutingListener mMockNfcAidRoutingListener;
     @Rule
     public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
     private final TestLooper mTestLooper = new TestLooper();
@@ -81,7 +83,7 @@ public final class NfcAidConflictOccurredTest {
         aidResolveInfo.services = new ArrayList<ApduServiceInfo>();
         aidResolveInfo.services.add(apduServiceInfo);
         when(mockAidCache.resolveAid(anyString())).thenReturn(aidResolveInfo);
-	when(NfcInjector.getInstance()).thenReturn(Mockito.mock(NfcInjector.class));
+        when(NfcInjector.getInstance()).thenReturn(Mockito.mock(NfcInjector.class));
 
         Context mockContext = new ContextWrapper(context) {
             @Override
@@ -99,6 +101,11 @@ public final class NfcAidConflictOccurredTest {
                       mockContext, mTestLooper.getLooper(), mockAidCache));
         assertNotNull(mHostEmulation);
 
+        if (android.nfc.Flags.nfcEventListener()) {
+            mMockNfcAidRoutingListener =
+                    Mockito.mock(HostEmulationManager.NfcAidRoutingListener.class);
+            mHostEmulation.setAidRoutingListener(mMockNfcAidRoutingListener);
+        }
         mHostEmulation.onHostEmulationActivated();
     }
 
@@ -121,6 +128,20 @@ public final class NfcAidConflictOccurredTest {
         ExtendedMockito.verify(() -> NfcStatsLog.write(
                 NfcStatsLog.NFC_AID_CONFLICT_OCCURRED,
                 "A000000003000000"));
+    }
+
+    @Test
+    @RequiresFlagsEnabled(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    public void testHCEOther_eventListener() {
+        byte[] aidBytes = new byte[] {
+            0x00, (byte)0xA4, 0x04, 0x00,  // command
+            0x08,  // data length
+            (byte)0xA0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00,
+            0x00,  // card manager AID
+            0x00  // trailer
+        };
+        mHostEmulation.onHostEmulationData(aidBytes);
+        verify(mMockNfcAidRoutingListener).onAidConflict("A000000003000000");
     }
 
     @Test

@@ -100,6 +100,7 @@ jmethodID gCachedNfcManagerNotifyHostEmuDeactivated;
 jmethodID gCachedNfcManagerNotifyRfFieldActivated;
 jmethodID gCachedNfcManagerNotifyRfFieldDeactivated;
 jmethodID gCachedNfcManagerNotifyEeUpdated;
+jmethodID gCachedNfcManagerNotifyTagDiscovered;
 jmethodID gCachedNfcManagerNotifyHwErrorReported;
 jmethodID gCachedNfcManagerNotifyPollingLoopFrame;
 jmethodID gCachedNfcManagerNotifyWlcStopped;
@@ -716,6 +717,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyWlcStopped =
       e->GetMethodID(cls.get(), "notifyWlcStopped", "(I)V");
+
+  gCachedNfcManagerNotifyTagDiscovered =
+      e->GetMethodID(cls.get(), "notifyTagDiscovered", "(Z)V");
 
   gCachedNfcManagerNotifyCommandTimeout =
       e->GetMethodID(cls.get(), "notifyCommandTimeout", "()V");
@@ -1439,6 +1443,8 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
   tNFA_STATUS stat = NFA_STATUS_OK;
   sIsRecovering = false;
 
+  struct nfc_jni_native_data* nat = getNative(e, o);
+
   PowerSwitch& powerSwitch = PowerSwitch::getInstance();
 
   if (sIsNfaEnabled) {
@@ -1492,7 +1498,6 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         /////////////////////////////////////////////////////////////////////////////////
         // Add extra configuration here (work-arounds, etc.)
 
-        struct nfc_jni_native_data* nat = getNative(e, o);
         if (nat) {
           nat->tech_mask =
               NfcConfig::getUnsigned(NAME_POLLING_TECH_MASK, DEFAULT_TECH_MASK);

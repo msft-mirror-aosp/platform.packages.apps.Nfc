@@ -357,7 +357,7 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity = (PollingLoopEmulatorActivity) instrumentation.startActivitySync(intent);
     }
 
-    @Rpc(description = "Open two polling frame emulator activity for two readers test\"")
+    @Rpc(description = "Open two polling frame emulator activity for two readers test")
     public void startTwoPollingFrameEmulatorActivity() {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
 
@@ -370,7 +370,7 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         mActivity = (TwoPollingFrameEmulatorActivity) instrumentation.startActivitySync(intent);
     }
 
-    @Rpc(description = "Opens PN532 Activity\"")
+    @Rpc(description = "Opens PN532 Activity")
     public void startPN532Activity() {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
 
@@ -379,6 +379,18 @@ public class NfcEmulatorDeviceSnippet extends NfcSnippet {
         intent.setClassName(instrumentation.getTargetContext(), PN532Activity.class.getName());
 
         mActivity = (PN532Activity) instrumentation.startActivitySync(intent);
+    }
+
+    @Rpc(description = "Opens the Event Listener Activity")
+    public void startEventListenerActivity() {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClassName(instrumentation.getTargetContext(),
+            EventListenerEmulatorActivity.class.getName());
+
+        mActivity = (EventListenerEmulatorActivity) instrumentation.startActivitySync(intent);
     }
 
     /** Registers receiver that waits for RF field broadcast */
