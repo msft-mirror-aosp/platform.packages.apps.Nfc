@@ -2274,7 +2274,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public int pausePolling(int timeoutInMs) {
+        public int pausePolling(long timeoutInMs) {
             NfcPermissions.enforceAdminPermissions(mContext);
             synchronized (mDiscoveryLock) {
                 if (!mRfDiscoveryStarted) {
@@ -2285,7 +2285,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             synchronized (NfcService.this) {
                 mPollingPaused = true;
                 mDeviceHost.disableDiscovery();
-                if (timeoutInMs <= 0 || timeoutInMs > MAX_POLLING_PAUSE_TIMEOUT) {
+                if (timeoutInMs <= 0 || timeoutInMs > this.getMaxPausePollingTimeoutMs()) {
                     throw new IllegalArgumentException(
                         "Invalid timeout " + timeoutInMs + " ms!");
                 }
@@ -3335,6 +3335,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "commitRouting");
             NfcPermissions.enforceAdminPermissions(mContext);
             return mDeviceHost.commitRouting();
+        }
+
+        @Override
+        public long getMaxPausePollingTimeoutMs() {
+            if (DBG) Log.i(TAG, "getMaxPausePollingTimeoutMs");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            int timeoutOverlay = mContext.getResources()
+                    .getInteger(R.integer.max_pause_polling_time_out_ms);
+            return timeoutOverlay > 0 ? (long) timeoutOverlay : MAX_POLLING_PAUSE_TIMEOUT;
         }
 
         private void updateNfCState() {
