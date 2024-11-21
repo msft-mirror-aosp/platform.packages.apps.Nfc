@@ -58,6 +58,7 @@ bool gIsTagDeactivating = false;  // flag for nfa callback indicating we are
                                   // deactivating for RF interface switch
 bool gIsSelectingRfInterface = false;  // flag for nfa callback indicating we
                                        // are selecting for RF interface switch
+bool gTagJustActivated = false;
 }  // namespace android
 
 /*****************************************************************************
@@ -129,6 +130,7 @@ static int sPresCheckErrCnt = 0;
 static bool sReselectTagIdle = false;
 
 static int sPresCheckStatus = 0;
+
 static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded);
 extern bool gIsDtaEnabled;
 static tNFA_STATUS performHaltPICC();
@@ -627,7 +629,6 @@ TheEnd:
 static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
   LOG(DEBUG) << StringPrintf("%s: enter; rf intf = 0x%x, current intf = 0x%x",
                              __func__, rfInterface, sCurrentRfInterface);
-
   sRfInterfaceMutex.lock();
 
   if (fSwitchIfNeeded && (rfInterface == sCurrentRfInterface)) {
@@ -667,6 +668,13 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
           break;
         }
       }
+    } else if ((sCurrentRfInterface == NFA_INTERFACE_ISO_DEP) &&
+               gTagJustActivated && sReselectTagIdle) {
+      // If tag does not answer to S(DESELECT), this might be because no data
+      // was sent before. Send empty I-frame in that case
+      SyncEventGuard g4(sReconnectEvent);
+      status = NFA_SendRawFrame(nullptr, 0, 0);
+      sReconnectEvent.wait(30);
     }
 
     {
@@ -681,7 +689,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         break;
       }
 
-      if (sReconnectEvent.wait(1000) == false)  // if timeout occurred
+      if (sReconnectEvent.wait(natTag.getTransceiveTimeout(
+              sCurrentConnectedTargetType)) == false)  // if timeout occurred
       {
         LOG(ERROR) << StringPrintf("%s: timeout waiting for deactivate",
                                    __func__);
@@ -691,6 +700,8 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
     if (NfcTag::getInstance().getActivationState() == NfcTag::Idle) {
       LOG(ERROR) << StringPrintf("%s: tag is in Idle state", __func__);
       sReselectTagIdle = true;
+    } else {
+      sReselectTagIdle = false;
     }
 
     gIsTagDeactivating = false;
@@ -757,7 +768,6 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
   sConnectWaitingForComplete = JNI_FALSE;
   gIsTagDeactivating = false;
   gIsSelectingRfInterface = false;
-  sReselectTagIdle = false;
   sRfInterfaceMutex.unlock();
   natTag.setReselect(FALSE);
   LOG(DEBUG) << StringPrintf("%s: exit; status=%d", __func__, rVal);
@@ -841,6 +851,7 @@ jboolean nativeNfcTag_doDisconnect(JNIEnv*, jobject) {
   tNFA_STATUS nfaStat = NFA_STATUS_OK;
 
   NfcTag::getInstance().resetAllTransceiveTimeouts();
+  sReselectTagIdle = false;
 
   if (NfcTag::getInstance().getActivationState() != NfcTag::Active) {
     LOG(WARNING) << StringPrintf("%s: tag already deactivated", __func__);
@@ -971,7 +982,7 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
       }
       waitOk = sTransceiveEvent.wait(timeout);
     }
-
+    gTagJustActivated = false;
     if (waitOk == false || sTransceiveRfTimeout)  // if timeout occurred
     {
       LOG(ERROR) << StringPrintf("%s: wait response timeout", __func__);
@@ -1391,7 +1402,8 @@ static jboolean nativeNfcTag_doPresenceCheck(JNIEnv*, jobject) {
            ((sPresCheckStatus == NFA_STATUS_RF_FRAME_CORRUPTED) &&
             ((sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T1T) ||
              (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T2T) ||
-             (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T5T))) ||
+             (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T5T) ||
+             (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_CI))) ||
            (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T3T))) {
         sPresCheckErrCnt++;
 
