@@ -45,7 +45,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Map;
 
 /** Native interface to the NFC Manager functions */
 public class NativeNfcManager implements DeviceHost {
@@ -428,7 +428,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean isMultiTag();
 
     @Override
-    public native List<String> dofetchActiveNfceeList();
+    public native Map<String, Integer> dofetchActiveNfceeList();
 
     private native NfcVendorNciResponse nativeSendRawVendorCmd(
             int mt, int gid, int oid, byte[] payload);
