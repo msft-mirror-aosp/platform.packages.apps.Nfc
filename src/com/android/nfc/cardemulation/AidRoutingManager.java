@@ -341,12 +341,14 @@ public class AidRoutingManager {
 
         synchronized (mLock) {
             if (routeForAid.equals(mRouteForAid) && powerForAid.equals(mPowerForAid) && !force) {
+                NfcService.getInstance().addT4tNfceeAid();
                 if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
                 return false;
             }
 
             // Otherwise, update internal structures and commit new routing
             clearNfcRoutingTableLocked();
+            NfcService.getInstance().addT4tNfceeAid();
             prevRouteForAid = mRouteForAid;
             mRouteForAid = routeForAid;
             prevPowerForAid = mPowerForAid;
