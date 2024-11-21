@@ -21,6 +21,7 @@ import static android.content.pm.PackageManager.MATCH_DEFAULT_ONLY;
 import static android.nfc.Flags.enableNfcMainline;
 
 import static com.android.nfc.NfcService.WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS;
+
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
@@ -69,6 +70,7 @@ import android.view.WindowManager;
 import android.widget.TextView;
 
 import com.android.nfc.RegisteredComponentCache.ComponentInfo;
+import com.android.nfc.flags.Flags;
 import com.android.nfc.handover.HandoverDataParser;
 import com.android.nfc.handover.PeripheralHandoverService;
 
@@ -346,25 +348,25 @@ class NfcDispatcher {
             int muteAppCount = 0;
             for (ResolveInfo resolveInfo : activities) {
                 ActivityInfo activityInfo = resolveInfo.activityInfo;
-                ComponentName cmp = new ComponentName(activityInfo.packageName, activityInfo.name);
-                if (DBG) {
-                    Log.d(TAG, "activityInfo.packageName= " + activityInfo.packageName);
-                    Log.d(TAG, "activityInfo.name= " + activityInfo.name);
-                    Log.d(TAG, "cmp.flattenToString= " + cmp.flattenToString());
-                }
+                String pkgName = activityInfo.packageName;
+                String appName = context.getPackageManager().getApplicationLabel(
+                        activityInfo.applicationInfo).toString();
+                if (DBG) Log.d(TAG, "activityInfo.packageName= " + pkgName);
                 Map<String, Boolean> preflist =
                         mNfcAdapter.getTagIntentAppPreferenceForUser(userId);
-                if (preflist.containsKey(activityInfo.packageName)) {
-                    if (!preflist.get(activityInfo.packageName)) {
-                        if (DBG) Log.d(TAG, "mute pkg:" + cmp.flattenToString());
+                if (preflist.containsKey(pkgName)) {
+                    if (!preflist.get(pkgName)) {
+                        if (DBG) Log.d(TAG, "mute pkg:" + pkgName);
                         muteAppCount++;
                         filtered.remove(resolveInfo);
                         logMuteApp(activityInfo.applicationInfo.uid);
                     }
                 } else {
                     // Default sets allow to the preference list
-                    mNfcAdapter.setTagIntentAppPreferenceForUser(userId, activityInfo.packageName,
-                            true);
+                    mNfcAdapter.setTagIntentAppPreferenceForUser(userId, pkgName, true);
+                    if (Flags.nfcAlertTagAppLaunch()) {
+                        new NfcTagAllowNotification(context, appName).startNotification();
+                    }
                 }
             }
             if (muteAppCount > 0) {
@@ -1008,6 +1010,8 @@ class NfcDispatcher {
                             matches.add(info.resolveInfo);
                         } else {
                             String pkgName = info.resolveInfo.activityInfo.packageName;
+                            String appName = mContext.getPackageManager().getApplicationLabel(
+                                    info.resolveInfo.activityInfo.applicationInfo).toString();
                             int userId = uh.getIdentifier();
                             Map<String, Boolean> preflist =
                                     mNfcAdapter.getTagIntentAppPreferenceForUser(userId);
@@ -1017,6 +1021,10 @@ class NfcDispatcher {
                                     // Default sets allow to the preference list
                                     mNfcAdapter.setTagIntentAppPreferenceForUser(userId,
                                             pkgName, true);
+                                    if (Flags.nfcAlertTagAppLaunch()) {
+                                        new NfcTagAllowNotification(mContext,
+                                                appName).startNotification();
+                                    }
                                 }
                             }
                         }
