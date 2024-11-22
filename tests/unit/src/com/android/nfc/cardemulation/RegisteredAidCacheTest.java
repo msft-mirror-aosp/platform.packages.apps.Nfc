@@ -18,6 +18,7 @@ package com.android.nfc.cardemulation;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,12 +31,13 @@ import static org.mockito.Mockito.when;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.nfc.ComponentNameAndUser;
+import android.nfc.Flags;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.util.Pair;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -56,6 +58,7 @@ import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 
 @RunWith(AndroidJUnit4.class)
@@ -103,6 +106,7 @@ public class RegisteredAidCacheTest {
     @Mock private WalletRoleObserver mWalletRoleObserver;
     @Mock private AidRoutingManager mAidRoutingManager;
     @Mock private UserManager mUserManager;
+    @Mock private PackageManager mPackageManager;
     @Mock private NfcService mNfcService;
 
     @Captor
@@ -118,6 +122,7 @@ public class RegisteredAidCacheTest {
                 ExtendedMockito.mockitoSession()
                         .mockStatic(ActivityManager.class)
                         .mockStatic(NfcService.class)
+                        .mockStatic(Flags.class)
                         .strictness(Strictness.LENIENT)
                         .initMocks(this)
                         .startMocking();
@@ -127,6 +132,7 @@ public class RegisteredAidCacheTest {
         when(mUserManager.getProfileParent(eq(USER_HANDLE))).thenReturn(USER_HANDLE);
         when(mContext.createContextAsUser(any(), anyInt())).thenReturn(mContext);
         when(mContext.getSystemService(eq(UserManager.class))).thenReturn(mUserManager);
+        when (mContext.getPackageManager()).thenReturn(mPackageManager);
     }
 
     @After
@@ -296,6 +302,66 @@ public class RegisteredAidCacheTest {
         assertNull(routingEntries.get(PAYMENT_AID_1).offHostSE);
         assertNull(routingEntries.get(NON_PAYMENT_AID_1).offHostSE);
         assertTrue(mRegisteredAidCache.isRequiresScreenOnServiceExist());
+    }
+
+    @Test
+    public void testAidConflictResolution_walletRoleEnabledNfcEnabled_associatedRoleServices()
+            throws PackageManager.NameNotFoundException {
+        setWalletRoleFlag(true);
+        supportPrefixAndSubset(false);
+        when(Flags.nfcAssociatedRoleServices()).thenReturn(true);
+        when(mPackageManager.getProperty(
+                eq(CardEmulation.PROPERTY_ALLOW_SHARED_ROLE_PRIORITY),
+                eq(WALLET_HOLDER_PACKAGE_NAME)))
+                .thenReturn(new PackageManager.Property(
+                        CardEmulation.PROPERTY_ALLOW_SHARED_ROLE_PRIORITY,
+                        true, WALLET_HOLDER_PACKAGE_NAME, null));
+
+        mRegisteredAidCache = new RegisteredAidCache(mContext, mWalletRoleObserver,
+                mAidRoutingManager);
+        mRegisteredAidCache.mNfcEnabled = true;
+
+        List<ApduServiceInfo> apduServiceInfos = new ArrayList<>();
+        apduServiceInfos.add(createServiceInfoForAidRouting(
+                WALLET_PAYMENT_SERVICE,
+                true,
+                List.of(PAYMENT_AID_1),
+                List.of(CardEmulation.CATEGORY_PAYMENT),
+                false,
+                true,
+                USER_ID,
+                true,
+                true));
+        apduServiceInfos.add(createServiceInfoForAidRouting(
+                PAYMENT_SERVICE,
+                true,
+                List.of(PAYMENT_AID_2),
+                List.of(CardEmulation.CATEGORY_PAYMENT),
+                false,
+                true,
+                USER_ID,
+                true,
+                true));
+
+        mRegisteredAidCache.generateUserApduServiceInfoLocked(USER_ID, apduServiceInfos);
+        mRegisteredAidCache.generateServiceMapLocked(apduServiceInfos);
+        mRegisteredAidCache.onWalletRoleHolderChanged(WALLET_HOLDER_PACKAGE_NAME, USER_ID);
+
+        mRegisteredAidCache.mAssociatedRoleServices = new HashSet<>(apduServiceInfos);
+        mRegisteredAidCache.generateAidCacheLocked();
+
+        RegisteredAidCache.AidResolveInfo paymentResolveInfo
+                = mRegisteredAidCache.resolveAid(PAYMENT_AID_2);
+
+        assertNotNull(paymentResolveInfo.defaultService);
+        assertEquals(PAYMENT_SERVICE, paymentResolveInfo.defaultService.getComponent());
+        assertEquals(CardEmulation.CATEGORY_PAYMENT, paymentResolveInfo.category);
+        assertEquals(1, paymentResolveInfo.services.size());
+
+        assertTrue(mRegisteredAidCache.isPreferredServicePackageNameForUser(
+                WALLET_HOLDER_PACKAGE_NAME, USER_ID));
+        assertTrue(mRegisteredAidCache.isPreferredServicePackageNameForUser(
+                WALLET_HOLDER_2_PACKAGE_NAME, USER_ID));
     }
 
     @Test
@@ -710,6 +776,27 @@ public class RegisteredAidCacheTest {
             boolean requiresScreenOn,
             int uid,
             boolean isCategoryOtherServiceEnabled) {
+        return createServiceInfoForAidRouting(componentName,
+                onHost,
+                aids,
+                categories,
+                requiresUnlock,
+                requiresScreenOn,
+                uid,
+                isCategoryOtherServiceEnabled,
+                false);
+    }
+
+    private static ApduServiceInfo createServiceInfoForAidRouting(
+            ComponentName componentName,
+            boolean onHost,
+            List<String> aids,
+            List<String> categories,
+            boolean requiresUnlock,
+            boolean requiresScreenOn,
+            int uid,
+            boolean isCategoryOtherServiceEnabled,
+            boolean shareRolePriority) {
         ApduServiceInfo apduServiceInfo = Mockito.mock(ApduServiceInfo.class);
         when(apduServiceInfo.isOnHost()).thenReturn(onHost);
         when(apduServiceInfo.getAids()).thenReturn(aids);
@@ -719,6 +806,7 @@ public class RegisteredAidCacheTest {
         when(apduServiceInfo.isCategoryOtherServiceEnabled())
                 .thenReturn(isCategoryOtherServiceEnabled);
         when(apduServiceInfo.getComponent()).thenReturn(componentName);
+        when(apduServiceInfo.shareRolePriority()).thenReturn(shareRolePriority);
         for (int i = 0; i < aids.size(); i++) {
             String aid = aids.get(i);
             String category = categories.get(i);

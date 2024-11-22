@@ -61,4 +61,5 @@
     <bool name="enable_euicc_support">false</bool>
     <!-- Whether to indicate user activity using PowerManager.userActivity for HCE activation -->
     <bool name="indicate_user_activity_for_hce">true</bool>
+    <integer name="max_pause_polling_time_out_ms">0</integer>
 </resources>
