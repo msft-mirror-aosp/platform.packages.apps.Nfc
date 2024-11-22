@@ -568,7 +568,7 @@ public class HostEmulationManagerTest {
         when(apduServiceInfo.requiresUnlock()).thenReturn(true);
         when(apduServiceInfo.getUid()).thenReturn(USER_ID);
         when(mNfcService.isSecureNfcEnabled()).thenReturn(false);
-        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        when(mNfcInjector.isDeviceLocked()).thenReturn(true);
         aidResolveInfo.defaultService = apduServiceInfo;
         when(mRegisteredAidCache.resolveAid(eq(MOCK_AID))).thenReturn(aidResolveInfo);
 
@@ -598,7 +598,7 @@ public class HostEmulationManagerTest {
         aidResolveInfo.category = CardEmulation.CATEGORY_PAYMENT;
         when(apduServiceInfo.requiresUnlock()).thenReturn(false);
         when(mNfcService.isSecureNfcEnabled()).thenReturn(true);
-        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        when(mNfcInjector.isDeviceLocked()).thenReturn(true);
         aidResolveInfo.defaultService = apduServiceInfo;
         when(mRegisteredAidCache.resolveAid(eq(MOCK_AID))).thenReturn(aidResolveInfo);
 
