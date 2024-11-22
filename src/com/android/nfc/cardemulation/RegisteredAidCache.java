@@ -16,13 +16,15 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.TargetApi;
-import android.annotation.FlaggedApi;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.nfc.ComponentNameAndUser;
+import android.nfc.Flags;
 import android.nfc.INfcOemExtensionCallback;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
@@ -34,9 +36,8 @@ import android.sysprop.NfcProperties;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 
-import com.android.nfc.NfcService;
-
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.nfc.NfcService;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.TreeMap;
 
 public class RegisteredAidCache {
@@ -174,6 +176,8 @@ public class RegisteredAidCache {
     boolean mSupportsSubset = false;
     boolean mRequiresScreenOnServiceExist = false;
 
+    Set<ApduServiceInfo> mAssociatedRoleServices = new HashSet<>();
+
     public RegisteredAidCache(Context context, WalletRoleObserver walletRoleObserver) {
         this(context, walletRoleObserver, new AidRoutingManager());
     }
@@ -297,8 +301,7 @@ public class RegisteredAidCache {
                     userId == mUserIdPreferredForegroundService) {
                 matchedForeground = serviceInfo;
             } else if(mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
-                if (userId == mUserIdDefaultWalletHolder &&
-                        componentName.getPackageName().equals(mDefaultWalletHolderPackageName)) {
+                if (isDefaultOrAssociatedWalletService(serviceInfo, userId)) {
                     roleHolderServices.add(serviceInfo);
                 }
             } else if (componentName.equals(mPreferredPaymentService) &&
@@ -363,6 +366,51 @@ public class RegisteredAidCache {
         }
     }
 
+    private boolean isDefaultOrAssociatedWalletService(ApduServiceInfo serviceInfo, int userId) {
+        synchronized (mLock) {
+            if (userId != mUserIdDefaultWalletHolder) {
+                return false;
+            }
+
+            if (serviceInfo.getComponent().getPackageName().equals(
+                    mDefaultWalletHolderPackageName)) {
+                return true;
+            }
+
+            if (Flags.nfcAssociatedRoleServices()) {
+                for (ApduServiceInfo associatedService : mAssociatedRoleServices) {
+                    if (associatedService.getComponent().equals(serviceInfo.getComponent())) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    private boolean isDefaultOrAssociatedWalletPackage(String packageName, int userId) {
+        synchronized (mLock) {
+            if (userId != mUserIdDefaultWalletHolder) {
+                return false;
+            }
+
+            if (packageName.equals(mDefaultWalletHolderPackageName)) {
+                return true;
+            }
+
+            if (Flags.nfcAssociatedRoleServices()) {
+                for (ApduServiceInfo associatedService : mAssociatedRoleServices) {
+                    if (associatedService.getComponent().getPackageName().equals(packageName)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
     /**
      * Resolves a conflict between multiple services handling the same
      * AIDs. Note that the AID itself is not an input to the decision
@@ -405,9 +453,7 @@ public class RegisteredAidCache {
                 }
                 matchedForeground = serviceAidInfo.service;
             } else if(mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
-                if(userId == mUserIdDefaultWalletHolder
-                    && componentName.getPackageName().equals(
-                    mDefaultWalletHolderPackageName)) {
+                if (isDefaultOrAssociatedWalletService(serviceAidInfo.service, userId)) {
                     if (VDBG) Log.d(TAG, "Prioritizing default wallet services.");
 
                     if (serviceClaimsPaymentAid ||
@@ -491,8 +537,7 @@ public class RegisteredAidCache {
                     userId == mUserIdPreferredForegroundService) {
                 defaultServiceInfo.foregroundDefault = serviceAidInfo;
             } else if(mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
-                if(userId == mUserIdDefaultWalletHolder && componentName
-                        .getPackageName().equals(mDefaultWalletHolderPackageName)) {
+                if (isDefaultOrAssociatedWalletService(serviceAidInfo.service, userId)) {
                     defaultServiceInfo.walletDefaults.add(serviceAidInfo);
                 }
             }else if (componentName.equals(mPreferredPaymentService) &&
@@ -1214,6 +1259,7 @@ public class RegisteredAidCache {
         synchronized (mLock) {
             generateUserApduServiceInfoLocked(userId, services);
             // Rebuild our internal data-structures
+            generateAssociatedRoleServicesLocked(userId);
             generateServiceMapLocked(services);
             generateAidCacheLocked();
         }
@@ -1242,7 +1288,50 @@ public class RegisteredAidCache {
         synchronized (mLock) {
             mDefaultWalletHolderPackageName = defaultWalletHolderPackageName;
             mUserIdDefaultWalletHolder = userId;
+            generateAssociatedRoleServicesLocked(userId);
             generateAidCacheLocked();
+        }
+    }
+
+    private void generateAssociatedRoleServicesLocked(int userId) {
+        if (!Flags.nfcAssociatedRoleServices()) {
+            return;
+        }
+
+        mAssociatedRoleServices.clear();
+
+        if (mDefaultWalletHolderPackageName == null || userId != mUserIdDefaultWalletHolder) {
+            return;
+        }
+
+        List<ApduServiceInfo> apduServices = mUserApduServiceInfo.get(userId);
+        if (apduServices == null) {
+            return;
+        }
+
+        PackageManager pm = mContext.getPackageManager();
+
+        try {
+            PackageManager.Property prop = pm.getProperty(
+                    CardEmulation.PROPERTY_ALLOW_SHARED_ROLE_PRIORITY,
+                    mDefaultWalletHolderPackageName);
+            if (!prop.getBoolean()) {
+                return;
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            // Role owner does not want to share priority with anyone else
+            return;
+        }
+
+        for (ApduServiceInfo service : apduServices) {
+            if (service.getComponent().getPackageName().equals(mDefaultWalletHolderPackageName)) {
+                continue;
+            }
+
+            if (service.shareRolePriority() && pm.checkSignatures(mDefaultWalletHolderPackageName,
+                    service.getComponent().getPackageName()) == PackageManager.SIGNATURE_MATCH) {
+                mAssociatedRoleServices.add(service);
+            }
         }
     }
 
@@ -1275,9 +1364,7 @@ public class RegisteredAidCache {
                 return false;
             }
         } else if(mWalletRoleObserver.isWalletRoleFeatureEnabled()) {
-            if (mDefaultWalletHolderPackageName != null &&
-                mDefaultWalletHolderPackageName.equals(packageName) &&
-                userId == mUserIdDefaultWalletHolder) {
+            if (isDefaultOrAssociatedWalletPackage(packageName, userId)) {
                 return true;
             } else {
                 Log.i(TAG, "NfcService:" + packageName + "(" + userId
@@ -1352,6 +1439,12 @@ public class RegisteredAidCache {
         pw.println("    UserId: " + mUserIdPreferredForegroundService);
         pw.println("    Preferred payment service: " + mPreferredPaymentService);
         pw.println("    UserId: " + mUserIdPreferredPaymentService);
+        if (Flags.nfcAssociatedRoleServices()) {
+            pw.println("    Wallet role userId: " + mUserIdDefaultWalletHolder);
+            pw.println("    Wallet role package: " + mDefaultWalletHolderPackageName);
+            pw.println("    Associated role services: " + mAssociatedRoleServices.stream()
+                    .map(service -> service.getComponent().toString()).toList());
+        }
         pw.println("");
         mRoutingManager.dump(fd, pw, args);
         pw.println("");
