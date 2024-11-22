@@ -218,10 +218,17 @@ public class NativeNfcManager implements DeviceHost {
         if (!NfcProperties.observe_mode_supported().orElse(true)) {
             return false;
         }
-        if (isProprietaryGetCapsSupported()) {
-            return isObserveModeSupportedCaps(mProprietaryCaps);
+        if (com.android.nfc.flags.Flags.observeModeWithoutRf()) {
+            if (isProprietaryGetCapsSupported()) {
+                return isObserveModeSupportedWithoutRfDeactivation();
+            }
+            return false;
+        } else {
+            if (isProprietaryGetCapsSupported()) {
+                return isObserveModeSupportedCaps(mProprietaryCaps);
+            }
+            return true;
         }
-        return true;
     }
 
     @Override
