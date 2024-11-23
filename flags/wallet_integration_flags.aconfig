@@ -7,3 +7,10 @@ flag {
     description: "Combine RF field activated and deactivated events to reduce excessive broadcasts."
     bug: "365533082"
 }
+
+flag {
+    name: "exit_frames"
+    namespace: "wallet_integration"
+    description: "Enable exit frames to improve autotransact performance."
+    bug: "368655283"
+}
