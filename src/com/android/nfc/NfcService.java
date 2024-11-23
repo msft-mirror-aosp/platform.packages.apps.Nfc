@@ -5138,8 +5138,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     executeOemOnTagConnectedCallback(false);
                     unregisterObject(tagEndpoint.getHandle());
                     if (mPollDelayTime > NO_POLL_DELAY) {
-                        tagEndpoint.stopPresenceChecking();
                         pollingDelay();
+                        tagEndpoint.stopPresenceChecking();
                     } else {
                         Log.d(TAG, "Keep presence checking.");
                     }
