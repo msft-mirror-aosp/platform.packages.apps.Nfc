@@ -12,5 +12,5 @@ flag {
     name: "exit_frames"
     namespace: "wallet_integration"
     description: "Enable exit frames to improve autotransact performance."
-    bug: "368655283"
+    bug: "380455428"
 }
