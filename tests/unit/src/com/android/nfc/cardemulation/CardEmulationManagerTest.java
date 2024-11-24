@@ -167,6 +167,7 @@ public class CardEmulationManagerTest {
         when(mContext.getResources()).thenReturn(mResources);
         when(mContext.getSystemService(eq(UserManager.class))).thenReturn(mUserManager);
         when(mResources.getBoolean(R.bool.indicate_user_activity_for_hce)).thenReturn(true);
+        when(android.nfc.Flags.nfcEventListener()).thenReturn(true);
         mCardEmulationManager = createInstanceWithMockParams();
     }
 
@@ -236,6 +237,7 @@ public class CardEmulationManagerTest {
         verify(mHostNfcFEmulationManager).onHostEmulationActivated();
         verify(mRegisteredNfcFServicesCache).onHostEmulationActivated();
         verify(mEnabledNfcFServices).onHostEmulationActivated();
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verifyZeroInteractions(mPreferredServices);
     }
@@ -288,6 +290,7 @@ public class CardEmulationManagerTest {
 
         verify(mHostNfcFEmulationManager).onHostEmulationData(mDataCaptor.capture());
         assertEquals(PROPER_SKIP_DATA_NDF1_HEADER, mDataCaptor.getValue());
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verify(mPowerManager)
                 .userActivity(anyLong(), eq(PowerManager.USER_ACTIVITY_EVENT_TOUCH), eq(0));
@@ -313,6 +316,7 @@ public class CardEmulationManagerTest {
         verify(mHostNfcFEmulationManager).onHostEmulationDeactivated();
         verify(mRegisteredNfcFServicesCache).onHostEmulationDeactivated();
         verify(mEnabledNfcFServices).onHostEmulationDeactivated();
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verifyZeroInteractions(mPreferredServices);
     }
@@ -388,6 +392,7 @@ public class CardEmulationManagerTest {
         verify(mRegisteredAidCache).onServicesUpdated(eq(USER_ID), mServiceListCaptor.capture());
         verify(mPreferredServices).onServicesUpdated();
         assertEquals(UPDATED_SERVICES, mServiceListCaptor.getValue());
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verify(mNfcService).onPreferredPaymentChanged(eq(NfcAdapter.PREFERRED_PAYMENT_UPDATED));
     }
