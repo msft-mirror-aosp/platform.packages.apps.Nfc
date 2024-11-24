@@ -108,6 +108,18 @@ class NfcTag {
 
   /*******************************************************************************
   **
+  ** Function:        notifyTagDiscovered
+  **
+  ** Description:     Notify NFC service about tag discovery.
+  **                  discovered: true if tag is discovered, false if tag is lost.
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+  void notifyTagDiscovered(bool discovered);
+
+  /*******************************************************************************
+  **
   ** Function:        isActivated
   **
   ** Description:     Is tag activated?
