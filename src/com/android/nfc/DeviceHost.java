@@ -49,6 +49,8 @@ public interface DeviceHost {
 
         public void onWlcStopped(int wpt_end_condition);
 
+        public void onTagRfDiscovered(boolean discovered);
+
         public void onVendorSpecificEvent(int gid, int oid, byte[] payload);
 
         public void onObserveModeStateChanged(boolean enable);
@@ -58,6 +60,8 @@ public interface DeviceHost {
         public void onEeListenActivated(boolean isActivated);
 
         public void onSeSelected();
+
+        public void onCommandTimeout();
     }
 
     public interface TagEndpoint {
@@ -160,7 +164,53 @@ public interface DeviceHost {
 
     public boolean unrouteAid(byte[] aid);
 
-    public boolean commitRouting();
+    public int commitRouting();
+
+    /**
+     * Get the T4T Nfcee power state supported.
+     * @return T4T Nfcee power state
+     */
+    int getT4TNfceePowerState();
+
+    /**
+     * Get the NDEF NFCEE Route ID.
+     * @return NDEF NFCEE Route ID
+     */
+    int getNdefNfceeRouteId();
+
+    /**
+     * Write the data into the NDEF NFCEE file of the specific file ID
+     * @param fileId
+     * @param data
+     * @return number of data bytes written
+     */
+    int doWriteData(byte[] fileId, byte[] data);
+
+    /**
+     * Read the data from the NDEF NFCEE file of the specific file ID.
+     * @param fileId
+     * @return read data buffer
+     */
+    byte[] doReadData(byte[] fileId);
+
+    /**
+     * This API will set all the NFCEE NDEF data to zero.
+     * @return "True" when operation is successful. else "False"
+     */
+    boolean doClearNdefData();
+
+    /**
+     * This API will get NDEF NFCEE status.
+     * @return Indicates whether NDEF NFCEE Read or write operation is under process
+     *         Return "True" when operation is in progress. else "False"
+     */
+    boolean isNdefOperationOngoing();
+
+    /**
+     * This API will tell whether NDEF NFCEE emulation is supported or not.
+     * @return "True" when feature supported. else "False"
+     */
+    boolean isNdefNfceeEmulationSupported();
 
     public void registerT3tIdentifier(byte[] t3tIdentifier);
 

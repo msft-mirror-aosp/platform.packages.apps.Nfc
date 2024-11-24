@@ -122,6 +122,11 @@
             android:label="Polling Frame Activity"
             android:exported="true">
         </activity>
+        <activity
+            android:name=".EventListenerEmulatorActivity"
+            android:label="Event Listener Activity"
+            android:exported="true">
+        </activity>
         <service android:name="com.android.nfc.service.PollingLoopService" android:exported="true"
             android:permission="android.permission.BIND_NFC_SERVICE"
             android:enabled="true">
