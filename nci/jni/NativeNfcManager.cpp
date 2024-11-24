@@ -31,6 +31,7 @@
 #ifdef DTA_ENABLED
 #include "NfcDta.h"
 #endif /* DTA_ENABLED */
+#include "NativeT4tNfcee.h"
 #include "NfcJniUtil.h"
 #include "NfcTag.h"
 #include "NfceeManager.h"
@@ -42,6 +43,7 @@
 #include "debug_lmrt.h"
 #include "nfa_api.h"
 #include "nfa_ee_api.h"
+#include "nfa_nfcee_int.h"
 #include "nfc_brcm_defs.h"
 #include "nfc_config.h"
 #include "rw_api.h"
@@ -117,6 +119,8 @@ const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
 const char* gNfcVendorNciResponseClassName =
     "com/android/nfc/NfcVendorNciResponse";
+const char* gNativeT4tNfceeClassName =
+    "com/android/nfc/dhimpl/NativeT4tNfceeManager";
 void doStartupConfig();
 void startStopPolling(bool isStartPolling);
 void startRfDiscovery(bool isStart);
@@ -639,6 +643,13 @@ static void nfaConnectionCallback(uint8_t connEvent,
           "%s: NFA_CE_UICC_LISTEN_CONFIGURED_EVT : status=0x%X", __func__,
           eventData->status);
       break;
+    case NFA_T4TNFCEE_EVT:
+    case NFA_T4TNFCEE_READ_CPLT_EVT:
+    case NFA_T4TNFCEE_WRITE_CPLT_EVT:
+    case NFA_T4TNFCEE_CLEAR_CPLT_EVT:
+    case NFA_T4TNFCEE_READ_CC_DATA_CPLT_EVT:
+      NativeT4tNfcee::getInstance().eventHandler(connEvent, eventData);
+      break;
 
     default:
       LOG(DEBUG) << StringPrintf("%s: unknown event (%d) ????", __func__,
@@ -1027,6 +1038,12 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
   ScopedByteArrayRO bytes(e, aid);
   buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
   bufLen = bytes.size();
+  if (NfcConfig::hasKey(NAME_DEFAULT_NDEF_NFCEE_ROUTE)) {
+    if (route == (int)NfcConfig::getUnsigned(NAME_DEFAULT_NDEF_NFCEE_ROUTE)) {
+      NativeT4tNfcee::getInstance().checkAndUpdateT4TAid(buf,
+                                                         (uint8_t*)&bufLen);
+    }
+  }
   return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
                                                      aidInfo, power);
 }
@@ -1443,6 +1460,8 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
   tNFA_STATUS stat = NFA_STATUS_OK;
   sIsRecovering = false;
 
+  struct nfc_jni_native_data* nat = getNative(e, o);
+
   PowerSwitch& powerSwitch = PowerSwitch::getInstance();
 
   if (sIsNfaEnabled) {
@@ -1492,11 +1511,11 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         NfcTag::getInstance().initialize(getNative(e, o));
         HciEventManager::getInstance().initialize(getNative(e, o));
         NativeWlcManager::getInstance().initialize(getNative(e, o));
+        NativeT4tNfcee::getInstance().initialize();
 
         /////////////////////////////////////////////////////////////////////////////////
         // Add extra configuration here (work-arounds, etc.)
 
-        struct nfc_jni_native_data* nat = getNative(e, o);
         if (nat) {
           nat->tech_mask =
               NfcConfig::getUnsigned(NAME_POLLING_TECH_MASK, DEFAULT_TECH_MASK);
@@ -1583,6 +1602,7 @@ static void nfcManager_doFactoryReset(JNIEnv*, jobject) {
 
 static void nfcManager_doShutdown(JNIEnv*, jobject) {
   NfcAdaptation& theInstance = NfcAdaptation::GetInstance();
+  NativeT4tNfcee::getInstance().onNfccShutdown();
   theInstance.DeviceShutdown();
 }
 
@@ -1801,6 +1821,7 @@ static jboolean nfcManager_doDeinitialize(JNIEnv*, jobject) {
   }
   sIsDisabling = true;
 
+  NativeT4tNfcee::getInstance().onNfccShutdown();
   if (!recovery_option || !sIsRecovering) {
     RoutingManager::getInstance().onNfccShutdown();
   }
@@ -2545,7 +2566,7 @@ static JNINativeMethod gMethods[] = {
     {"nativeSendRawVendorCmd", "(III[B)Lcom/android/nfc/NfcVendorNciResponse;",
      (void*)nfcManager_nativeSendRawVendorCmd},
 
-    {"dofetchActiveNfceeList", "()Ljava/util/List;",
+    {"dofetchActiveNfceeList", "()Ljava/util/Map;",
      (void*)nfcManager_dofetchActiveNfceeList},
 
     {"getProprietaryCaps", "()[B", (void*)nfcManager_getProprietaryCaps},
