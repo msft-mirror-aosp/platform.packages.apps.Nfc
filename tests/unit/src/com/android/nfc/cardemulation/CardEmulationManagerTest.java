@@ -16,6 +16,9 @@
 
 package com.android.nfc.cardemulation;
 
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_OK;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -38,6 +41,7 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Resources;
+import android.nfc.ComponentNameAndUser;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.AidGroup;
 import android.nfc.cardemulation.ApduServiceInfo;
@@ -52,6 +56,7 @@ import android.os.UserManager;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.ForegroundUtils;
+import com.android.nfc.NfcEventLog;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 import com.android.nfc.R;
@@ -132,6 +137,7 @@ public class CardEmulationManagerTest {
     @Mock private NfcService mNfcService;
     @Mock private UserManager mUserManager;
     @Mock private NfcAdapter mNfcAdapter;
+    @Mock private NfcEventLog mNfcEventLog;
     @Captor private ArgumentCaptor<List<PollingFrame>> mPollingLoopFrameCaptor;
     @Captor private ArgumentCaptor<byte[]> mDataCaptor;
     @Captor private ArgumentCaptor<List<ApduServiceInfo>> mServiceListCaptor;
@@ -161,6 +167,7 @@ public class CardEmulationManagerTest {
         when(mContext.getResources()).thenReturn(mResources);
         when(mContext.getSystemService(eq(UserManager.class))).thenReturn(mUserManager);
         when(mResources.getBoolean(R.bool.indicate_user_activity_for_hce)).thenReturn(true);
+        when(android.nfc.Flags.nfcEventListener()).thenReturn(true);
         mCardEmulationManager = createInstanceWithMockParams();
     }
 
@@ -230,6 +237,7 @@ public class CardEmulationManagerTest {
         verify(mHostNfcFEmulationManager).onHostEmulationActivated();
         verify(mRegisteredNfcFServicesCache).onHostEmulationActivated();
         verify(mEnabledNfcFServices).onHostEmulationActivated();
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verifyZeroInteractions(mPreferredServices);
     }
@@ -282,6 +290,7 @@ public class CardEmulationManagerTest {
 
         verify(mHostNfcFEmulationManager).onHostEmulationData(mDataCaptor.capture());
         assertEquals(PROPER_SKIP_DATA_NDF1_HEADER, mDataCaptor.getValue());
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verify(mPowerManager)
                 .userActivity(anyLong(), eq(PowerManager.USER_ACTIVITY_EVENT_TOUCH), eq(0));
@@ -307,6 +316,7 @@ public class CardEmulationManagerTest {
         verify(mHostNfcFEmulationManager).onHostEmulationDeactivated();
         verify(mRegisteredNfcFServicesCache).onHostEmulationDeactivated();
         verify(mEnabledNfcFServices).onHostEmulationDeactivated();
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verifyZeroInteractions(mPreferredServices);
     }
@@ -382,6 +392,7 @@ public class CardEmulationManagerTest {
         verify(mRegisteredAidCache).onServicesUpdated(eq(USER_ID), mServiceListCaptor.capture());
         verify(mPreferredServices).onServicesUpdated();
         assertEquals(UPDATED_SERVICES, mServiceListCaptor.getValue());
+        verify(mHostEmulationManager).setAidRoutingListener(any());
         verifyZeroInteractions(mHostEmulationManager);
         verify(mNfcService).onPreferredPaymentChanged(eq(NfcAdapter.PREFERRED_PAYMENT_UPDATED));
     }
@@ -1453,12 +1464,13 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mResources.getBoolean(R.bool.enable_service_for_category_other)).thenReturn(true);
         when(mRegisteredServicesCache.registerOtherForService(anyInt(), any(), anyBoolean()))
-                .thenReturn(true);
+                .thenReturn(SET_SERVICE_ENABLED_STATUS_OK);
 
-        assertTrue(
+        assertEquals(SET_SERVICE_ENABLED_STATUS_OK,
                 mCardEmulationManager
                         .getNfcCardEmulationInterface()
-                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true));
+                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true)
+        );
 
         ExtendedMockito.verify(
                 () -> {
@@ -1475,12 +1487,13 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mResources.getBoolean(R.bool.enable_service_for_category_other)).thenReturn(false);
         when(mRegisteredServicesCache.registerOtherForService(anyInt(), any(), anyBoolean()))
-                .thenReturn(true);
+                .thenReturn(SET_SERVICE_ENABLED_STATUS_OK);
 
-        assertFalse(
+        assertEquals(SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED,
                 mCardEmulationManager
                         .getNfcCardEmulationInterface()
-                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true));
+                        .setServiceEnabledForCategoryOther(USER_ID, WALLET_PAYMENT_SERVICE, true)
+        );
 
         verify(mRegisteredServicesCache).initialize();
         verifyNoMoreInteractions(mRegisteredServicesCache);
@@ -2250,6 +2263,7 @@ public class CardEmulationManagerTest {
                 mPreferredServices,
                 mEnabledNfcFServices,
                 mRoutingOptionManager,
-                mPowerManager);
+                mPowerManager,
+                mNfcEventLog);
     }
 }

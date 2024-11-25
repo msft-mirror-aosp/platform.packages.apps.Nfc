@@ -19,6 +19,9 @@ import static android.nfc.NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED;
 
 import static com.android.nfc.NfcService.INVALID_NATIVE_HANDLE;
 import static com.android.nfc.NfcService.NCI_VERSION_1_0;
+import static com.android.nfc.NfcService.NFC_LISTEN_A;
+import static com.android.nfc.NfcService.NFC_LISTEN_B;
+import static com.android.nfc.NfcService.NFC_LISTEN_F;
 import static com.android.nfc.NfcService.NFC_POLL_V;
 import static com.android.nfc.NfcService.PREF_NFC_ON;
 import static com.android.nfc.NfcService.SOUND_END;
@@ -34,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
@@ -97,9 +101,13 @@ import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.test.TestLooper;
+import android.platform.test.annotations.RequiresFlagsEnabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
+import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.se.omapi.ISecureElementService;
 import android.sysprop.NfcProperties;
 import android.nfc.INfcOemExtensionCallback;
@@ -118,7 +126,9 @@ import android.nfc.INfcVendorNciCallback;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -195,10 +205,21 @@ public final class NfcServiceTest {
     NfcService mNfcService;
     private MockitoSession mStaticMockSession;
     private ContentObserver mContentObserver;
+    private TestClock mClock = new TestClock();
+
+    class TestClock implements TestLooper.Clock {
+        long mOffset = 0;
+        public long uptimeMillis() {
+            return SystemClock.uptimeMillis() + mOffset;
+        }
+    }
+
+    @Rule
+    public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
 
     @Before
     public void setUp() throws PackageManager.NameNotFoundException {
-        mLooper = new TestLooper();
+        mLooper = new TestLooper(mClock);
         mStaticMockSession = ExtendedMockito.mockitoSession()
                 .mockStatic(NfcProperties.class)
                 .mockStatic(android.nfc.Flags.class)
@@ -1331,11 +1352,37 @@ public final class NfcServiceTest {
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         mNfcService.onRemoteFieldDeactivated();
         verify(callback, atLeastOnce()).onRfFieldActivated(anyBoolean());
+        mClock.mOffset += 60;
         mLooper.dispatchAll();
         verify(mCardEmulationManager).onFieldChangeDetected(anyBoolean());
         verify(mApplication).sendBroadcastAsUser(any(), any());
         verify(mStatsdUtils).logFieldChanged(anyBoolean(), anyInt());
-        verify(mNfcEventLog, times(2)).logEvent(any());
+        verify(mNfcEventLog, atLeast(2)).logEvent(any());
+    }
+
+    @Test
+    @RequiresFlagsEnabled(Flags.FLAG_COALESCE_RF_EVENTS)
+    public void testOnRemoteFieldCoalessing() throws RemoteException {
+        Assume.assumeTrue(com.android.nfc.flags.Flags.coalesceRfEvents());
+        createNfcServiceWithoutStatsdUtils();
+        List<String> userlist = new ArrayList<>();
+        userlist.add("com.android.nfc");
+        mNfcService.mIsSecureNfcEnabled = true;
+        mNfcService.mIsRequestUnlockShowed = false;
+        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        mNfcService.mNfcEventInstalledPackages.put(1, userlist);
+        when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
+        mNfcService.onRemoteFieldActivated();
+        mNfcService.onRemoteFieldDeactivated();
+        mNfcService.onRemoteFieldActivated();
+        mNfcService.onRemoteFieldDeactivated();
+        mClock.mOffset += 60;
+        mLooper.dispatchAll();
+        verify(mCardEmulationManager).onFieldChangeDetected(true);
+        verify(mCardEmulationManager).onFieldChangeDetected(false);
+        verify(mApplication, times(2)).sendBroadcastAsUser(any(), any());
+        verify(mStatsdUtils, times(4)).logFieldChanged(anyBoolean(), anyInt());
+        verify(mNfcEventLog, atLeast(2)).logEvent(any());
     }
 
     @Test
@@ -1632,14 +1679,14 @@ public final class NfcServiceTest {
     @Test
     public void testFetchActiveNfceeList() throws RemoteException {
         mNfcService.mState = NfcAdapter.STATE_ON;
-        List<String> nfceeList = new ArrayList<>();
-        nfceeList.add("test1");
-        nfceeList.add("test2");
-        nfceeList.add("test3");
-        when(mDeviceHost.dofetchActiveNfceeList()).thenReturn(nfceeList);
-        List<String> list = mNfcService.mNfcAdapter.fetchActiveNfceeList();
+        Map<String, Integer> nfceeMap = new HashMap<>();
+        nfceeMap.put("test1", Integer.valueOf(NFC_LISTEN_A));
+        nfceeMap.put("test2", Integer.valueOf(NFC_LISTEN_B));
+        nfceeMap.put("test3", Integer.valueOf(NFC_LISTEN_F));
+        when(mDeviceHost.dofetchActiveNfceeList()).thenReturn(nfceeMap);
+        Map<String, Integer> map = mNfcService.mNfcAdapter.fetchActiveNfceeList();
         verify(mDeviceHost).dofetchActiveNfceeList();
-        Assert.assertEquals(list.get(0), nfceeList.get(0));
+        Assert.assertEquals(map, nfceeMap);
     }
 
     @Test
@@ -2205,6 +2252,6 @@ public final class NfcServiceTest {
         mNfcService.mNfcAdapter.registerOemExtensionCallback(oemExtensionCallback);
         callback.onTagDisconnected();
         assertThat(mNfcService.mCookieUpToDate).isLessThan(0);
-        verify(oemExtensionCallback).onTagConnected(anyBoolean(), any());
+        verify(oemExtensionCallback).onTagConnected(anyBoolean());
     }
 }

@@ -21,6 +21,7 @@ import static android.content.pm.PackageManager.MATCH_DEFAULT_ONLY;
 import static android.nfc.Flags.enableNfcMainline;
 
 import static com.android.nfc.NfcService.WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS;
+
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
@@ -69,6 +70,7 @@ import android.view.WindowManager;
 import android.widget.TextView;
 
 import com.android.nfc.RegisteredComponentCache.ComponentInfo;
+import com.android.nfc.flags.Flags;
 import com.android.nfc.handover.HandoverDataParser;
 import com.android.nfc.handover.PeripheralHandoverService;
 
@@ -86,6 +88,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import androidx.annotation.VisibleForTesting;
 
 /**
  * Dispatch of NFC events to start activities
@@ -110,7 +113,7 @@ class NfcDispatcher {
     private final NfcInjector mNfcInjector;
     private final Handler mMessageHandler = new MessageHandler();
     private final Messenger mMessenger = new Messenger(mMessageHandler);
-    private AtomicBoolean mBluetoothEnabledByNfc = new AtomicBoolean();
+    private final AtomicBoolean mBluetoothEnabledByNfc;
 
     // Locked on this
     private PendingIntent mOverrideIntent;
@@ -143,6 +146,7 @@ class NfcDispatcher {
         synchronized (this) {
             mProvisioningOnly = provisionOnly;
         }
+        mBluetoothEnabledByNfc = mNfcInjector.createAtomicBoolean();
         String[] provisionMimes = null;
         if (provisionOnly) {
             try {
@@ -344,25 +348,25 @@ class NfcDispatcher {
             int muteAppCount = 0;
             for (ResolveInfo resolveInfo : activities) {
                 ActivityInfo activityInfo = resolveInfo.activityInfo;
-                ComponentName cmp = new ComponentName(activityInfo.packageName, activityInfo.name);
-                if (DBG) {
-                    Log.d(TAG, "activityInfo.packageName= " + activityInfo.packageName);
-                    Log.d(TAG, "activityInfo.name= " + activityInfo.name);
-                    Log.d(TAG, "cmp.flattenToString= " + cmp.flattenToString());
-                }
+                String pkgName = activityInfo.packageName;
+                String appName = context.getPackageManager().getApplicationLabel(
+                        activityInfo.applicationInfo).toString();
+                if (DBG) Log.d(TAG, "activityInfo.packageName= " + pkgName);
                 Map<String, Boolean> preflist =
                         mNfcAdapter.getTagIntentAppPreferenceForUser(userId);
-                if (preflist.containsKey(activityInfo.packageName)) {
-                    if (!preflist.get(activityInfo.packageName)) {
-                        if (DBG) Log.d(TAG, "mute pkg:" + cmp.flattenToString());
+                if (preflist.containsKey(pkgName)) {
+                    if (!preflist.get(pkgName)) {
+                        if (DBG) Log.d(TAG, "mute pkg:" + pkgName);
                         muteAppCount++;
                         filtered.remove(resolveInfo);
                         logMuteApp(activityInfo.applicationInfo.uid);
                     }
                 } else {
                     // Default sets allow to the preference list
-                    mNfcAdapter.setTagIntentAppPreferenceForUser(userId, activityInfo.packageName,
-                            true);
+                    mNfcAdapter.setTagIntentAppPreferenceForUser(userId, pkgName, true);
+                    if (Flags.nfcAlertTagAppLaunch()) {
+                        new NfcTagAllowNotification(context, appName).startNotification();
+                    }
                 }
             }
             if (muteAppCount > 0) {
@@ -841,8 +845,8 @@ class NfcDispatcher {
         if (intent == null) return false;
 
         // Try to start AAR activity with matching filter
-        List<String> aarPackages = extractAarPackages(message);
-        for (String pkg : aarPackages) {
+        List<String> packages = extractAarPackages(message);
+        for (String pkg : packages) {
             dispatch.intent.setPackage(pkg);
             if (dispatch.tryStartActivity()) {
                 if (DBG) Log.i(TAG, "matched AAR to NDEF");
@@ -850,10 +854,20 @@ class NfcDispatcher {
             }
         }
 
+        // Try to start AAR activity (OEM proprietary format) with matching filter
+        packages = extractOemPackages(message);
+        for (String pkg : packages) {
+            dispatch.intent.setPackage(pkg);
+            if (dispatch.tryStartActivity()) {
+                if (DBG) Log.i(TAG, "matched OEM package to NDEF");
+                return true;
+            }
+        }
+
         List<UserHandle> luh = dispatch.getCurrentActiveUserHandles();
         // Try to perform regular launch of the first AAR
-        if (aarPackages.size() > 0) {
-            String firstPackage = aarPackages.get(0);
+        if (packages.size() > 0) {
+            String firstPackage = packages.get(0);
             PackageManager pm;
             for (UserHandle uh : luh) {
                 try {
@@ -996,6 +1010,8 @@ class NfcDispatcher {
                             matches.add(info.resolveInfo);
                         } else {
                             String pkgName = info.resolveInfo.activityInfo.packageName;
+                            String appName = mContext.getPackageManager().getApplicationLabel(
+                                    info.resolveInfo.activityInfo.applicationInfo).toString();
                             int userId = uh.getIdentifier();
                             Map<String, Boolean> preflist =
                                     mNfcAdapter.getTagIntentAppPreferenceForUser(userId);
@@ -1005,6 +1021,10 @@ class NfcDispatcher {
                                     // Default sets allow to the preference list
                                     mNfcAdapter.setTagIntentAppPreferenceForUser(userId,
                                             pkgName, true);
+                                    if (Flags.nfcAlertTagAppLaunch()) {
+                                        new NfcTagAllowNotification(mContext,
+                                                appName).startNotification();
+                                    }
                                 }
                             }
                         }
@@ -1269,6 +1289,11 @@ class NfcDispatcher {
         }
     }
 
+    @VisibleForTesting
+    public Handler getHandler() {
+        return mMessageHandler;
+    }
+
     final BroadcastReceiver mBluetoothStatusReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -1286,6 +1311,36 @@ class NfcDispatcher {
             }
         }
     };
+
+    List<String> extractOemPackages(NdefMessage message) {
+        if (mNfcOemExtensionCallback != null) {
+            CountDownLatch latch = new CountDownLatch(1);
+            NfcCallbackResultReceiver.OnReceiveResultListener listener =
+                    new NfcCallbackResultReceiver.OnReceiveResultListener();
+            ResultReceiver receiver = new NfcCallbackResultReceiver(latch, listener);
+            try {
+                mNfcOemExtensionCallback.onExtractOemPackages(message, receiver);
+            } catch (RemoteException remoteException) {
+                return new LinkedList<String>();
+            }
+            try {
+                boolean success = latch.await(
+                        WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                if (!success) {
+                    return new LinkedList<String>();
+                } else {
+                    Bundle bundle = listener.getResultData();
+                    String[] packageNames = bundle.getStringArray("packageNames");
+                    if (packageNames != null) {
+                        return List.of(packageNames);
+                    }
+                }
+            } catch (InterruptedException ie) {
+                return new LinkedList<String>();
+            }
+        }
+        return new LinkedList<String>();
+    }
 
     boolean receiveOemCallbackResult(Tag tag, NdefMessage message) {
         if (mNfcOemExtensionCallback == null) {
