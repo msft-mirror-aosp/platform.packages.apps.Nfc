@@ -108,6 +108,18 @@ class NfcTag {
 
   /*******************************************************************************
   **
+  ** Function:        notifyTagDiscovered
+  **
+  ** Description:     Notify NFC service about tag discovery.
+  **                  discovered: true if tag is discovered, false if tag is lost.
+  **
+  ** Returns:         None
+  **
+  *******************************************************************************/
+  void notifyTagDiscovered(bool discovered);
+
+  /*******************************************************************************
+  **
   ** Function:        isActivated
   **
   ** Description:     Is tag activated?
@@ -196,6 +208,18 @@ class NfcTag {
   **
   *******************************************************************************/
   int getT1tMaxMessageSize();
+
+  /*******************************************************************************
+  **
+  ** Function:        isNfcForumT2T
+  **
+  ** Description:     Whether tag is Nfc-Forum based and uses read command for
+  **                  presence check.
+  **
+  ** Returns:         True if tag is isNfcForumT2T.
+  **
+  *******************************************************************************/
+  bool isNfcForumT2T();
 
   /*******************************************************************************
   **

@@ -29,6 +29,7 @@ import com.android.modules.utils.BasicShellCommandHandler;
 
 import java.io.PrintWriter;
 import java.util.Arrays;
+import androidx.annotation.VisibleForTesting;
 
 /**
  * Interprets and executes 'adb shell cmd nfc [args]'.
@@ -60,10 +61,23 @@ public class NfcShellCommand extends BasicShellCommandHandler {
     };
     private final NfcService mNfcService;
     private final Context mContext;
+    private PrintWriter mPrintWriter;
 
     NfcShellCommand(NfcService nfcService, Context context) {
         mNfcService = nfcService;
         mContext = context;
+    }
+
+    @VisibleForTesting
+    NfcShellCommand(NfcService nfcService, Context context, PrintWriter printWriter) {
+       this(nfcService, context);
+       mPrintWriter = printWriter;
+    }
+
+    @VisibleForTesting
+    @Override
+    public PrintWriter getOutPrintWriter() {
+        return mPrintWriter;
     }
 
     @Override

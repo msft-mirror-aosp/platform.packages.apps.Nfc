@@ -16,6 +16,7 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.FlaggedApi;
 import android.annotation.TargetApi;
@@ -30,6 +31,7 @@ import android.content.pm.PackageManager;
 import android.nfc.ComponentNameAndUser;
 import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NfcAdapter;
+import android.nfc.OemLogItems;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
@@ -742,6 +744,9 @@ public class HostEmulationManager {
                           "Screen is off, sending AID_NOT_FOUND, but not triggering bug report");
                     } else {
                         Log.w(TAG, "Can't handle AID " + selectAid + " sending AID_NOT_FOUND");
+                        if (android.nfc.Flags.nfcEventListener()) {
+                            notifyAidNotRoutedListener(selectAid);
+                        }
                         if (mUnroutableAidBugReportRunnable != null) {
                             mUnroutableAidBugReportRunnable.addAid(selectAid);
                         } else {
@@ -825,6 +830,9 @@ public class HostEmulationManager {
                     // Just ignore all future APDUs until we resolve to only one
                     mState = STATE_W4_DEACTIVATE;
                     NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, selectAid);
+                    if (android.nfc.Flags.nfcEventListener()) {
+                        notifyAidConflictListener(selectAid);
+                    }
                     if (mStatsdUtils != null) {
                         mStatsdUtils.setCardEmulationEventCategory(CardEmulation.CATEGORY_OTHER);
                         mStatsdUtils.logCardEmulationWrongSettingEvent();
@@ -1074,6 +1082,10 @@ public class HostEmulationManager {
         msg.setData(dataBundle);
         msg.replyTo = mMessenger;
         try {
+            NfcService.getInstance().notifyOemLogEvent(new OemLogItems
+                    .Builder(OemLogItems.LOG_ACTION_HCE_DATA)
+                    .setApduCommand(data)
+                    .build());
             mActiveService.send(msg);
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping APDU", e);
@@ -1247,6 +1259,34 @@ public class HostEmulationManager {
             return bytesToString(data, SELECT_APDU_HDR_LENGTH, aidLength);
         }
         return null;
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    interface NfcAidRoutingListener {
+        void onAidConflict(@NonNull String aid);
+        void onAidNotRouted(@NonNull String aid);
+    }
+
+    @Nullable
+    private NfcAidRoutingListener mAidRoutingListener = null;
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    void setAidRoutingListener(@Nullable NfcAidRoutingListener listener) {
+        mAidRoutingListener = listener;
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    private void notifyAidConflictListener(String aid) {
+        if (mAidRoutingListener != null && aid != null) {
+            mAidRoutingListener.onAidConflict(aid);
+        }
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    private void notifyAidNotRoutedListener(String aid) {
+        if (mAidRoutingListener != null && aid != null) {
+            mAidRoutingListener.onAidNotRouted(aid);
+        }
     }
 
     private void returnToIdleStateLocked() {
@@ -1447,9 +1487,12 @@ public class HostEmulationManager {
                 synchronized (mLock) {
                     Log.d(TAG, "Received MSG_UNHANDLED");
                     AidResolveInfo resolveInfo = mAidCache.resolveAid(mLastSelectedAid);
-                    boolean isPayment = false;
+
                     if (resolveInfo.services.size() > 0) {
                         NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, mLastSelectedAid);
+                        if (android.nfc.Flags.nfcEventListener()) {
+                            notifyAidConflictListener(mLastSelectedAid);
+                        }
                         launchResolver(mLastSelectedAid,
                             (ArrayList<ApduServiceInfo>)resolveInfo.services,
                             mActiveServiceName, resolveInfo.category);

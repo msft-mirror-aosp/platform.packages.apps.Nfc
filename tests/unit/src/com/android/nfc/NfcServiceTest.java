@@ -19,6 +19,9 @@ import static android.nfc.NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED;
 
 import static com.android.nfc.NfcService.INVALID_NATIVE_HANDLE;
 import static com.android.nfc.NfcService.NCI_VERSION_1_0;
+import static com.android.nfc.NfcService.NFC_LISTEN_A;
+import static com.android.nfc.NfcService.NFC_LISTEN_B;
+import static com.android.nfc.NfcService.NFC_LISTEN_F;
 import static com.android.nfc.NfcService.NFC_POLL_V;
 import static com.android.nfc.NfcService.PREF_NFC_ON;
 import static com.android.nfc.NfcService.SOUND_END;
@@ -123,6 +126,7 @@ import android.nfc.INfcVendorNciCallback;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1359,6 +1363,7 @@ public final class NfcServiceTest {
     @Test
     @RequiresFlagsEnabled(Flags.FLAG_COALESCE_RF_EVENTS)
     public void testOnRemoteFieldCoalessing() throws RemoteException {
+        Assume.assumeTrue(com.android.nfc.flags.Flags.coalesceRfEvents());
         createNfcServiceWithoutStatsdUtils();
         List<String> userlist = new ArrayList<>();
         userlist.add("com.android.nfc");
@@ -1674,14 +1679,14 @@ public final class NfcServiceTest {
     @Test
     public void testFetchActiveNfceeList() throws RemoteException {
         mNfcService.mState = NfcAdapter.STATE_ON;
-        List<String> nfceeList = new ArrayList<>();
-        nfceeList.add("test1");
-        nfceeList.add("test2");
-        nfceeList.add("test3");
-        when(mDeviceHost.dofetchActiveNfceeList()).thenReturn(nfceeList);
-        List<String> list = mNfcService.mNfcAdapter.fetchActiveNfceeList();
+        Map<String, Integer> nfceeMap = new HashMap<>();
+        nfceeMap.put("test1", Integer.valueOf(NFC_LISTEN_A));
+        nfceeMap.put("test2", Integer.valueOf(NFC_LISTEN_B));
+        nfceeMap.put("test3", Integer.valueOf(NFC_LISTEN_F));
+        when(mDeviceHost.dofetchActiveNfceeList()).thenReturn(nfceeMap);
+        Map<String, Integer> map = mNfcService.mNfcAdapter.fetchActiveNfceeList();
         verify(mDeviceHost).dofetchActiveNfceeList();
-        Assert.assertEquals(list.get(0), nfceeList.get(0));
+        Assert.assertEquals(map, nfceeMap);
     }
 
     @Test

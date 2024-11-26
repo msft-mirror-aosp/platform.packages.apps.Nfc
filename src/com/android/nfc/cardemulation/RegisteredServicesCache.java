@@ -16,6 +16,11 @@
 
 package com.android.nfc.cardemulation;
 
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_ALREADY_SET;
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_INVALID_SERVICE;
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_UNKNOWN_ERROR;
+import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_OK;
+
 import android.annotation.TargetApi;
 import android.annotation.FlaggedApi;
 import android.app.ActivityManager;
@@ -536,7 +541,7 @@ public class RegisteredServicesCache {
                 ComponentName component = entry.getKey();
                 DynamicSettings dynamicSettings = entry.getValue();
                 ApduServiceInfo serviceInfo = userServices.services.get(component);
-                if (serviceInfo == null || (serviceInfo.getUid() != dynamicSettings.uid)) {
+                if (serviceInfo == null) {
                     toBeRemovedComponent.add(component);
                     continue;
                 } else {
@@ -1064,7 +1069,7 @@ public class RegisteredServicesCache {
 
             DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
             if (dynSettings == null) {
-                dynSettings = new DynamicSettings(uid);
+                dynSettings = new DynamicSettings(serviceInfo.getUid());
             }
             dynSettings.offHostSE = offHostSE;
             boolean success = writeDynamicSettingsLocked();
@@ -1144,7 +1149,7 @@ public class RegisteredServicesCache {
             serviceInfo.setShouldDefaultToObserveMode(enable);
             DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
             if (dynSettings == null) {
-                dynSettings = new DynamicSettings(uid);
+                dynSettings = new DynamicSettings(serviceInfo.getUid());
                 dynSettings.offHostSE = null;
                 services.dynamicSettings.put(componentName, dynSettings);
             }
@@ -1177,7 +1182,8 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
-            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            DynamicSettings dynamicSettings =
+                getOrCreateSettings(services, componentName, serviceInfo.getUid());
             dynamicSettings.pollingLoopFilters.put(pollingLoopFilter,
                     autoTransact);
             serviceInfo.addPollingLoopFilter(pollingLoopFilter, autoTransact);
@@ -1238,7 +1244,8 @@ public class RegisteredServicesCache {
             if (!serviceInfo.isOnHost() && !autoTransact) {
                 return false;
             }
-            DynamicSettings dynamicSettings = getOrCreateSettings(services, componentName, uid);
+            DynamicSettings dynamicSettings =
+                getOrCreateSettings(services, componentName, serviceInfo.getUid());
             dynamicSettings.pollingLoopPatternFilters
                     .put(pollingLoopPatternFilter, autoTransact);
             serviceInfo.addPollingLoopPatternFilter(pollingLoopPatternFilter, autoTransact);
@@ -1309,7 +1316,7 @@ public class RegisteredServicesCache {
             serviceInfo.setDynamicAidGroup(aidGroup);
             DynamicSettings dynSettings = services.dynamicSettings.get(componentName);
             if (dynSettings == null) {
-                dynSettings = new DynamicSettings(uid);
+                dynSettings = new DynamicSettings(serviceInfo.getUid());
                 dynSettings.offHostSE = null;
                 services.dynamicSettings.put(componentName, dynSettings);
             }
@@ -1334,12 +1341,12 @@ public class RegisteredServicesCache {
         return success;
     }
 
-    public boolean registerOtherForService(int userId,
+    public int registerOtherForService(int userId,
             ComponentName componentName, boolean checked) {
         if (DEBUG) Log.d(TAG, "[register other] checked:" + checked + ", "  + componentName);
 
         ArrayList<ApduServiceInfo> newServices = null;
-        boolean success = false;
+        int success = SET_SERVICE_ENABLED_STATUS_FAILURE_UNKNOWN_ERROR;
 
         synchronized (mLock) {
 
@@ -1348,12 +1355,14 @@ public class RegisteredServicesCache {
 
             if (serviceInfo == null) {
                 Log.e(TAG, "Service " + componentName + "does not exist");
-                return false;
+                return SET_SERVICE_ENABLED_STATUS_FAILURE_INVALID_SERVICE;
             }
 
-            success = updateOtherServiceStatus(userId, serviceInfo, checked);
+            success = updateOtherServiceStatus(userId, serviceInfo, checked)
+                    ? SET_SERVICE_ENABLED_STATUS_OK
+                    : SET_SERVICE_ENABLED_STATUS_FAILURE_ALREADY_SET;
 
-            if (success) {
+            if (success == SET_SERVICE_ENABLED_STATUS_OK) {
                 UserServices userService = findOrCreateUserLocked(userId);
                 newServices = new ArrayList<ApduServiceInfo>(userService.services.values());
             } else {
@@ -1361,7 +1370,7 @@ public class RegisteredServicesCache {
             }
         }
 
-        if (success) {
+        if (success == SET_SERVICE_ENABLED_STATUS_OK) {
             if (DEBUG) Log.d(TAG, "other list update due to User Select " + componentName);
             mCallback.onServicesUpdated(userId, Collections.unmodifiableList(newServices),false);
         }
