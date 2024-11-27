@@ -166,6 +166,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -540,6 +542,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private boolean mRfFieldActivated = false;
     private boolean mRfDiscoveryStarted = false;
     private boolean mEeListenActivated = false;
+    // Scheduled executor for routing table update
+    private final ScheduledExecutorService mRtUpdateScheduler = Executors.newScheduledThreadPool(1);
+    private ScheduledFuture<?> mRtUpdateScheduledTask = null;
 
     private static final int STATUS_OK = NfcOemExtension.STATUS_OK;
     private static final int STATUS_UNKNOWN_ERROR = NfcOemExtension.STATUS_UNKNOWN_ERROR;
@@ -730,7 +735,19 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.e(TAG, "Failed to send onEeUpdated", e);
             }
         }
-        new ApplyRoutingTask().execute();
+        if (mRtUpdateScheduledTask != null && !mRtUpdateScheduledTask.isDone()) {
+            mRtUpdateScheduledTask.cancel(false);
+        }
+        // Delay routing table update to allow remove useless operations when several
+        // ntf are received
+        mRtUpdateScheduledTask =
+                mRtUpdateScheduler.schedule(
+                    () -> {
+                        if (DBG) Log.d(TAG, "onEeUpdated: ApplyRoutingTask");
+                        new ApplyRoutingTask().execute();
+                    },
+                    50,
+                    TimeUnit.MILLISECONDS);
     }
 
     private void restartStack() {
