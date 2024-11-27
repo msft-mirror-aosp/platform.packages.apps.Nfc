@@ -1138,8 +1138,10 @@ public class HostEmulationManager {
         Log.d(TAG, "Unbinding payment service");
         if (mPaymentServiceBound) {
             try {
-                if (!isMultipleBindingSupported()) {
-                    mContext.unbindService(mPaymentConnection);
+                mContext.unbindService(mPaymentConnection);
+                if (isMultipleBindingSupported()) {
+                    mComponentNameToConnectionsMap.remove(
+                        new ComponentNameAndUser(mPaymentServiceUserId, mPaymentServiceName));
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Failed to unbind payment service: " + mPaymentServiceName, e);
