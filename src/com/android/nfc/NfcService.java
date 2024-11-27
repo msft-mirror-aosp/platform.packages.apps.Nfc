@@ -33,6 +33,7 @@ import android.app.AlarmManager;
 import android.app.Application;
 import android.app.BroadcastOptions;
 import android.app.KeyguardManager;
+import android.app.KeyguardManager.DeviceLockedStateListener;
 import android.app.KeyguardManager.KeyguardLockedStateListener;
 import android.app.PendingIntent;
 import android.app.VrManager;
@@ -1112,7 +1113,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         ownerFilter.addDataScheme("package");
         mContext.registerReceiverForAllUsers(mOwnerReceiver, ownerFilter, null, null);
 
-        addKeyguardLockedStateListener();
+        addDeviceLockedStateListener();
 
         updatePackageCache();
 
@@ -2274,7 +2275,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public int pausePolling(int timeoutInMs) {
+        public int pausePolling(long timeoutInMs) {
             NfcPermissions.enforceAdminPermissions(mContext);
             synchronized (mDiscoveryLock) {
                 if (!mRfDiscoveryStarted) {
@@ -2285,7 +2286,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             synchronized (NfcService.this) {
                 mPollingPaused = true;
                 mDeviceHost.disableDiscovery();
-                if (timeoutInMs <= 0 || timeoutInMs > MAX_POLLING_PAUSE_TIMEOUT) {
+                if (timeoutInMs <= 0 || timeoutInMs > this.getMaxPausePollingTimeoutMs()) {
                     throw new IllegalArgumentException(
                         "Invalid timeout " + timeoutInMs + " ms!");
                 }
@@ -2329,8 +2330,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean setNfcSecure(boolean enable) {
             NfcPermissions.enforceAdminPermissions(mContext);
-            if(mKeyguard.isKeyguardLocked() && !enable) {
-                Log.i(TAG, "KeyGuard need to be unlocked before setting Secure NFC OFF");
+            if (mNfcInjector.isDeviceLocked() && !enable) {
+                Log.i(TAG, "Device need to be unlocked before setting Secure NFC OFF");
                 return false;
             }
 
@@ -3246,12 +3247,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
         }
         @Override
-        public List<String> fetchActiveNfceeList() throws RemoteException {
-            List<String> list = new ArrayList<String>();
+        public Map<String, Integer> fetchActiveNfceeList() throws RemoteException {
+            Map<String, Integer> map = new HashMap<String, Integer>();
             if (isNfcEnabled()) {
-                list = mDeviceHost.dofetchActiveNfceeList();
+                map = mDeviceHost.dofetchActiveNfceeList();
             }
-            return list;
+            return map;
         }
 
         @Override
@@ -3335,6 +3336,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.i(TAG, "commitRouting");
             NfcPermissions.enforceAdminPermissions(mContext);
             return mDeviceHost.commitRouting();
+        }
+
+        @Override
+        public long getMaxPausePollingTimeoutMs() {
+            if (DBG) Log.i(TAG, "getMaxPausePollingTimeoutMs");
+            NfcPermissions.enforceAdminPermissions(mContext);
+            int timeoutOverlay = mContext.getResources()
+                    .getInteger(R.integer.max_pause_polling_time_out_ms);
+            return timeoutOverlay > 0 ? (long) timeoutOverlay : MAX_POLLING_PAUSE_TIMEOUT;
         }
 
         private void updateNfCState() {
@@ -4032,12 +4042,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         return data;
     }
 
-    private void addKeyguardLockedStateListener() {
-        try {
-            mKeyguard.addKeyguardLockedStateListener(mContext.getMainExecutor(),
-                    mIKeyguardLockedStateListener);
-        } catch (Exception e) {
-            Log.e(TAG, "Exception in addKeyguardLockedStateListener " + e);
+    private void addDeviceLockedStateListener() {
+        if (android.app.Flags.deviceUnlockListener() && Flags.useDeviceLockListener()) {
+            try {
+                mKeyguard.addDeviceLockedStateListener(
+                        mContext.getMainExecutor(), mDeviceLockedStateListener);
+            } catch (Exception e) {
+                Log.e(TAG, "Exception in addDeviceLockedStateListener " + e);
+            }
+        } else {
+            try {
+                mKeyguard.addKeyguardLockedStateListener(mContext.getMainExecutor(),
+                        mIKeyguardLockedStateListener);
+            } catch (Exception e) {
+                Log.e(TAG, "Exception in addKeyguardLockedStateListener " + e);
+            }
         }
     }
 
@@ -4050,6 +4069,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void onKeyguardLockedStateChanged(boolean isKeyguardLocked) {
             if (!mIsWlcCapable || !mNfcCharging.NfcChargingOnGoing) {
                 applyScreenState(mScreenStateHelper.checkScreenState(mCheckDisplayStateForScreenState));
+            }
+        }
+    };
+
+    /**
+     * Receives Device lock state updates
+     */
+    private DeviceLockedStateListener mDeviceLockedStateListener =
+            new DeviceLockedStateListener() {
+        @Override
+        public void onDeviceLockedStateChanged(boolean isDeviceLocked) {
+            if (!mIsWlcCapable || !mNfcCharging.NfcChargingOnGoing) {
+                applyScreenState(mScreenStateHelper.checkScreenState(
+                                     mCheckDisplayStateForScreenState));
             }
         }
     };
@@ -4425,7 +4458,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
      * Send require device unlock for NFC intent to system UI.
      */
     public void sendRequireUnlockIntent() {
-        if (!mIsRequestUnlockShowed && mKeyguard.isKeyguardLocked()) {
+        if (!mIsRequestUnlockShowed && mNfcInjector.isDeviceLocked()) {
             if (DBG) Log.d(TAG, "Request unlock");
             mIsRequestUnlockShowed = true;
             mRequireUnlockWakeLock.acquire();
@@ -5129,8 +5162,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     executeOemOnTagConnectedCallback(false);
                     unregisterObject(tagEndpoint.getHandle());
                     if (mPollDelayTime > NO_POLL_DELAY) {
-                        tagEndpoint.stopPresenceChecking();
                         pollingDelay();
+                        tagEndpoint.stopPresenceChecking();
                     } else {
                         Log.d(TAG, "Keep presence checking.");
                     }
