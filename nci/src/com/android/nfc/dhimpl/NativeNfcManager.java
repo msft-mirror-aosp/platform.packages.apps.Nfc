@@ -45,7 +45,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Map;
 
 /** Native interface to the NFC Manager functions */
 public class NativeNfcManager implements DeviceHost {
@@ -218,10 +218,17 @@ public class NativeNfcManager implements DeviceHost {
         if (!NfcProperties.observe_mode_supported().orElse(true)) {
             return false;
         }
-        if (isProprietaryGetCapsSupported()) {
-            return isObserveModeSupportedCaps(mProprietaryCaps);
+        if (com.android.nfc.flags.Flags.observeModeWithoutRf()) {
+            if (isProprietaryGetCapsSupported()) {
+                return isObserveModeSupportedWithoutRfDeactivation();
+            }
+            return false;
+        } else {
+            if (isProprietaryGetCapsSupported()) {
+                return isObserveModeSupportedCaps(mProprietaryCaps);
+            }
+            return true;
         }
-        return true;
     }
 
     @Override
@@ -428,7 +435,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean isMultiTag();
 
     @Override
-    public native List<String> dofetchActiveNfceeList();
+    public native Map<String, Integer> dofetchActiveNfceeList();
 
     private native NfcVendorNciResponse nativeSendRawVendorCmd(
             int mt, int gid, int oid, byte[] payload);

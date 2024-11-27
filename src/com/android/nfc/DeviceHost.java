@@ -24,6 +24,7 @@ import android.os.Bundle;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.List;
+import java.util.Map;
 
 public interface DeviceHost {
     public interface DeviceHostListener {
@@ -308,5 +309,5 @@ public interface DeviceHost {
     /**
      * Get the active NFCEE list
      */
-    public List<String> dofetchActiveNfceeList();
+    public Map<String, Integer> dofetchActiveNfceeList();
 }

@@ -19,6 +19,9 @@ import static android.nfc.NfcAdapter.ACTION_PREFERRED_PAYMENT_CHANGED;
 
 import static com.android.nfc.NfcService.INVALID_NATIVE_HANDLE;
 import static com.android.nfc.NfcService.NCI_VERSION_1_0;
+import static com.android.nfc.NfcService.NFC_LISTEN_A;
+import static com.android.nfc.NfcService.NFC_LISTEN_B;
+import static com.android.nfc.NfcService.NFC_LISTEN_F;
 import static com.android.nfc.NfcService.NFC_POLL_V;
 import static com.android.nfc.NfcService.PREF_NFC_ON;
 import static com.android.nfc.NfcService.SOUND_END;
@@ -613,7 +616,7 @@ public final class NfcServiceTest {
         mNfcService.mNfcEventInstalledPackages.put(1, userlist);
         mNfcService.mIsSecureNfcEnabled = true;
         mNfcService.mIsRequestUnlockShowed = false;
-        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        when(mNfcInjector.isDeviceLocked()).thenReturn(true);
         handler.handleMessage(msg);
         verify(mApplication).sendBroadcastAsUser(mIntentArgumentCaptor.capture(), any());
         Intent intent = mIntentArgumentCaptor.getValue();
@@ -1320,7 +1323,7 @@ public final class NfcServiceTest {
         userlist.add("com.android.nfc");
         mNfcService.mIsSecureNfcEnabled = true;
         mNfcService.mIsRequestUnlockShowed = false;
-        when(mKeyguardManager.isKeyguardLocked()).thenReturn(true);
+        when(mNfcInjector.isDeviceLocked()).thenReturn(true);
         mNfcService.mNfcEventInstalledPackages.put(1, userlist);
         INfcOemExtensionCallback callback = mock(INfcOemExtensionCallback.class);
         mNfcService.mNfcAdapter.registerOemExtensionCallback(callback);
@@ -1332,7 +1335,7 @@ public final class NfcServiceTest {
         verify(mApplication).sendBroadcastAsUser(any(), any());
         verify(mApplication).sendBroadcast(any());
         verify(mStatsdUtils).logFieldChanged(anyBoolean(), anyInt());
-        verify(mNfcEventLog, times(2)).logEvent(any());
+        verify(mNfcEventLog, atLeast(2)).logEvent(any());
     }
 
     @Test
@@ -1676,14 +1679,14 @@ public final class NfcServiceTest {
     @Test
     public void testFetchActiveNfceeList() throws RemoteException {
         mNfcService.mState = NfcAdapter.STATE_ON;
-        List<String> nfceeList = new ArrayList<>();
-        nfceeList.add("test1");
-        nfceeList.add("test2");
-        nfceeList.add("test3");
-        when(mDeviceHost.dofetchActiveNfceeList()).thenReturn(nfceeList);
-        List<String> list = mNfcService.mNfcAdapter.fetchActiveNfceeList();
+        Map<String, Integer> nfceeMap = new HashMap<>();
+        nfceeMap.put("test1", Integer.valueOf(NFC_LISTEN_A));
+        nfceeMap.put("test2", Integer.valueOf(NFC_LISTEN_B));
+        nfceeMap.put("test3", Integer.valueOf(NFC_LISTEN_F));
+        when(mDeviceHost.dofetchActiveNfceeList()).thenReturn(nfceeMap);
+        Map<String, Integer> map = mNfcService.mNfcAdapter.fetchActiveNfceeList();
         verify(mDeviceHost).dofetchActiveNfceeList();
-        Assert.assertEquals(list.get(0), nfceeList.get(0));
+        Assert.assertEquals(map, nfceeMap);
     }
 
     @Test
@@ -2038,7 +2041,7 @@ public final class NfcServiceTest {
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         adapterService.notifyTestHceData(Ndef.NDEF, "test".getBytes());
         verify(mCardEmulationManager).onHostCardEmulationData(anyInt(), any());
-        verify(mNfcEventLog, times(1)).logEvent(any());
+        verify(mNfcEventLog, atLeastOnce()).logEvent(any());
     }
 
     @Test

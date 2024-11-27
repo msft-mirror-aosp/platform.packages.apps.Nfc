@@ -16,9 +16,9 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.FlaggedApi;
 import android.annotation.TargetApi;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
@@ -781,10 +781,9 @@ public class HostEmulationManager {
                         mStatsdUtils.setCardEmulationEventCategory(resolveInfo.category);
                         mStatsdUtils.setCardEmulationEventUid(defaultServiceInfo.getUid());
                     }
-
                     if ((defaultServiceInfo.requiresUnlock()
                             || NfcService.getInstance().isSecureNfcEnabled())
-                          && mKeyguard.isKeyguardLocked()) {
+                          && NfcInjector.getInstance().isDeviceLocked()) {
                         NfcService.getInstance().sendRequireUnlockIntent();
                         NfcService.getInstance().sendData(AID_NOT_FOUND);
                         if (DBG) Log.d(TAG, "requiresUnlock()! show toast");

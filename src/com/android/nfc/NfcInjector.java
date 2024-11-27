@@ -18,6 +18,7 @@ package com.android.nfc;
 
 import android.annotation.NonNull;
 import android.app.ActivityManager;
+import android.app.KeyguardManager;
 import android.app.backup.BackupManager;
 import android.content.ApexEnvironment;
 import android.content.Context;
@@ -44,6 +45,7 @@ import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.flags.FeatureFlags;
+import com.android.nfc.flags.Flags;
 import com.android.nfc.handover.HandoverDataParser;
 import com.android.nfc.wlc.NfcCharging;
 
@@ -78,12 +80,17 @@ public class NfcInjector {
     private final NfcDiagnostics mNfcDiagnostics;
     private final NfcServiceManager.ServiceRegisterer mNfcManagerRegisterer;
     private final NfcWatchdog mNfcWatchdog;
+    private final KeyguardManager mKeyguardManager;
     private static NfcInjector sInstance;
     private CardEmulationManager mCardEmulationManager;
 
     public static NfcInjector getInstance() {
         if (sInstance == null) throw new IllegalStateException("Nfc injector instance null");
         return sInstance;
+    }
+
+    static void setNfcInjector(NfcInjector nfcInjector) {
+        sInstance = nfcInjector;
     }
 
 
@@ -120,6 +127,7 @@ public class NfcInjector {
         mNfcEventLog = new NfcEventLog(mContext, this, eventLogThread.getLooper(),
                 new AtomicFile(new File(NFC_DATA_DIR, EVENT_LOG_FILE_NAME)));
         mNfcWatchdog = new NfcWatchdog(mContext);
+        mKeyguardManager = mContext.getSystemService(KeyguardManager.class);
         sInstance = this;
     }
 
@@ -324,5 +332,14 @@ public class NfcInjector {
             return SystemProperties.getBoolean(NFC_EUICC_SUPPORTED_PROP_KEY, true);
         }
 
+    }
+
+    /**
+     * Returns whether the device unlocked or not.
+     */
+    public boolean isDeviceLocked() {
+        return (android.app.Flags.deviceUnlockListener() && Flags.useDeviceLockListener())
+                            ? mKeyguardManager.isDeviceLocked()
+                            : mKeyguardManager.isKeyguardLocked();
     }
 }
