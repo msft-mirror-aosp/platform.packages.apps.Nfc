@@ -44,6 +44,8 @@ custom_apex {
     name: "com.android.nfcservices",
     manifest: "manifest.json",
     apps: ["NfcNciApex"],
+    defaults: ["b-launched-apex-module"],
+    min_sdk_version: "35", // Make it 36 once available.
     multilib: {
         first: {
             // Extractor process runs only with the primary ABI.
