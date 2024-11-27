@@ -123,6 +123,7 @@ public final class NfcReaderConflictOccurredTest {
             }
         };
         mNfcInjector = mock(NfcInjector.class);
+        NfcInjector.setNfcInjector(mNfcInjector);
         mAtomicBoolean = mock(AtomicBoolean.class);
         when(mNfcInjector.createAtomicBoolean()).thenReturn(mAtomicBoolean);
         InstrumentationRegistry.getInstrumentation().runOnMainSync(

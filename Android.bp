@@ -108,6 +108,7 @@ android_app {
         "framework-permission.stubs.module_lib",
         "framework-statsd.stubs.module_lib",
         "framework-wifi.stubs.module_lib",
+        "android.app.flags-aconfig-java",
         "android.nfc.flags-aconfig-java",
         "android.permission.flags-aconfig-java",
         "android.service.chooser.flags-aconfig-java",
