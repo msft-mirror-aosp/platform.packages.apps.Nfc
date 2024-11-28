@@ -8,7 +8,7 @@ package {
 // APK - com.google.android.nfc
 android_app {
     name: "NfcNciApexMigration",
-    min_sdk_version: "current",
+    min_sdk_version: "35", // Make it 36 once available.
     sdk_version: "system_current",
     certificate: "nfc",
     enabled: select(release_flag("RELEASE_NFC_MAINLINE_MODULE"), {
