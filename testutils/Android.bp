@@ -92,3 +92,24 @@ android_library {
         "error_prone_annotations",
     ],
 }
+
+python_defaults {
+    name: "GeneratedTestsPythonDefaults",
+    libs: [
+        "mobly",
+        "pyserial",
+        "pn532-python",
+    ],
+    test_suites: [
+        "general-tests",
+    ],
+    device_common_data: [
+        ":NfcEmulatorTestApp",
+        "config.yaml",
+    ],
+    version: {
+        py3: {
+            embedded_launcher: true,
+        },
+    },
+}
