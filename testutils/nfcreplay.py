@@ -17,6 +17,7 @@
 import argparse
 import datetime
 import os
+import subprocess
 import time
 from generate_test import generate_test
 from parse_log import FullApduEntry, NfcType, PollingLoopEntry, open_and_parse_file, parse_timeframe, replace_aids
@@ -97,45 +98,6 @@ def send_unknown_data(reader: PN532, data: bytes) -> str | None:
     return e.__str__()
 
 
-def does_response_match(expected: list[bytes], actual: list[bytes]) -> bool:
-  """Checks if the actual response from the emulator matches the expected response."""
-  if len(expected) != len(actual):
-    return False
-  for cur_expected, cur_actual in zip(expected, actual):
-    if not cur_expected and not cur_actual:
-      continue
-    if cur_expected[0] != 0x00 and cur_actual[0] == 0x00:
-      cur_actual = cur_actual[1:]
-    if cur_expected != cur_actual:
-      return False
-  return True
-
-
-def transceive(
-    reader: PN532, target_id: int, current: FullApduEntry
-) -> list[bytes]:
-  """Sends APDU commands to the emulator and checks the responses for correctness.
-
-  Args:
-    reader: The PN532 reader.
-    target_id: The ID of the tag to be transmitted to. This is obtained by
-      calling poll_a() on the reader.
-    current: A data object containing the APDU commands to be sent to the
-      emulator and the expected responses.
-
-  Returns:
-    a list containing the response APDUs sent by the emulator
-  """
-  responses = []
-  for cmd in current.command:
-    rsp = reader.transceive(bytearray([target_id]) + cmd)
-    if rsp is None:
-      responses.append(b"")
-    else:
-      responses.append(rsp)
-  return responses
-
-
 def conduct_apdu_exchange(reader: PN532, current: FullApduEntry) -> str | None:
   """Conducts an APDU exchange between the emulator and the PN 532 module.
 
@@ -156,13 +118,11 @@ def conduct_apdu_exchange(reader: PN532, current: FullApduEntry) -> str | None:
     for i in range(_NUM_RETRIES):
       tag = reader.poll_a()
       if tag is not None:
-        responses = transceive(reader, tag.target_id, current)
-        current.actual_response = responses
-        if not does_response_match(
-            current.expected_response, current.actual_response
-        ):
-          return "Received incorrect response. Expected: {}. Actual: {}".format(
-              current.expected_response, current.actual_response
+        transacted = tag.transact(current.command, current.response)
+
+        if not transacted:
+          return "Received incorrect response. Expected: ".format(
+              current.response
           )
         return None
       reader.mute()
@@ -261,7 +221,7 @@ def output_line_for_snoop_log(
         _APDU_OUTPUT_STR.format(
             cur_time_str,
             [command.hex() for command in entry.command],
-            [response.hex() for response in entry.actual_response],
+            [response.hex() for response in entry.response],
         )
     )
   else:  # isinstance(entry, PollingLoopEntry)
@@ -325,13 +285,16 @@ def create_file_for_emulator_app(
       file.write(
           "{};{}".format(
               [command.hex() for command in entry.command],
-              [response.hex() for response in entry.expected_response],
+              [response.hex() for response in entry.response],
           )
       )
       file.write("\n")
   print()
   print("File for third party app generated at: {}".format(local_path))
 
+
+def get_name_for_test_case(filename: str) -> str:
+  return "Generated" + filename.replace("/", "").replace(".txt", "")
 
 def main():
   parser = argparse.ArgumentParser(prog="pn532")
@@ -368,6 +331,11 @@ def main():
       action="store_true",
       help="Replay the transaction with the emulator app",
   )
+  parser.add_argument(
+      "--generate_and_replay_test",
+      action="store_true",
+      help="Generate a test case from the log and then immediately run it",
+  )
   args = parser.parse_args()
 
   parsed_snoop_log = parse_snoop_log(args)
@@ -379,8 +347,24 @@ def main():
         start=args.start,
         end=args.end,
     )
-    replay_transaction(parsed_snoop_log, args.path)
-    generate_test(parsed_snoop_log, args.file)
+    if args.generate_and_replay_test:  # Replay the test that was just generated
+      test_case_name = get_name_for_test_case(args.file)
+      apdu_local_file = generate_test(parsed_snoop_log, test_case_name)
+      test_command = [
+          "atest",
+          "-v",
+          test_case_name,
+          "--",
+          "--testparam",
+          "pn532_serial_path=" + args.path,
+          "--testparam",
+          "file_path=" + apdu_local_file,
+      ]
+      if args.replay_with_app:
+        test_command += ["--testparam", "with_emulator_app=True"]
+      subprocess.run(test_command)
+    else:  # Default: replay the transaction
+      replay_transaction(parsed_snoop_log, args.path)
 
 
 if __name__ == "__main__":

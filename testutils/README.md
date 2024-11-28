@@ -16,8 +16,8 @@ The detailed design for this feature can be found at go/nfc-replay-utility-dd.
 
 2\. Connect the PN532 module via a serial port.
 
-3\. Replay the transaction and generate a test case for it, substituting the
-name of the snoop file and the serial port that the PN 532 module is using.
+3\. To replay the transaction, substitute the name of the snoop file and the
+serial port that the PN 532 module is using.
 
 ```
 python3 nfcreplay.py -f $SNOOP_FILE -p $READER_PATH
@@ -32,48 +32,16 @@ python3 nfcreplay.py -f $SNOOP_FILE -p $READER_PATH --start "2024-07-17 12:00:00
 ```
 
 Information about the transaction will be printed out to console, including a
-list of all polling loop and APDU exchanges that took place. At the end, the
-path to the file containing the generated test should be included.
+list of all polling loop and APDU exchanges that took place.
 
-5\. To replay the test created in the previous step, copy the python file to
-https://source.corp.google.com/h/googleplex-android/platform/superproject/main/+/main:packages/apps/Nfc/tests/testcases/multidevices.
-
-Then add a new `python_test_host` entry to Android.bp, substituting "name,"
-"main," and "srcs" with the appropriate names.
-
+5\. To generate and run a test from the snoop log, use the command:
 ```
-python_test_host {
-    name: "TestAutotransact",
-    main: "test_autotransact.py",
-    srcs: [
-        "test_autotransact.py",
-    ],
-    test_config: "AndroidTest.xml",
-    data: [
-        ":NfcEmulatorTestApp",
-        "config.yaml",
-    ],
-    test_options: {
-        unit_test: false,
-        tags: ["mobly"],
-    },
-    defaults: ["GeneratedMultiDevicePythonDefaults"],
-}
+python3 nfcreplay.py -f $SNOOP_FILE -p $READER_PATH --generate_and_replay_test
 ```
 
-6\. To run the test, enter the command:
+A Python file will be created, representing the test, along with a JSON file
+that contains all information pertaining to APDUs transacted.
 
-```
-atest -v $NAME_OF_TEST -- --testparam pn532_serial_path=$READER_PATH
-```
-
-such that $NAME_OF_TEST matches the name of the `python_test_host` entry above.
-
-To run the test while using the emulator app, run the command:
-
-```
-atest -v $NAME_OF_TEST -- --testparam pn532_serial_path=$READER_PATH --testparam with_emulator_app=True
-```
 ### Using the Emulator App
 
 The emulator app (located at src/com/android/nfc/emulatorapp/) is meant to

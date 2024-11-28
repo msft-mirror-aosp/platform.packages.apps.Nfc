@@ -102,8 +102,7 @@ class PartialApduEntry:
 class FullApduEntry:
   ts: int = 0
   command: list[bytes] = dataclasses.field(default_factory=lambda: [])
-  expected_response: list[bytes] = dataclasses.field(default_factory=lambda: [])
-  actual_response: list[bytes] = dataclasses.field(default_factory=lambda: [])
+  response: list[bytes] = dataclasses.field(default_factory=lambda: [])
   error: str | None = None
 
 
@@ -116,7 +115,7 @@ def replace_aids(
     is_first_aid = True
     if isinstance(cur, FullApduEntry):
       new_apdu_entry = FullApduEntry(
-          ts=cur.ts, command=[], expected_response=cur.expected_response
+          ts=cur.ts, command=[], response=cur.response
       )
       for cmd in cur.command:
         if cmd.startswith(AID_START_BYTES):
