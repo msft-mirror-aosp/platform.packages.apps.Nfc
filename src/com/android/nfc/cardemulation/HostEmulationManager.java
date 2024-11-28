@@ -17,6 +17,8 @@
 package com.android.nfc.cardemulation;
 
 import android.annotation.FlaggedApi;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.TargetApi;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
@@ -26,7 +28,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.nfc.ComponentNameAndUser;
+import android.nfc.INfcOemExtensionCallback;
 import android.nfc.NfcAdapter;
+import android.nfc.OemLogItems;
 import android.nfc.cardemulation.ApduServiceInfo;
 import android.nfc.cardemulation.CardEmulation;
 import android.nfc.cardemulation.HostApduService;
@@ -116,6 +121,8 @@ public class HostEmulationManager {
     private final Looper mLooper;
 
     private final StatsdUtils mStatsdUtils;
+
+    INfcOemExtensionCallback mNfcOemExtensionCallback;
 
     // All variables below protected by mLock
 
@@ -287,6 +294,10 @@ public class HostEmulationManager {
         }
     }
 
+    public void setOemExtension(@Nullable INfcOemExtensionCallback nfcOemExtensionCallback) {
+        mNfcOemExtensionCallback = nfcOemExtensionCallback;
+    }
+
     /**
      *  Preferred payment service changed
      */
@@ -373,19 +384,6 @@ public class HostEmulationManager {
 
     public void onObserveModeStateChange(boolean enabled) {
         synchronized(mLock) {
-            if (android.nfc.Flags.nfcEventListener()) {
-                Messenger service = getForegroundServiceOrDefault();
-                if (service != null) {
-                    Message msg = Message.obtain(null, HostApduService.MSG_OBSERVE_MODE_CHANGE);
-                    msg.arg1 = enabled ? 1 : 0;
-                    msg.replyTo = mMessenger;
-                    try {
-                        service.send(msg);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Remote service has died", e);
-                    }
-                }
-            }
             if (!enabled && mAutoDisableObserveModeRunnable != null) {
                 mHandler.removeCallbacks(mAutoDisableObserveModeRunnable);
                 mAutoDisableObserveModeRunnable = null;
@@ -650,44 +648,6 @@ public class HostEmulationManager {
         synchronized (mLock) {
             int userId = serviceAndUser.getUserId();
             ComponentName service = serviceAndUser.getComponentName();
-            if (android.nfc.Flags.nfcEventListener()) {
-                ComponentNameAndUser oldServiceAndUser = mAidCache.getPreferredService();
-                ComponentNameAndUser newServiceAndUser = new ComponentNameAndUser(userId, service);
-                Messenger oldPreferredService = null;
-                if (oldServiceAndUser != null && oldServiceAndUser.getComponentName() != null) {
-                    if (mPaymentServiceName != null
-                        && mPaymentServiceName.equals(oldServiceAndUser.getComponentName())
-                        && mPaymentServiceUserId == oldServiceAndUser.getUserId()) {
-                        oldPreferredService = mPaymentService;
-                    } else if (!isMultipleBindingSupported()
-                            && mServiceName != null
-                            && mServiceName.equals(oldServiceAndUser.getComponentName())
-                            && mServiceUserId == oldServiceAndUser.getUserId()) {
-                        oldPreferredService = mService;
-                    } else if (isMultipleBindingSupported()
-                            && mComponentNameToConnectionsMap.containsKey(newServiceAndUser)
-                            && Objects.equals(newServiceAndUser, oldServiceAndUser)) {
-                        oldPreferredService =
-                            mComponentNameToConnectionsMap.get(newServiceAndUser).mMessenger;
-                    } else {
-                        Log.w(TAG, oldServiceAndUser.getComponentName() +
-                            " is no longer the preferred NFC service but isn't bound");
-                    }
-                    if (oldPreferredService != null) {
-                        Message msg =
-                        Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-                        msg.arg1 = 0;
-                        msg.replyTo = mMessenger;
-                        try {
-                            oldPreferredService.send(msg);
-                        } catch (RemoteException e) {
-                            Log.e(TAG, "Remote service has died", e);
-                        }
-                    }
-                } else {
-                    Log.i(TAG, "old service is null");
-                }
-            }
 
             mAidCache.onPreferredForegroundServiceChanged(serviceAndUser);
 
@@ -784,6 +744,9 @@ public class HostEmulationManager {
                           "Screen is off, sending AID_NOT_FOUND, but not triggering bug report");
                     } else {
                         Log.w(TAG, "Can't handle AID " + selectAid + " sending AID_NOT_FOUND");
+                        if (android.nfc.Flags.nfcEventListener()) {
+                            notifyAidNotRoutedListener(selectAid);
+                        }
                         if (mUnroutableAidBugReportRunnable != null) {
                             mUnroutableAidBugReportRunnable.addAid(selectAid);
                         } else {
@@ -818,10 +781,9 @@ public class HostEmulationManager {
                         mStatsdUtils.setCardEmulationEventCategory(resolveInfo.category);
                         mStatsdUtils.setCardEmulationEventUid(defaultServiceInfo.getUid());
                     }
-
                     if ((defaultServiceInfo.requiresUnlock()
                             || NfcService.getInstance().isSecureNfcEnabled())
-                          && mKeyguard.isKeyguardLocked()) {
+                          && NfcInjector.getInstance().isDeviceLocked()) {
                         NfcService.getInstance().sendRequireUnlockIntent();
                         NfcService.getInstance().sendData(AID_NOT_FOUND);
                         if (DBG) Log.d(TAG, "requiresUnlock()! show toast");
@@ -867,12 +829,15 @@ public class HostEmulationManager {
                     // Just ignore all future APDUs until we resolve to only one
                     mState = STATE_W4_DEACTIVATE;
                     NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, selectAid);
+                    if (android.nfc.Flags.nfcEventListener()) {
+                        notifyAidConflictListener(selectAid);
+                    }
                     if (mStatsdUtils != null) {
                         mStatsdUtils.setCardEmulationEventCategory(CardEmulation.CATEGORY_OTHER);
                         mStatsdUtils.logCardEmulationWrongSettingEvent();
                     }
-                    launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services, null,
-                            resolveInfo.category);
+                    launchResolver(selectAid, (ArrayList<ApduServiceInfo>)resolveInfo.services,
+                        null, resolveInfo.category);
                     return;
                 }
             }
@@ -890,6 +855,20 @@ public class HostEmulationManager {
                                 bindServiceIfNeededLocked(user.getIdentifier(), resolvedService);
                         if (existingService != null) {
                             Log.d(TAG, "Binding to existing service");
+                            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                                    NfcEventProto.EventType.newBuilder()
+                                            .setCeRoutedAid(
+                                                NfcEventProto.NfcCeRoutedAid.newBuilder()
+                                                    .setAid(selectAid)
+                                                    .setComponentInfo(
+                                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                                            .setPackageName(
+                                                                resolvedService.getPackageName())
+                                                            .setClassName(
+                                                                resolvedService.getClassName())
+                                                            .build())
+                                                    .build())
+                                            .build());
                             sendDataToServiceLocked(existingService, data);
                         } else {
                             // Waiting for service to be bound
@@ -1102,6 +1081,10 @@ public class HostEmulationManager {
         msg.setData(dataBundle);
         msg.replyTo = mMessenger;
         try {
+            NfcService.getInstance().notifyOemLogEvent(new OemLogItems
+                    .Builder(OemLogItems.LOG_ACTION_HCE_DATA)
+                    .setApduCommand(data)
+                    .build());
             mActiveService.send(msg);
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping APDU", e);
@@ -1152,22 +1135,13 @@ public class HostEmulationManager {
     }
 
     void unbindPaymentServiceLocked() {
-        if (android.nfc.Flags.nfcEventListener() &&
-            mPaymentService != null) {
-            Message msg = Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-            msg.arg1 = 0;
-            msg.replyTo = mMessenger;
-            try {
-                mPaymentService.send(msg);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Remote service has died", e);
-            }
-        }
         Log.d(TAG, "Unbinding payment service");
         if (mPaymentServiceBound) {
             try {
-                if (!isMultipleBindingSupported()) {
-                    mContext.unbindService(mPaymentConnection);
+                mContext.unbindService(mPaymentConnection);
+                if (isMultipleBindingSupported()) {
+                    mComponentNameToConnectionsMap.remove(
+                        new ComponentNameAndUser(mPaymentServiceUserId, mPaymentServiceName));
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Failed to unbind payment service: " + mPaymentServiceName, e);
@@ -1227,6 +1201,14 @@ public class HostEmulationManager {
     }
 
     void launchTapAgain(ApduServiceInfo service, String category) {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onLaunchHceTapAgainActivity(service, category);
+                return;
+            } catch(RemoteException e){
+                Log.e(TAG, "onLaunchHceTapAgainActivity failed",e);
+            }
+        }
         Intent dialogIntent = new Intent(mContext, TapAgainDialog.class);
         dialogIntent.putExtra(TapAgainDialog.EXTRA_CATEGORY, category);
         dialogIntent.putExtra(TapAgainDialog.EXTRA_APDU_SERVICE, service);
@@ -1235,8 +1217,17 @@ public class HostEmulationManager {
                 UserHandle.getUserHandleForUid(service.getUid()));
     }
 
-    void launchResolver(ArrayList<ApduServiceInfo> services, ComponentName failedComponent,
-            String category) {
+    void launchResolver(String selectedAid, ArrayList<ApduServiceInfo> services,
+        ComponentName failedComponent, String category) {
+        if (mNfcOemExtensionCallback != null) {
+            try {
+                mNfcOemExtensionCallback.onLaunchHceAppChooserActivity(
+                    selectedAid, services, failedComponent, category);
+                return;
+            }catch (RemoteException e){
+                Log.e(TAG, "onLaunchHceAppChooserActivity failed",e);
+            }
+        }
         Intent intent = new Intent(mContext, AppChooserActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         intent.putParcelableArrayListExtra(AppChooserActivity.EXTRA_APDU_SERVICES, services);
@@ -1269,6 +1260,34 @@ public class HostEmulationManager {
             return bytesToString(data, SELECT_APDU_HDR_LENGTH, aidLength);
         }
         return null;
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    interface NfcAidRoutingListener {
+        void onAidConflict(@NonNull String aid);
+        void onAidNotRouted(@NonNull String aid);
+    }
+
+    @Nullable
+    private NfcAidRoutingListener mAidRoutingListener = null;
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    void setAidRoutingListener(@Nullable NfcAidRoutingListener listener) {
+        mAidRoutingListener = listener;
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    private void notifyAidConflictListener(String aid) {
+        if (mAidRoutingListener != null && aid != null) {
+            mAidRoutingListener.onAidConflict(aid);
+        }
+    }
+
+    @FlaggedApi(android.nfc.Flags.FLAG_NFC_EVENT_LISTENER)
+    private void notifyAidNotRoutedListener(String aid) {
+        if (mAidRoutingListener != null && aid != null) {
+            mAidRoutingListener.onAidNotRouted(aid);
+        }
     }
 
     private void returnToIdleStateLocked() {
@@ -1312,18 +1331,6 @@ public class HostEmulationManager {
                         }
                 }
                 Log.i(TAG, "Payment service bound: " + name);
-                if (android.nfc.Flags.nfcEventListener() &&
-                    mPaymentService != null) {
-                    Message msg =
-                        Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-                    msg.arg1 = 1;
-                    msg.replyTo = mMessenger;
-                    try {
-                        mPaymentService.send(msg);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Remote service has died", e);
-                    }
-                }
             }
         }
 
@@ -1386,24 +1393,26 @@ public class HostEmulationManager {
                 }
 
                 Log.d(TAG, "Service bound: " + name);
-                if (android.nfc.Flags.nfcEventListener()
-                        && name.equals(preferredServiceName)
-                        && messenger != null) {
-                    Message msg =
-                            Message.obtain(null, HostApduService.MSG_PREFERRED_SERVICE_CHANGED);
-                    msg.arg1 = 1;
-                    msg.replyTo = mMessenger;
-                    try {
-                        messenger.send(msg);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Remote service has died", e);
-                    }
-                }
                 // Send pending select APDU
                 if (mSelectApdu != null) {
                     if (mStatsdUtils != null) {
                         mStatsdUtils.notifyCardEmulationEventServiceBound();
                     }
+                    NfcInjector.getInstance().getNfcEventLog().logEvent(
+                            NfcEventProto.EventType.newBuilder()
+                                    .setCeRoutedAid(
+                                        NfcEventProto.NfcCeRoutedAid.newBuilder()
+                                            .setAid(mLastSelectedAid == null
+                                                        ? "" : mLastSelectedAid)
+                                            .setComponentInfo(
+                                                NfcEventProto.NfcComponentInfo.newBuilder()
+                                                    .setPackageName(
+                                                        name.getPackageName())
+                                                    .setClassName(
+                                                        name.getClassName())
+                                                    .build())
+                                            .build())
+                                    .build());
                     sendDataToServiceLocked(messenger, mSelectApdu);
                     mSelectApdu = null;
                 } else if (mPollingFramesToSend != null && mPollingFramesToSend.containsKey(name)) {
@@ -1479,11 +1488,15 @@ public class HostEmulationManager {
                 synchronized (mLock) {
                     Log.d(TAG, "Received MSG_UNHANDLED");
                     AidResolveInfo resolveInfo = mAidCache.resolveAid(mLastSelectedAid);
-                    boolean isPayment = false;
+
                     if (resolveInfo.services.size() > 0) {
                         NfcStatsLog.write(NfcStatsLog.NFC_AID_CONFLICT_OCCURRED, mLastSelectedAid);
-                        launchResolver((ArrayList<ApduServiceInfo>)resolveInfo.services,
-                                mActiveServiceName, resolveInfo.category);
+                        if (android.nfc.Flags.nfcEventListener()) {
+                            notifyAidConflictListener(mLastSelectedAid);
+                        }
+                        launchResolver(mLastSelectedAid,
+                            (ArrayList<ApduServiceInfo>)resolveInfo.services,
+                            mActiveServiceName, resolveInfo.category);
                     }
                 }
             }
