@@ -863,6 +863,10 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
 
   bool offHostRouteFound = false;
   bool felicaRouteFound = false;
+
+  int defaultFelicaRoute = mDefaultFelicaRoute;
+  int defaultOffHostRoute = mDefaultOffHostRoute;
+
   for (uint8_t i = 0; i < mEeInfo.num_ee; i++) {
     tNFA_HANDLE eeHandle = mEeInfo.ee_disc_info[i].ee_handle;
     tNFA_TECHNOLOGY_MASK seTechMask = 0;
@@ -889,7 +893,7 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
       if (mEeInfo.ee_disc_info[i].lf_protocol != 0)
         seTechMask |= NFA_TECHNOLOGY_MASK_F;
       else
-        mDefaultFelicaRoute = NFC_DH_ID;
+        defaultFelicaRoute = NFC_DH_ID;
     }
 
     // If OFFHOST_LISTEN_TECH_MASK exists,
@@ -923,21 +927,21 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
   }
 
   if (!offHostRouteFound) {
-    mDefaultOffHostRoute = NFC_DH_ID;
+    defaultOffHostRoute = NFC_DH_ID;
   }
   if (!felicaRouteFound) {
-    mDefaultFelicaRoute = NFC_DH_ID;
+    defaultFelicaRoute = NFC_DH_ID;
   }
 
   tNFA_TECHNOLOGY_MASK hostTechMask = 0;
-  if (mDefaultOffHostRoute == NFC_DH_ID || mDefaultFelicaRoute == NFC_DH_ID) {
-    if (mDefaultOffHostRoute == NFC_DH_ID) {
+  if (defaultOffHostRoute == NFC_DH_ID || defaultFelicaRoute == NFC_DH_ID) {
+    if (defaultOffHostRoute == NFC_DH_ID) {
       LOG(DEBUG) << StringPrintf(
           "%s: Setting technology route to host with A,B type", fn);
       hostTechMask |= NFA_TECHNOLOGY_MASK_A;
       hostTechMask |= NFA_TECHNOLOGY_MASK_B;
     }
-    if (mDefaultFelicaRoute == NFC_DH_ID) {
+    if (defaultFelicaRoute == NFC_DH_ID) {
       LOG(DEBUG) << StringPrintf(
           "%s: Setting technology route to host with F type", fn);
       hostTechMask |= NFA_TECHNOLOGY_MASK_F;

@@ -44,15 +44,19 @@
     <string name="prompt_connect_to_network" msgid="8511683573657516114">"Koppel aan die netwerk <xliff:g id="NETWORK_SSID">%1$s</xliff:g>?"</string>
     <string name="beam_requires_nfc_enabled" msgid="2800366967218600534">"Android Straal vereis dat NFC geaktiveer moet wees. Wil jy dit aktiveer?"</string>
     <string name="android_beam" msgid="1666446406999492763">"Android Straal"</string>
-    <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"Die program het nie toestemming vir eksterne berging nie. Dit word vereis om hierdie lêer te straal"</string>
+    <string name="beam_requires_external_storage_permission" msgid="8798337545702206901">"Die app het nie toestemming vir eksterne berging nie. Dit word vereis om hierdie lêer te straal"</string>
     <string name="title_confirm_url_open" msgid="8069968913244794478">"Maak skakel oop?"</string>
     <string name="summary_confirm_url_open" msgid="1246398412196449226">"Jou foon het \'n skakel deur NFC ontvang:"</string>
     <string name="summary_confirm_url_open_tablet" msgid="771152442325809851">"Jou tablet het ’n skakel deur NFC ontvang:"</string>
     <string name="action_confirm_url_open" msgid="3458322738812921189">"Maak skakel oop"</string>
     <string name="tag_read_error" msgid="2485274498885877547">"NFC-leesfout. Probeer weer."</string>
-    <string name="tag_dispatch_failed" msgid="3562984995049738400">"Geen gesteunde program vir hierdie NFC-merker nie"</string>
+    <string name="tag_dispatch_failed" msgid="3562984995049738400">"Geen gesteunde app vir hierdie NFC-merker nie"</string>
     <string name="nfc_blocking_alert_title" msgid="1086172436984457085">"NFC is dalk geblokkeer"</string>
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Tik om uit te vind hoe om dit reg te stel."</string>
+    <!-- no translation found for nfc_tag_alert_title (197917719004551090) -->
+    <skip />
+    <!-- no translation found for nfc_tag_alert_message (3140894528184634873) -->
+    <skip />
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"NFC-data word tans opgeneem"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Tik om opname te stop."</string>
     <string name="title_package_enabling_nfc" msgid="5736481508428918024">"Laat <xliff:g id="PKG">%1$s</xliff:g> toe om NFC te aktiveer?"</string>
