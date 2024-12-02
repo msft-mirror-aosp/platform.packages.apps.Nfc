@@ -1454,7 +1454,7 @@ public class RegisteredServicesCache {
         OtherServiceStatus status = userServices.others.get(service.getComponent());
         // This is Error handling code if otherServiceStatus is null
         if (status == null) {
-            Log.d(TAG, service.getComponent() + " status is could not be null");
+            Log.d(TAG, service.getComponent() + " status is null");
             return false;
         }
 
