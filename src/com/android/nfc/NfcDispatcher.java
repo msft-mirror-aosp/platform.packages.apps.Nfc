@@ -855,7 +855,7 @@ class NfcDispatcher {
         }
 
         // Try to start AAR activity (OEM proprietary format) with matching filter
-        packages = extractOemPackages(message);
+        List<String> oemPackages = extractOemPackages(message);
         for (String pkg : packages) {
             dispatch.intent.setPackage(pkg);
             if (dispatch.tryStartActivity()) {
@@ -865,9 +865,13 @@ class NfcDispatcher {
         }
 
         List<UserHandle> luh = dispatch.getCurrentActiveUserHandles();
+
+        String firstPackage = packages.size() > 0 ? packages.get(0) :
+                              oemPackages.size() > 0 ? oemPackages.get(0):
+                              null;
+
         // Try to perform regular launch of the first AAR
-        if (packages.size() > 0) {
-            String firstPackage = packages.get(0);
+        if (firstPackage != null) {
             PackageManager pm;
             for (UserHandle uh : luh) {
                 try {
