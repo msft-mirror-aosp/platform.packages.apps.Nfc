@@ -3172,7 +3172,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                                 .build())
                                 .build());
             }
-            // TODO: Implement this.
+            mPrefsEditor.clear();
+            mPrefsEditor.putBoolean(
+                PREF_NFC_READER_OPTION_ON, mDeviceConfigFacade.getDefaultReaderOption());
+            mPrefsEditor.commit();
         }
 
         @Override
