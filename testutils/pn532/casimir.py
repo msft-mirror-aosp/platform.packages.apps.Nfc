@@ -50,6 +50,12 @@ class CasimirTag(ReaderTag):
 
     def transact(self, command_apdus, expected_response_apdus):
         response_apdus = self.casimir.transceive_multiple(self.sender_id, command_apdus)
+        if response_apdus is None:
+            self.log.info("received None for response APDUs")
+            return False
+        if len(response_apdus) < len(expected_response_apdus):
+            self.log.info(f"received {len(response_apdus)} responses, expected {len(expected_response_apdus)}")
+            return False
 
         for i in range(len(expected_response_apdus)):
             if expected_response_apdus[i] != "*" and len(response_apdus) > i and not responses_match(expected_response_apdus[i], response_apdus[i]):
