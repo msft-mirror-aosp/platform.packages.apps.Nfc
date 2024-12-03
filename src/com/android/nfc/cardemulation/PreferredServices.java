@@ -418,7 +418,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
                     mForegroundUid = callingUid;
                     success = true;
                 } else {
-                    Log.e(TAG, "Calling UID is not in the foreground, ignorning!");
+                    Log.e(TAG, "Calling UID is not in the foreground, ignoring!");
                     success = false;
                 }
             } else {
@@ -451,7 +451,7 @@ public class PreferredServices implements com.android.nfc.ForegroundUtils.Callba
         if (mForegroundUtils.isInForeground(callingUid)) {
             return unregisterForegroundService(callingUid);
         } else {
-            Log.e(TAG, "Calling UID is not in the foreground, ignorning!");
+            Log.e(TAG, "Calling UID is not in the foreground, ignoring!");
             return false;
         }
     }
