@@ -39,18 +39,13 @@ public class NfcWatchdog extends BroadcastReceiver {
     static final String ACTION_WATCHDOG = "android.nfc.intent.action.WATCHDOG";
 
     CountDownLatch mCountDownLatch;
-    private Intent mWatchdogIntent = new Intent(ACTION_WATCHDOG);
-    private AlarmManager mAlarmManager;
-    private PendingIntent mPendingIntent;
+    Context mContext;
 
     NfcWatchdog(Context context) {
+        mContext = context;
         if (android.nfc.Flags.nfcWatchdog()) {
-            mPendingIntent =
-                    PendingIntent.getBroadcast(
-                            context, 0, mWatchdogIntent, PendingIntent.FLAG_IMMUTABLE);
             context.registerReceiver(this, new IntentFilter(ACTION_WATCHDOG),
                     Context.RECEIVER_EXPORTED);
-            mAlarmManager = context.getSystemService(AlarmManager.class);
         }
     }
 
@@ -122,19 +117,24 @@ public class NfcWatchdog extends BroadcastReceiver {
 
     void ensureWatchdogMonitoring() {
         if (android.nfc.Flags.nfcWatchdog()) {
-            if (mAlarmManager != null && mAlarmManager.getNextAlarmClock() == null) {
-                mAlarmManager.setInexactRepeating(
+            Intent watchdogIntent = new Intent(ACTION_WATCHDOG);
+            AlarmManager alarmManager = mContext.getSystemService(AlarmManager.class);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                mContext, 0, watchdogIntent, PendingIntent.FLAG_IMMUTABLE);
+            if (alarmManager != null && alarmManager.getNextAlarmClock() == null) {
+                alarmManager.setInexactRepeating(
                     AlarmManager.ELAPSED_REALTIME,
                     SystemClock.elapsedRealtime() + NFC_MONITOR_INTERVAL,
                     NFC_MONITOR_INTERVAL,
-                    mPendingIntent);
+                    pendingIntent);
             }
         }
     }
 
     void stopMonitoring() {
-        if (mAlarmManager != null) {
-            mAlarmManager.cancelAll();
+        AlarmManager alarmManager = mContext.getSystemService(AlarmManager.class);
+        if (alarmManager != null) {
+            alarmManager.cancelAll();
         }
     }
 }
