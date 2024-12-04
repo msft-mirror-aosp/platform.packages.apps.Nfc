@@ -232,6 +232,18 @@ public class NativeNfcManager implements DeviceHost {
     }
 
     @Override
+    public boolean isFirmwareExitFramesSupported() {
+        if (!com.android.nfc.flags.Flags.exitFrames()) {
+            return false;
+        }
+        if (isProprietaryGetCapsSupported()) {
+            return mProprietaryCaps.isAutotransactPollingLoopFilterSupported()
+                    && mProprietaryCaps.getNumberOfExitFramesSupported() > 0;
+        }
+        return false;
+    }
+
+    @Override
     public native boolean setObserveMode(boolean enabled);
 
     @Override
@@ -672,7 +684,8 @@ public class NativeNfcManager implements DeviceHost {
                 observeModeStatsd,
                 proprietaryCaps.isPollingFrameNotificationSupported(),
                 proprietaryCaps.isPowerSavingModeSupported(),
-                proprietaryCaps.isAutotransactPollingLoopFilterSupported());
+                proprietaryCaps.isAutotransactPollingLoopFilterSupported(),
+                proprietaryCaps.getNumberOfExitFramesSupported());
     }
 
     public void notifyObserveModeChanged(boolean enabled) {
