@@ -68,7 +68,6 @@ custom_apex {
     file_contexts: ":com.android.nfcservices-file_contexts",
     key: "com.android.nfcservices.key",
     certificate: ":com.android.nfcservices.certificate",
-    updatable: false,
 }
 
 sdk {

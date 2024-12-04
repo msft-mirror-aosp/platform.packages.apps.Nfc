@@ -15,6 +15,7 @@
 # Lint as: python3
 
 from binascii import hexlify
+from .nfcutils.reader import ReaderTag
 
 
 def responses_match(expected: bytes, actual: bytes) -> bool:
@@ -30,7 +31,7 @@ def responses_match(expected: bytes, actual: bytes) -> bool:
     return False
 
 
-class Tag:
+class Tag(ReaderTag):
     def __init__(self, pn532, target_id: int):
         self.pn532 = pn532
         self.target_id = target_id
