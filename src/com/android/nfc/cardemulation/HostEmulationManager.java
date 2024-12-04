@@ -1053,7 +1053,7 @@ public class HostEmulationManager {
 
     void sendDataToServiceLocked(Messenger service, byte[] data) {
         mState = STATE_XFER;
-        if (service != mActiveService) {
+        if (!Objects.equals(service, mActiveService)) {
             sendDeactivateToActiveServiceLocked(HostApduService.DEACTIVATION_DESELECTED);
             mActiveService = service;
             if (service.equals(mPaymentService)) {

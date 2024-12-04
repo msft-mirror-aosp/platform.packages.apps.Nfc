@@ -22,6 +22,8 @@ import android.util.Log;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.nfc.cardemulation.RoutingOptionManager;
+
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -335,7 +337,8 @@ public class RoutingTableParser {
                 case TYPE_SYSTEMCODE -> new String(info.mEntry, StandardCharsets.UTF_8);
                 default -> null;
             };
-            entries.add(new Entry(entry, info.mType, info.mNfceeId));
+            entries.add(new Entry(entry, info.mType, info.mNfceeId,
+                    RoutingOptionManager.getInstance().getSecureElementForRoute(info.mNfceeId)));
         }
         return entries;
     }
