@@ -19,6 +19,7 @@ package com.android.nfc.cardemulation;
 import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
 import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_OK;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -42,6 +44,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Resources;
 import android.nfc.ComponentNameAndUser;
+import android.nfc.INfcCardEmulation;
 import android.nfc.NfcAdapter;
 import android.nfc.cardemulation.AidGroup;
 import android.nfc.cardemulation.ApduServiceInfo;
@@ -53,6 +56,7 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.ForegroundUtils;
@@ -82,33 +86,33 @@ public class CardEmulationManagerTest {
     private static final byte[] TEST_DATA_2 = new byte[] {(byte) 0xd3};
     private static final byte[] PROPER_SKIP_DATA_NDF1_HEADER =
             new byte[] {
-                0x00,
-                (byte) 0xa4,
-                0x04,
-                0x00,
-                (byte) 0x07,
-                (byte) 0xd2,
-                0x76,
-                0x00,
-                0x00,
-                (byte) 0x85,
-                0x01,
-                0x00
+                    0x00,
+                    (byte) 0xa4,
+                    0x04,
+                    0x00,
+                    (byte) 0x07,
+                    (byte) 0xd2,
+                    0x76,
+                    0x00,
+                    0x00,
+                    (byte) 0x85,
+                    0x01,
+                    0x00
             };
     private static final byte[] PROPER_SKIP_DATA_NDF2_HEADER =
             new byte[] {
-                0x00,
-                (byte) 0xa4,
-                0x04,
-                0x00,
-                (byte) 0x07,
-                (byte) 0xd2,
-                0x76,
-                0x00,
-                0x00,
-                (byte) 0x85,
-                0x01,
-                0x01
+                    0x00,
+                    (byte) 0xa4,
+                    0x04,
+                    0x00,
+                    (byte) 0x07,
+                    (byte) 0xd2,
+                    0x76,
+                    0x00,
+                    0x00,
+                    (byte) 0x85,
+                    0x01,
+                    0x01
             };
     private static final String WALLET_HOLDER_PACKAGE_NAME = "com.android.test.walletroleholder";
     private static final List<PollingFrame> POLLING_LOOP_FRAMES = List.of();
@@ -152,6 +156,7 @@ public class CardEmulationManagerTest {
                         .mockStatic(ActivityManager.class)
                         .mockStatic(NfcPermissions.class)
                         .mockStatic(android.nfc.Flags.class)
+                        .mockStatic(Settings.Secure.class)
                         .strictness(Strictness.LENIENT)
                         .mockStatic(NfcService.class)
                         .mockStatic(Binder.class)
@@ -632,7 +637,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.setShouldDefaultToObserveModeForService(
-                        anyInt(), anyInt(), any(), anyBoolean()))
+                anyInt(), anyInt(), any(), anyBoolean()))
                 .thenReturn(true);
         when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(anyInt(), any()))
                 .thenReturn(false);
@@ -666,7 +671,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.setShouldDefaultToObserveModeForService(
-                        anyInt(), anyInt(), any(), anyBoolean()))
+                anyInt(), anyInt(), any(), anyBoolean()))
                 .thenReturn(true);
         when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(anyInt(), any()))
                 .thenReturn(false);
@@ -732,7 +737,7 @@ public class CardEmulationManagerTest {
     public void testCardEmulationRegisterAidGroupForService_serviceExists() throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.registerAidGroupForService(
-                        eq(USER_ID), anyInt(), any(), any()))
+                eq(USER_ID), anyInt(), any(), any()))
                 .thenReturn(true);
         AidGroup aidGroup = Mockito.mock(AidGroup.class);
 
@@ -763,7 +768,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.registerAidGroupForService(
-                        eq(USER_ID), anyInt(), any(), any()))
+                eq(USER_ID), anyInt(), any(), any()))
                 .thenReturn(true);
         AidGroup aidGroup = Mockito.mock(AidGroup.class);
 
@@ -793,7 +798,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.registerPollingLoopFilterForService(
-                        eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
+                eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -829,7 +834,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.registerPollingLoopFilterForService(
-                        eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
+                eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -859,7 +864,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.removePollingLoopFilterForService(
-                        eq(USER_ID), anyInt(), any(), any()))
+                eq(USER_ID), anyInt(), any(), any()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -891,7 +896,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.removePollingLoopFilterForService(
-                        eq(USER_ID), anyInt(), any(), any()))
+                eq(USER_ID), anyInt(), any(), any()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -921,7 +926,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.registerPollingLoopPatternFilterForService(
-                        eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
+                eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -957,7 +962,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.registerPollingLoopPatternFilterForService(
-                        eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
+                eq(USER_ID), anyInt(), any(), any(), anyBoolean()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -987,7 +992,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.removePollingLoopPatternFilterForService(
-                        eq(USER_ID), anyInt(), any(), any()))
+                eq(USER_ID), anyInt(), any(), any()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -1019,7 +1024,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.removePollingLoopPatternFilterForService(
-                        eq(USER_ID), anyInt(), any(), any()))
+                eq(USER_ID), anyInt(), any(), any()))
                 .thenReturn(true);
         String pollingLoopFilter = "filter";
 
@@ -1161,7 +1166,7 @@ public class CardEmulationManagerTest {
         AidGroup aidGroup = Mockito.mock(AidGroup.class);
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.getAidGroupForService(
-                        eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
+                eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
                 .thenReturn(aidGroup);
 
         assertEquals(
@@ -1197,7 +1202,7 @@ public class CardEmulationManagerTest {
         AidGroup aidGroup = Mockito.mock(AidGroup.class);
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.getAidGroupForService(
-                        eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
+                eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
                 .thenReturn(aidGroup);
 
         assertNull(
@@ -1226,7 +1231,7 @@ public class CardEmulationManagerTest {
         AidGroup aidGroup = Mockito.mock(AidGroup.class);
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredServicesCache.removeAidGroupForService(
-                        eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
+                eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
                 .thenReturn(true);
         assertTrue(
                 mCardEmulationManager
@@ -1260,7 +1265,7 @@ public class CardEmulationManagerTest {
             throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.removeAidGroupForService(
-                        eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
+                eq(USER_ID), anyInt(), any(), eq(CardEmulation.CATEGORY_PAYMENT)))
                 .thenReturn(true);
 
         assertFalse(
@@ -1288,7 +1293,7 @@ public class CardEmulationManagerTest {
     public void testCardEmulationGetServices() throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredServicesCache.getServicesForCategory(
-                        eq(USER_ID), eq(CardEmulation.CATEGORY_PAYMENT)))
+                eq(USER_ID), eq(CardEmulation.CATEGORY_PAYMENT)))
                 .thenReturn(UPDATED_SERVICES);
 
         assertEquals(
@@ -1315,7 +1320,7 @@ public class CardEmulationManagerTest {
     public void testCardEmulationSetPreferredService_serviceExists() throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mPreferredServices.registerPreferredForegroundService(
-                        eq(WALLET_PAYMENT_SERVICE), anyInt()))
+                eq(WALLET_PAYMENT_SERVICE), anyInt()))
                 .thenReturn(true);
 
         assertTrue(
@@ -1342,7 +1347,7 @@ public class CardEmulationManagerTest {
     public void testCardEmulationSetPreferredService_serviceDoesNotExists() throws RemoteException {
         when(mRegisteredServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mPreferredServices.registerPreferredForegroundService(
-                        eq(WALLET_PAYMENT_SERVICE), anyInt()))
+                eq(WALLET_PAYMENT_SERVICE), anyInt()))
                 .thenReturn(false);
 
         assertFalse(
@@ -1735,7 +1740,7 @@ public class CardEmulationManagerTest {
         String systemCode = "systemCode";
         when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredNfcFServicesCache.registerSystemCodeForService(
-                        anyInt(), anyInt(), any(), anyString()))
+                anyInt(), anyInt(), any(), anyString()))
                 .thenReturn(true);
 
         assertTrue(
@@ -1766,7 +1771,7 @@ public class CardEmulationManagerTest {
         String systemCode = "systemCode";
         when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredNfcFServicesCache.registerSystemCodeForService(
-                        anyInt(), anyInt(), any(), anyString()))
+                anyInt(), anyInt(), any(), anyString()))
                 .thenReturn(true);
 
         assertFalse(
@@ -1906,7 +1911,7 @@ public class CardEmulationManagerTest {
         String nfcid2 = "nfcid2";
         when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any())).thenReturn(true);
         when(mRegisteredNfcFServicesCache.setNfcid2ForService(
-                        anyInt(), anyInt(), any(), anyString()))
+                anyInt(), anyInt(), any(), anyString()))
                 .thenReturn(true);
 
         assertTrue(
@@ -1936,7 +1941,7 @@ public class CardEmulationManagerTest {
         String nfcid2 = "nfcid2";
         when(mRegisteredNfcFServicesCache.hasService(eq(USER_ID), any())).thenReturn(false);
         when(mRegisteredNfcFServicesCache.setNfcid2ForService(
-                        anyInt(), anyInt(), any(), anyString()))
+                anyInt(), anyInt(), any(), anyString()))
                 .thenReturn(true);
 
         assertFalse(
@@ -2265,5 +2270,34 @@ public class CardEmulationManagerTest {
                 mRoutingOptionManager,
                 mPowerManager,
                 mNfcEventLog);
+    }
+
+    @Test
+    public void testIsDefaultServiceForCategory() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mWalletRoleObserver.isWalletRoleFeatureEnabled()).thenReturn(false);
+        when(Settings.Secure.getString(any(), anyString()))
+                .thenReturn("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation
+                .isDefaultServiceForCategory(1, componentName, "payment");
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testIsDefaultServiceForAid() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mRegisteredAidCache.isDefaultServiceForAid(1, componentName, "test"))
+                .thenReturn(true);
+        boolean result = iNfcCardEmulation
+                .isDefaultServiceForAid(1, componentName, "test");
+        assertThat(result).isTrue();
     }
 }
