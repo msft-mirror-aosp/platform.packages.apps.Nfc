@@ -2300,4 +2300,90 @@ public class CardEmulationManagerTest {
                 .isDefaultServiceForAid(1, componentName, "test");
         assertThat(result).isTrue();
     }
+
+    @Test
+    public void testSetDefaultServiceForCategory() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mRegisteredAidCache.isDefaultServiceForAid(1, componentName, "test"))
+                .thenReturn(true);
+        boolean result = iNfcCardEmulation
+                .setDefaultServiceForCategory(1, componentName, "payment");
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testSetDefaultForNextTap() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mRegisteredAidCache.isDefaultServiceForAid(1, componentName, "test"))
+                .thenReturn(true);
+        iNfcCardEmulation.setDefaultForNextTap(1, componentName);
+        verify(mPreferredServices).setDefaultForNextTap(1, componentName);
+    }
+
+    @Test
+    public void testSetShouldDefaultToObserveModeForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mRegisteredAidCache.isDefaultServiceForAid(1, componentName, "test"))
+                .thenReturn(true);
+        when(mRegisteredServicesCache.doesServiceShouldDefaultToObserveMode(1, componentName))
+                .thenReturn(true);
+        boolean result = iNfcCardEmulation
+                .setShouldDefaultToObserveModeForService(1, componentName, true);
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testRegisterAidGroupForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.registerAidGroupForService(anyInt(), anyInt(), any(), any()))
+                .thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        AidGroup aidGroup = mock(AidGroup.class);
+        boolean result = iNfcCardEmulation
+                .registerAidGroupForService(1, componentName, aidGroup);
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testRegisterPollingLoopFilterForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.registerPollingLoopFilterForService(anyInt(),
+                anyInt(), any(), anyString(), anyBoolean())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation.registerPollingLoopFilterForService(1,
+                componentName, "test", true);
+        assertThat(true).isTrue();
+    }
+
+    @Test
+    public void testRemovePollingLoopPatternFilterForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.removePollingLoopFilterForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation.removePollingLoopPatternFilterForService(1,
+                componentName, "test");
+        assertThat(true).isTrue();
+    }
 }
