@@ -183,7 +183,8 @@
         </service>
         <service android:name="com.android.nfc.service.PaymentService1" android:exported="true"
             android:permission="android.permission.BIND_NFC_SERVICE"
-            android:enabled="false">
+            android:enabled="false"
+            android:process="com.android.nfc.emulator.payment">
             <intent-filter>
                 <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE"/>
                 <category android:name="android.intent.category.DEFAULT"/>
