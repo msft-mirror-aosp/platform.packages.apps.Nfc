@@ -259,6 +259,8 @@ public interface DeviceHost {
 
     public boolean isObserveModeEnabled();
 
+    public boolean isFirmwareExitFramesSupported();
+
     /**
     * Get the committed listen mode routing configuration
     */
