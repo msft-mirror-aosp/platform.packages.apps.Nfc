@@ -39,7 +39,7 @@ class RoutingManager {
   bool addAidRouting(const uint8_t* aid, uint8_t aidLen, int route, int aidInfo,
                      int power);
   bool removeAidRouting(const uint8_t* aid, uint8_t aidLen);
-  bool commitRouting();
+  tNFA_STATUS commitRouting();
   int registerT3tIdentifier(uint8_t* t3tId, uint8_t t3tIdLen);
   void deregisterT3tIdentifier(int handle);
   void onNfccShutdown();
@@ -60,6 +60,7 @@ class RoutingManager {
   static const int CLEAR_AID_ENTRIES = 0x01;
   static const int CLEAR_PROTOCOL_ENTRIES = 0x02;
   static const int CLEAR_TECHNOLOGY_ENTRIES = 0x04;
+  SyncEvent mEeUpdateEvent;
 
  private:
   RoutingManager();
@@ -138,7 +139,6 @@ class RoutingManager {
   static const JNINativeMethod sMethods[];
   SyncEvent mEeRegisterEvent;
   SyncEvent mRoutingEvent;
-  SyncEvent mEeUpdateEvent;
   SyncEvent mEeInfoEvent;
   SyncEvent mEeSetModeEvent;
   SyncEvent mEePwrAndLinkCtrlEvent;

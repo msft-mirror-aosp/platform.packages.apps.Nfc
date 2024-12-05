@@ -96,6 +96,7 @@ cc_defaults {
         // does not ship one in /product
         "libnfc-nci.conf-default",
     ],
+    min_sdk_version: "35", // Make it 36 once available.
 }
 
 cc_test {
@@ -171,5 +172,4 @@ cc_test {
         },
     },
     auto_gen_config: true,
-    min_sdk_version: "current",
 }
