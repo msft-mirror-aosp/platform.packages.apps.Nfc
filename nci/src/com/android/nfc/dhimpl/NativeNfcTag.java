@@ -775,6 +775,23 @@ public class NativeNfcTag implements TagEndpoint {
         }
     }
 
+    private boolean isMifareDesfireTag() {
+        for (int i = 0; i < mTechList.length; i++) {
+            if (mTechList[i] != TagTechnology.NFC_A) {
+                continue;
+            } else if ((mTechActBytes[i] == null) || (mTechActBytes[i].length == 0)) {
+                continue;
+            } else if (((mTechActBytes[i][0] & (short) 0xFF) == 0x20)
+                    && (((mTechPollBytes[i][0] & (short) 0xFF) == 0x44)
+                            || (((mTechPollBytes[i][0] & (short) 0xFF) == 0x04)))
+                    && ((mTechPollBytes[i][1] & (short) 0xFF) == 0x03)) {
+                if (DBG) Log.d(TAG, "isMifareDesfireTag() - true, need reconnect()");
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public NdefMessage findAndReadNdef() {
         // Try to find NDEF on any of the technologies.
@@ -808,8 +825,11 @@ public class NativeNfcTag implements TagEndpoint {
                     // We'll only add formattable tech if no ndef is
                     // found - this is because libNFC refuses to format
                     // an already NDEF formatted tag.
+                    if (isMifareDesfireTag()) {
+                        reconnect();
+                        connectWithIdx(techIndex);
+                    }
                 }
-                // reconnect();
             }
 
             int[] ndefinfo = new int[2];
