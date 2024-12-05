@@ -76,6 +76,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CardEmulationManagerTest {
@@ -2385,5 +2386,112 @@ public class CardEmulationManagerTest {
         boolean result = iNfcCardEmulation.removePollingLoopPatternFilterForService(1,
                 componentName, "test");
         assertThat(true).isTrue();
+    }
+
+    @Test
+    public void testSetOffHostForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.setOffHostSecureElement(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation
+                .setOffHostForService(1, componentName, "test");
+        assertThat(result).isTrue();
+        verify(mNfcService).onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+    }
+
+    @Test
+    public void testUnsetOffHostForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.resetOffHostSecureElement(anyInt(),
+                anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation.unsetOffHostForService(1, componentName);
+        assertThat(result).isTrue();
+        verify(mNfcService).onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+    }
+
+    @Test
+    public void testGetAidGroupForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        AidGroup aidGroup = mock(AidGroup.class);
+        when(mRegisteredServicesCache.getAidGroupForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(aidGroup);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        AidGroup result = iNfcCardEmulation
+                .getAidGroupForService(1, componentName, "test");
+        assertThat(result).isEqualTo(aidGroup);
+    }
+
+    @Test
+    public void testRemoveAidGroupForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.removeAidGroupForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation
+                .removeAidGroupForService(1, componentName, "payment");
+        assertThat(result).isTrue();
+        verify(mNfcService).onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+        verify(mNfcEventLog).logEvent(any());
+    }
+
+    @Test
+    public void testSetServices() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mPreferredServices.registerPreferredForegroundService(any(), anyInt()))
+                .thenReturn(true);
+        boolean result = iNfcCardEmulation.setPreferredService(componentName);
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testGetServices() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ApduServiceInfo apduServiceInfo = mock(ApduServiceInfo.class);
+        List<ApduServiceInfo> apduServiceInfoList =  new ArrayList<>();
+        apduServiceInfoList.add(apduServiceInfo);
+        when(mRegisteredServicesCache.getServicesForCategory(1, "payment"))
+                .thenReturn(apduServiceInfoList);
+        List<ApduServiceInfo> result = iNfcCardEmulation
+                .getServices(1, "payment");
+        assertThat(result).isEqualTo(apduServiceInfoList);
+    }
+
+    @Test
+    public void testUnsetPreferredService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mPreferredServices
+                .unregisteredPreferredForegroundService(anyInt())).thenReturn(true);
+        boolean result = iNfcCardEmulation.unsetPreferredService();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testSupportsAidPrefixRegistration()  throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredAidCache
+                .supportsAidPrefixRegistration()).thenReturn(true);
+        boolean result = iNfcCardEmulation.supportsAidPrefixRegistration();
+        assertThat(result).isTrue();
     }
 }
