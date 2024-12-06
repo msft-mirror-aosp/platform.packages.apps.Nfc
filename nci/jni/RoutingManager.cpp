@@ -180,6 +180,11 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
   updateDefaultRoute();
   updateDefaultProtocolRoute();
 
+  // For startup case with NFC secure enabled.
+  if (mSecureNfcEnabled) {
+    NFA_SetNfcSecure(mSecureNfcEnabled);
+  }
+
   return true;
 }
 
@@ -397,7 +402,7 @@ bool RoutingManager::removeAidRouting(const uint8_t* aid, uint8_t aidLen) {
   }
 }
 
-bool RoutingManager::commitRouting() {
+tNFA_STATUS RoutingManager::commitRouting() {
   static const char fn[] = "RoutingManager::commitRouting";
   tNFA_STATUS nfaStat = 0;
   LOG(DEBUG) << fn;
@@ -412,7 +417,7 @@ bool RoutingManager::commitRouting() {
       mEeUpdateEvent.wait();  // wait for NFA_EE_UPDATED_EVT
     }
   }
-  return (nfaStat == NFA_STATUS_OK);
+  return nfaStat;
 }
 
 void RoutingManager::onNfccShutdown() {
@@ -566,6 +571,14 @@ void RoutingManager::notifyDeactivated(uint8_t technology) {
   if (e == NULL) {
     LOG(ERROR) << "jni env is null";
     return;
+  }
+
+  e->CallVoidMethod(mNativeData->manager,
+                    android::gCachedNfcManagerNotifyEeListenActivated,
+                    JNI_FALSE);
+  if (e->ExceptionCheck()) {
+    e->ExceptionClear();
+    LOG(ERROR) << StringPrintf("Fail to notify Ee listen active status.");
   }
 
   e->CallVoidMethod(mNativeData->manager,
@@ -855,6 +868,10 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
 
   bool offHostRouteFound = false;
   bool felicaRouteFound = false;
+
+  int defaultFelicaRoute = mDefaultFelicaRoute;
+  int defaultOffHostRoute = mDefaultOffHostRoute;
+
   for (uint8_t i = 0; i < mEeInfo.num_ee; i++) {
     tNFA_HANDLE eeHandle = mEeInfo.ee_disc_info[i].ee_handle;
     tNFA_TECHNOLOGY_MASK seTechMask = 0;
@@ -881,7 +898,7 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
       if (mEeInfo.ee_disc_info[i].lf_protocol != 0)
         seTechMask |= NFA_TECHNOLOGY_MASK_F;
       else
-        mDefaultFelicaRoute = NFC_DH_ID;
+        defaultFelicaRoute = NFC_DH_ID;
     }
 
     // If OFFHOST_LISTEN_TECH_MASK exists,
@@ -915,21 +932,21 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
   }
 
   if (!offHostRouteFound) {
-    mDefaultOffHostRoute = NFC_DH_ID;
+    defaultOffHostRoute = NFC_DH_ID;
   }
   if (!felicaRouteFound) {
-    mDefaultFelicaRoute = NFC_DH_ID;
+    defaultFelicaRoute = NFC_DH_ID;
   }
 
   tNFA_TECHNOLOGY_MASK hostTechMask = 0;
-  if (mDefaultOffHostRoute == NFC_DH_ID || mDefaultFelicaRoute == NFC_DH_ID) {
-    if (mDefaultOffHostRoute == NFC_DH_ID) {
+  if (defaultOffHostRoute == NFC_DH_ID || defaultFelicaRoute == NFC_DH_ID) {
+    if (defaultOffHostRoute == NFC_DH_ID) {
       LOG(DEBUG) << StringPrintf(
           "%s: Setting technology route to host with A,B type", fn);
       hostTechMask |= NFA_TECHNOLOGY_MASK_A;
       hostTechMask |= NFA_TECHNOLOGY_MASK_B;
     }
-    if (mDefaultFelicaRoute == NFC_DH_ID) {
+    if (defaultFelicaRoute == NFC_DH_ID) {
       LOG(DEBUG) << StringPrintf(
           "%s: Setting technology route to host with F type", fn);
       hostTechMask |= NFA_TECHNOLOGY_MASK_F;
@@ -1284,9 +1301,19 @@ void RoutingManager::nfcFCeCallback(uint8_t event,
   }
 }
 
+/*******************************************************************************
+**
+** Function:        setNfcSecure
+**
+** Description:     get the NFC secure status
+**
+** Returns:         true
+**
+*******************************************************************************/
 bool RoutingManager::setNfcSecure(bool enable) {
   mSecureNfcEnabled = enable;
   LOG(INFO) << "setNfcSecure NfcService " << enable;
+  NFA_SetNfcSecure(enable);
   return true;
 }
 
