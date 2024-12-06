@@ -2494,4 +2494,80 @@ public class CardEmulationManagerTest {
         boolean result = iNfcCardEmulation.supportsAidPrefixRegistration();
         assertThat(result).isTrue();
     }
-}
+
+    @Test
+    public void testGetPreferredPaymentService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ComponentNameAndUser componentNameAndUser = mock(ComponentNameAndUser.class);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(componentNameAndUser.getComponentName()).thenReturn(componentName);
+        when(mRegisteredAidCache.getPreferredService()).thenReturn(componentNameAndUser);
+        ApduServiceInfo apduServiceInfo = mock(ApduServiceInfo.class);
+        when(mRegisteredServicesCache.getService(1, componentName))
+                .thenReturn(apduServiceInfo);
+        ApduServiceInfo result = iNfcCardEmulation.getPreferredPaymentService(1);
+        assertThat(result).isNotNull();
+        assertThat(result).isEqualTo(apduServiceInfo);
+        verify(mRegisteredAidCache).getPreferredService();
+    }
+
+    @Test
+    public void testSetServiceEnabledForCategoryOther() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mResources.getBoolean(R.bool.enable_service_for_category_other))
+                .thenReturn(true);
+        when(mRegisteredServicesCache.registerOtherForService(1,
+                componentName, true)).thenReturn(1);
+        int result = iNfcCardEmulation
+                .setServiceEnabledForCategoryOther(1, componentName, true);
+        assertThat(result).isEqualTo(1);
+        verify(mRegisteredServicesCache)
+                .registerOtherForService(1, componentName, true);
+    }
+
+    @Test
+    public void testIsDefaultPaymentRegistered() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mWalletRoleObserver.isWalletRoleFeatureEnabled()).thenReturn(true);
+        when(Binder.getCallingUserHandle()).thenReturn(USER_HANDLE);
+        when(mWalletRoleObserver.getDefaultWalletRoleHolder(0))
+                .thenReturn("com.android.test");
+        boolean result = iNfcCardEmulation.isDefaultPaymentRegistered();
+        assertThat(result).isTrue();
+
+        when(mWalletRoleObserver.isWalletRoleFeatureEnabled()).thenReturn(false);
+        when(Settings.Secure.getString(any(), anyString())).thenReturn("com.android.test");
+        result = iNfcCardEmulation.isDefaultPaymentRegistered();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testOverrideRoutingTable() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(android.nfc.Flags.nfcOverrideRecoverRoutingTable()).thenReturn(false);
+        when(mForegroundUtils.registerUidToBackgroundCallback(any(), anyInt()))
+                .thenReturn(true);
+        iNfcCardEmulation.overrideRoutingTable(1,
+                "eSE", "SIM", "com.android.test");
+        verify(mRoutingOptionManager).overrideDefaultIsoDepRoute(anyInt());
+        verify(mRoutingOptionManager).overrideDefaultOffHostRoute(anyInt());
+        verify(mRegisteredAidCache).onRoutingOverridedOrRecovered();
+    }
+
+    @Test
+    public void testRecoverRoutingTable() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mForegroundUtils.isInForeground(anyInt())).thenReturn(true);
+        iNfcCardEmulation.recoverRoutingTable(1);
+        verify(mRoutingOptionManager).recoverOverridedRoutingTable();
+        verify(mRegisteredAidCache).onRoutingOverridedOrRecovered();
+    }
+ }
