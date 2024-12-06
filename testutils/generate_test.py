@@ -25,7 +25,9 @@ from parse_log import FullApduEntry, NfcType, PollingLoopEntry
 INDENT_SIZE = 4
 
 
-def generate_test(log: list[FullApduEntry | PollingLoopEntry], name: str):
+def generate_test(
+    log: list[FullApduEntry | PollingLoopEntry], name: str
+) -> str:
   """Generates a Python test case from a snoop log parsed by the replay tool.
 
   The generated test will be placed in the current directory.
@@ -33,13 +35,14 @@ def generate_test(log: list[FullApduEntry | PollingLoopEntry], name: str):
   Args:
     log: The parsed snoop log.
     name: The name of the file containing the snoop log.
+
+  Returns:
+    The name of the JSON file containing APDUs needed to run the test.
   """
   # The name of the test file is based on the name of the snoop log
+  python_local_file = name + ".py"
   file_path = (
-      os.path.dirname(os.path.realpath(__file__))
-      + "/"
-      + format_test_name(name)
-      + ".py"
+      os.path.dirname(os.path.realpath(__file__)) + "/" + python_local_file
   )
 
   try:
@@ -65,11 +68,9 @@ def generate_test(log: list[FullApduEntry | PollingLoopEntry], name: str):
     last_timestamp = entry.ts
 
   json_dump = json.dumps(json_list)
+  apdu_local_file = name + "_apdus.json"
   apdu_file_path = (
-      os.path.dirname(os.path.realpath(__file__))
-      + "/"
-      + format_test_name(name)
-      + "_apdus.json"
+      os.path.dirname(os.path.realpath(__file__)) + "/" + apdu_local_file
   )
   apdu_file = open(apdu_file_path, "wt")
   apdu_file.write(json_dump)
@@ -82,6 +83,32 @@ def generate_test(log: list[FullApduEntry | PollingLoopEntry], name: str):
       "Test generated at {}. To run the test, copy the test file to"
       " packages/apps/Nfc/tests/testcases/multidevices/.".format(file_path)
   )
+  update_android_bp(python_local_file, name)
+
+  return apdu_local_file
+
+
+def update_android_bp(local_file_path, test_name):
+  """Creates a new python_test_host entry in Android.bp for the generated test."""
+  try:
+    android_bp = open("Android.bp", "a")
+  except Exception as e:
+    raise RuntimeError("Error occurred while opening Android.bp") from e
+
+  s = create_line()
+  s += create_line()
+  s += create_line("python_test_host {")
+  s += create_line('name: "{}",'.format(test_name), indent=1)
+  s += create_line('main: "{}",'.format(local_file_path), indent=1)
+  s += create_line('srcs: ["{}"],'.format(local_file_path), indent=1)
+  s += create_line('test_config: "AndroidTest.xml",', indent=1)
+  s += create_line("test_options: {", indent=1)
+  s += create_line("unit_test: false,", indent=2)
+  s += create_line('tags: ["mobly"],', indent=2)
+  s += create_line("},", indent=1)
+  s += create_line('defaults: ["GeneratedTestsPythonDefaults"],', indent=1)
+  s += create_line("}")
+  android_bp.write(s)
 
 
 def create_apdu_dict(entry: FullApduEntry):
@@ -90,7 +117,7 @@ def create_apdu_dict(entry: FullApduEntry):
   for cmd in entry.command:
     command_arr.append(cmd.hex())
   response_arr = []
-  for rsp in entry.expected_response:
+  for rsp in entry.response:
     if isinstance(rsp, str):
       response_arr.append(rsp)
     else:
@@ -104,7 +131,7 @@ def create_apdu_dict(entry: FullApduEntry):
 
 def create_test_opening(name: str):
   """Creates the opening of the test file."""
-  s = create_line("def test_{}(self):".format(format_test_name(name)), indent=1)
+  s = create_line("def test_{}(self):".format(name), indent=1)
   s += create_line("# Read in APDU commands and responses from file", indent=2)
   s += create_line(
       'file_path = self.user_params.get("file_path", "")', indent=2
@@ -385,10 +412,6 @@ def create_main_function():
 
 def create_line(s: str = "", indent: int = 0):
   return "{}{}\n".format(create_indent(indent), s)
-
-
-def format_test_name(name: str):
-  return name.replace("/", "_").replace(".", "_")
 
 
 def create_indent(multiplier: int):
