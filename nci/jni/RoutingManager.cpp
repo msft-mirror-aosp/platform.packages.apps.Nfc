@@ -180,6 +180,11 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
   updateDefaultRoute();
   updateDefaultProtocolRoute();
 
+  // For startup case with NFC secure enabled.
+  if (mSecureNfcEnabled) {
+    NFA_SetNfcSecure(mSecureNfcEnabled);
+  }
+
   return true;
 }
 
@@ -1296,9 +1301,19 @@ void RoutingManager::nfcFCeCallback(uint8_t event,
   }
 }
 
+/*******************************************************************************
+**
+** Function:        setNfcSecure
+**
+** Description:     get the NFC secure status
+**
+** Returns:         true
+**
+*******************************************************************************/
 bool RoutingManager::setNfcSecure(bool enable) {
   mSecureNfcEnabled = enable;
   LOG(INFO) << "setNfcSecure NfcService " << enable;
+  NFA_SetNfcSecure(enable);
   return true;
 }
 
