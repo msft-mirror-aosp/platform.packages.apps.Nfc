@@ -607,6 +607,13 @@ public final class NfcServiceTest {
     }
 
     @Test
+    public void testReleaseSoundPool() {
+        mNfcService.mSoundPool = mSoundPool;
+        mNfcService.releaseSoundPool();
+        Assert.assertNull(mNfcService.mSoundPool);
+    }
+
+    @Test
     public void testMsg_Rf_Field_Activated() {
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
