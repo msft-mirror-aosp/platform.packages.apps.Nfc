@@ -26,7 +26,8 @@ from serial.tools.list_ports import comports
 from mobly import logger as mobly_logger
 
 from .tag import TypeATag, TypeBTag
-from .nfcutils import ByteStruct, with_crc16a, snake_to_camel, s_to_us
+from .nfcutils import ByteStruct, snake_to_camel, s_to_us
+from .nfcutils.reader import Reader, CONFIGURATION_A_LONG
 
 
 _LONG_PREAMBLE = bytes(20)
@@ -290,7 +291,9 @@ class Status(IntEnum):
     INVALID_PARAMETER = 0x10
 
 
-class PN532:
+class PN532(Reader):
+    """Implements an NFC reader with a PN532 chip"""
+
     def __init__(self, path):
         """Initializes device on path,
         or first available serial port if none is provided."""
@@ -318,7 +321,7 @@ class PN532:
         self.device = serial.Serial(path, 115200, timeout=0.5)
 
         self.device.flush()
-        self.send_ack_frame()
+        self._send_ack_frame()
         self.device.flushInput()
         if not self.verify_firmware_version():
             raise RuntimeError(
@@ -341,12 +344,6 @@ class PN532:
 
     # Custom functions
 
-    def verify_firmware_version(self):
-        """Verifies we are talking to a PN532."""
-        self.log.debug("Checking firmware version")
-        rsp = self.get_firmware_version()
-        return rsp[0] == 0x32
-
     def poll_a(self):
         """Attempts to detect target for NFC type A."""
         self.log.debug("Polling A")
@@ -366,16 +363,40 @@ class PN532:
             self.log.debug(f"Got Type B tag {tag.sensb_res}")
         return tag
 
-    def send_broadcast(self, broadcast):
-        """Emits broadcast frame with CRC.
-        This should be called after poll_a()."""
-        self.log.debug("Sending broadcast %s", hexlify(broadcast).decode())
-
-        # Adjust bit framing so all bytes are transmitted
-        self.write_registers({REG.BIT_FRAMING: 0x00})
-        self.in_communicate_thru(
-            with_crc16a(broadcast), raise_on_error_status=False
+    def send_broadcast(
+        self,
+        data: bytes,
+        *,
+        configuration=CONFIGURATION_A_LONG
+    ):
+        """Emits a broadcast frame into the polling loop"""
+        self.log.debug("Sending broadcast %s", hexlify(data).decode())
+        return self.transceive_raw(
+            data=data,
+            type_=configuration.type,
+            crc=configuration.crc,
+            bits=configuration.bits,
+            bitrate=configuration.bitrate,
+            timeout=configuration.timeout or 0.25,
+            power_level=configuration.power,
         )
+
+    def mute(self):
+        """Turns off device's RF antenna."""
+        self.log.debug("Muting")
+        self.rf_configuration(RFConfigItem.RF_FIELD, [0b10])
+
+    def unmute(self, auto_rf_ca=False):
+        """Turns on device's RF antenna."""
+        self.log.debug("Unmuting")
+        self.rf_configuration(RFConfigItem.RF_FIELD, [(auto_rf_ca << 1) + 0b01])
+
+    def reset(self):
+        """Clears out input and output buffers to expunge leftover data"""
+        self.device.reset_input_buffer()
+        self.device.reset_output_buffer()
+
+    # Special commands
 
     def transceive_raw(
         self,
@@ -479,22 +500,18 @@ class PN532:
         # No data is OK for this use case
         return self.in_communicate_thru(data, raise_on_error_status=False)
 
-    def mute(self):
-        """Turns off device's RF antenna."""
-        self.log.debug("Muting")
-        self.rf_configuration(RFConfigItem.RF_FIELD, [0b10])
-
-    def unmute(self, auto_rf_ca=False):
-        """Turns on device's RF antenna."""
-        self.log.debug("Unmuting")
-        self.rf_configuration(RFConfigItem.RF_FIELD, [(auto_rf_ca << 1) + 0b01])
+    def verify_firmware_version(self):
+        """Verifies we are talking to a PN532."""
+        self.log.debug("Checking firmware version")
+        rsp = self.get_firmware_version()
+        return rsp[0] == 0x32
 
     # PN532 defined commands
 
     def initialize_target_mode(self):
         """Configures the PN532 as target."""
         self.log.debug("Initializing target mode")
-        self.execute_command(
+        self._execute_command(
             Command.TG_INIT_AS_TARGET,
             [
                 0x05,  # Mode
@@ -539,7 +556,7 @@ class PN532:
 
     def sam_configuration(self, mode=0x01, timeout_value=0x00):
         """(7.2.10) SAMConfiguration"""
-        return self.execute_command(
+        return self._execute_command(
             Command.SAM_CONFIGURATION,
             [mode, timeout_value],
             timeout=1,
@@ -548,7 +565,7 @@ class PN532:
 
     def get_firmware_version(self):
         """(7.2.2) GetFirmwareVersion"""
-        return self.execute_command(
+        return self._execute_command(
             Command.GET_FIRMWARE_VERSION, min_response=4
         )
 
@@ -556,7 +573,7 @@ class PN532:
         self, tg, data, *, timeout=3, raise_on_error_status=True
     ):
         """(7.3.8) InDataExchange"""
-        rsp = self.execute_command(
+        rsp = self._execute_command(
             Command.IN_DATA_EXCHANGE,
             [tg, *data],
             timeout=timeout,
@@ -572,7 +589,7 @@ class PN532:
         self, data, *, timeout=1, raise_on_error_status=True
     ):
         """(7.3.9) InCommunicateThru"""
-        rsp = self.execute_command(
+        rsp = self._execute_command(
             Command.IN_COMMUNICATE_THRU, data, min_response=1, timeout=timeout
         )
         if rsp[0] != Status.OK:
@@ -592,7 +609,7 @@ class PN532:
         self.register_cache = {}
         self.rf_configuration_cache = {}
 
-        rsp = self.execute_command(
+        rsp = self._execute_command(
             Command.IN_LIST_PASSIVE_TARGET,
             [max_tg, br_ty, *initiator_data],
             min_response=1,
@@ -635,7 +652,7 @@ class PN532:
         ):
             return [self.register_cache[register] for register in registers]
         data = b"".join(struct.pack(">H", register) for register in registers)
-        rsp = self.execute_command(Command.READ_REGISTER, data)
+        rsp = self._execute_command(Command.READ_REGISTER, data)
         if not rsp:
             raise RuntimeError(f"No response for read registers {registers}.")
         return list(
@@ -662,7 +679,7 @@ class PN532:
         data = b"".join(
             struct.pack(">HB", reg, val) for reg, val in difference.items()
         )
-        self.execute_command(Command.WRITE_REGISTER, data)
+        self._execute_command(Command.WRITE_REGISTER, data)
         self.register_cache = {**self.register_cache, **registers}
 
     def rf_configuration(
@@ -674,22 +691,22 @@ class PN532:
         """
         if cache and self.rf_configuration_cache.get(cfg_item) == value:
             return
-        self.execute_command(
+        self._execute_command(
             Command.RF_CONFIGURATION, [cfg_item, *value], min_response=0
         )
         self.rf_configuration_cache[cfg_item] = value
 
     # Internal communication commands
 
-    def execute_command(
+    def _execute_command(
         self, command: Command, data=b"", *, timeout=0.5, min_response=None
     ):
         """Executes the provided command
         Verifies that response code matches the command code if response arrived
         If min_response is set, checks if enough data was returned
         """
-        rsp = self.send_frame(
-            self.construct_frame([command, *data]), timeout=timeout
+        rsp = self._send_frame(
+            self._construct_frame([command, *data]), timeout=timeout
         )
 
         if not rsp:
@@ -711,7 +728,9 @@ class PN532:
 
         return rsp
 
-    def construct_frame(self, data):
+    # Protocol communication methods
+
+    def _construct_frame(self, data):
         """Construct a data fram to be sent to the PN532."""
         # Preamble, start code, length, length checksum, TFI
         frame = [
@@ -736,29 +755,24 @@ class PN532:
         )
         return bytearray(frame)
 
-    def write(self, frame):
+    def _write(self, frame):
         """Performs serial writes
         while handling config for sending long preambles"""
         if self.write_long_preamble:
             frame = _LONG_PREAMBLE + frame
         self.device.write(frame)
 
-    def send_frame(self, frame, timeout=0.5):
+    def _send_frame(self, frame, timeout=0.5):
         """Writes a frame to the device and returns the response."""
-        self.write(frame)
-        return self.get_device_response(timeout)
+        self._write(frame)
+        return self._get_device_response(timeout)
 
-    def send_ack_frame(self, timeout=0.5):
+    def _send_ack_frame(self, timeout=0.5):
         """Send ACK frame, there is no response."""
         self.device.timeout = timeout
-        self.write(_ACK_FRAME)
+        self._write(_ACK_FRAME)
 
-    def reset_buffers(self):
-        """Clears out input and output buffers to expunge leftover data"""
-        self.device.reset_input_buffer()
-        self.device.reset_output_buffer()
-
-    def get_device_response(self, timeout=0.5):
+    def _get_device_response(self, timeout=0.5):
         """onfirms we get an ACK frame from device.
         Reads response frame, and writes ACK.
         """
@@ -813,7 +827,7 @@ class PN532:
                     frame[4],
                 )
 
-        self.send_ack_frame()
+        self._send_ack_frame()
 
         self.log.debug(
             "Received frame %s%s",
