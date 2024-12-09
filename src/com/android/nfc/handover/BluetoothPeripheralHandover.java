@@ -731,4 +731,8 @@ public class BluetoothPeripheralHandover implements BluetoothProfile.ServiceList
             mHandler.sendMessageDelayed(mHandler.obtainMessage(MSG_RETRY), waitTime);
         }
     }
+
+    public int getTransport() {
+        return mTransport;
+    }
 }

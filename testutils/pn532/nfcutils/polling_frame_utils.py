@@ -19,17 +19,7 @@
 import time
 from typing import Collection
 from dataclasses import dataclass
-
-
-@dataclass
-class TransceiveConfiguration:
-    """Defines settings used during NFC communication
-    """
-    type: str
-    crc: int = True
-    bits: int = 8
-    bitrate: int = 106
-    timeout: float = None
+from .reader import TransceiveConfiguration
 
 
 @dataclass
@@ -151,7 +141,7 @@ _O = TransceiveConfiguration(type="O")
 _X = TransceiveConfiguration(type="X")
 
 # Possible transceive configurations for polling frames
-_A = TransceiveConfiguration(
+CONFIGURATION_A_LONG = _A = TransceiveConfiguration(
     type="A", crc=True, bits=8, timeout=_A_TIMEOUT
 )
 _A_SHORT = TransceiveConfiguration(
@@ -161,7 +151,7 @@ _A_NOCRC = TransceiveConfiguration(
     type="A", crc=False, bits=8, timeout=_A_TIMEOUT
 )
 
-_B = TransceiveConfiguration(
+CONFIGURATION_B_LONG = _B = TransceiveConfiguration(
     type="B", crc=True, bits=8, timeout=_B_TIMEOUT
 )
 _B_NOCRC = TransceiveConfiguration(
@@ -485,16 +475,14 @@ def poll_and_observe_frames(
         elif configuration.type == "X":
             pn532.mute()
         else:
-            pn532.transceive_raw(
+            if "power_level" in kwargs:
+                configuration = configuration.replace(
+                    power=kwargs["power_level"]
+                )
+            pn532.send_broadcast(
                 data=bytes.fromhex(testcase.data),
-                type_=configuration.type,
-                crc=configuration.crc,
-                bitrate=configuration.bitrate,
-                bits=configuration.bits,
-                timeout=configuration.timeout or 0.025,
-                **kwargs
+                configuration=configuration
             )
-
         if configuration.type in {"O", "X"}:
             time.sleep(GUARD_TIME_PER_TECH[configuration.type])
 
