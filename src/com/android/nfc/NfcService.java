@@ -3890,36 +3890,45 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public int writeData(final int fileId, byte[] data) {
-          NfcPermissions.enforceAdminPermissions(mContext);
-          int status = T4tNdefNfcee.WRITE_DATA_ERROR_INTERNAL;
-          try {
-            ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
-            fileIdInBytes.putShort((short)fileId);
-            status = mDeviceHost.doWriteData(fileIdInBytes.array(), data);
-            if(status > 0) status = T4tNdefNfcee.WRITE_DATA_SUCCESS;
-          } catch (Exception e) {
-            Log.e(TAG, "Exception occurred while writing NDEF NFCEE data", e);
-          }
-          Log.i(TAG, "writeData : " + status);
-          return status;
+            NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                return T4tNdefNfcee.WRITE_DATA_ERROR_DEVICE_BUSY;
+            }
+            int status = T4tNdefNfcee.WRITE_DATA_ERROR_INTERNAL;
+            try {
+                ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
+                fileIdInBytes.putShort((short)fileId);
+                status = mDeviceHost.doWriteData(fileIdInBytes.array(), data);
+                if(status > 0) status = T4tNdefNfcee.WRITE_DATA_SUCCESS;
+            } catch (Exception e) {
+                Log.e(TAG, "Exception occurred while writing NDEF NFCEE data", e);
+            }
+            Log.i(TAG, "writeData : " + status);
+            return status;
         }
 
         @Override
         public byte[] readData(final int fileId) {
-          NfcPermissions.enforceAdminPermissions(mContext);
-          byte[] readData = {};
-          ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
-          fileIdInBytes.putShort((short)fileId);
-          readData = mDeviceHost.doReadData(fileIdInBytes.array());
-          if (readData == null) {
-            throw new IllegalStateException("Ndef Nfcee read failed");
-          }
-          return readData;
+            NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                throw new IllegalStateException("Device is busy");
+            }
+            byte[] readData = {};
+            ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
+            fileIdInBytes.putShort((short)fileId);
+            readData = mDeviceHost.doReadData(fileIdInBytes.array());
+            if (readData == null) {
+                throw new IllegalStateException("Ndef Nfcee read failed");
+            }
+            return readData;
         }
 
         @Override
         public T4tNdefNfceeCcFileInfo readCcfile() {
             NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                throw new IllegalStateException("Device is busy");
+            }
             T4tNdefNfceeCcFileInfo ccFileInfo = null;
             byte[] readData = {};
 
@@ -3929,18 +3938,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     int cclen = ((Byte.toUnsignedInt(readData[0])) << 8)
                             + (Byte.toUnsignedInt(readData[1]));
                     int version = Byte.toUnsignedInt(readData[2]);
-                    int maxLe = ((Byte.toUnsignedInt(readData[3])) << 8)
-                            + Byte.toUnsignedInt(readData[4]);
-                    int maxLc = ((Byte.toUnsignedInt(readData[5])) << 8)
-                            + Byte.toUnsignedInt(readData[6]);
                     int ndefFileId = ((Byte.toUnsignedInt(readData[9])) << 8)
                             + Byte.toUnsignedInt(readData[10]);
                     int ndefMaxFileSize = ((Byte.toUnsignedInt(readData[11])) << 8)
                             + Byte.toUnsignedInt(readData[12]);
-                    int ndefReadAccess = Byte.toUnsignedInt(readData[13]);
-                    int ndefWriteAccess = Byte.toUnsignedInt(readData[14]);
-                    ccFileInfo = new T4tNdefNfceeCcFileInfo(cclen,  version,  maxLe,  maxLc,
-                            ndefFileId,  ndefMaxFileSize, ndefReadAccess,  ndefWriteAccess);
+                    boolean isReadAllowed = readData[13] == 0;
+                    boolean isWriteAllowed = readData[14] == 0;
+                    ccFileInfo = new T4tNdefNfceeCcFileInfo(cclen,  version,
+                            ndefFileId,  ndefMaxFileSize, isReadAllowed,  isWriteAllowed);
                 } else {
                     Log.e(TAG, "Empty data received while reading T4T NDEF NFCEE CC data");
                 }
@@ -3953,6 +3958,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int clearNdefData() {
             NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                return T4tNdefNfcee.CLEAR_DATA_FAILED_DEVICE_BUSY;
+            }
             boolean status  = mDeviceHost.doClearNdefData();
             Log.i(TAG, "doClearNdefT4tData : " + status);
             return status
