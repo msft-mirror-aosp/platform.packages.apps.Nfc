@@ -91,12 +91,9 @@ class Casimir(Reader):
     def poll_a(self):
         """Attempts to detect target for NFC type A."""
         response = self._send_command("PollA", {})
-        if response is None:
+        if not isinstance(response, dict):
             return None
-        if response == {}:
-            sender_id = 0
-        else:
-            sender_id = response["sender_id"]
+        sender_id = response.get("senderId", response.get("sender_id")) or 0
         self.log.debug("got sender_id: " + str(sender_id))
         return CasimirTag(self, sender_id)
 
