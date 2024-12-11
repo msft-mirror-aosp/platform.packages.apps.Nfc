@@ -835,43 +835,27 @@ class NfcDispatcher {
         }
         return receiveOemCallbackResult(tag,message);
     }
-    boolean tryNdef(DispatchInfo dispatch, NdefMessage message) {
-        if (message == null) {
-            return false;
-        }
-        Intent intent = dispatch.setNdefIntent();
 
-        // Bail out if the intent does not contain filterable NDEF data
-        if (intent == null) return false;
-
-        // Try to start AAR activity with matching filter
-        List<String> packages = extractAarPackages(message);
+    boolean tryActivityOrLaunchAppStore(DispatchInfo dispatch, List<String> packages,
+        boolean isAar) {
         for (String pkg : packages) {
             dispatch.intent.setPackage(pkg);
             if (dispatch.tryStartActivity()) {
-                if (DBG) Log.i(TAG, "matched AAR to NDEF");
-                return true;
-            }
-        }
-
-        // Try to start AAR activity (OEM proprietary format) with matching filter
-        List<String> oemPackages = extractOemPackages(message);
-        for (String pkg : packages) {
-            dispatch.intent.setPackage(pkg);
-            if (dispatch.tryStartActivity()) {
-                if (DBG) Log.i(TAG, "matched OEM package to NDEF");
+                if (DBG) {
+                    if (isAar) {
+                        Log.i(TAG, "matched AAR to NDEF");
+                    } else {
+                        Log.i(TAG, "matched OEM to NDEF");
+                    }
+                }
                 return true;
             }
         }
 
         List<UserHandle> luh = dispatch.getCurrentActiveUserHandles();
-
-        String firstPackage = packages.size() > 0 ? packages.get(0) :
-                              oemPackages.size() > 0 ? oemPackages.get(0):
-                              null;
-
-        // Try to perform regular launch of the first AAR
-        if (firstPackage != null) {
+        // Try to perform regular launch of the first Application Record
+        if (packages.size() > 0) {
+            String firstPackage = packages.get(0);
             PackageManager pm;
             for (UserHandle uh : luh) {
                 try {
@@ -886,18 +870,61 @@ class NfcDispatcher {
                     ResolveInfo ri = pm.resolveActivity(appLaunchIntent, 0);
                     if (ri != null && ri.activityInfo != null && ri.activityInfo.exported
                             && dispatch.tryStartActivity(appLaunchIntent)) {
-                        if (DBG) Log.i(TAG, "matched AAR to application launch");
+                        if (DBG) {
+                            if (isAar) {
+                                Log.i(TAG, "matched AAR to application launch");
+                            } else {
+                                Log.i(TAG, "matched OEM to application launch");
+                            }
+
+                        }
                         return true;
                     }
                 }
             }
-            // Find the package in Market:
-            Intent marketIntent = getAppSearchIntent(firstPackage);
+
+            Intent marketIntent = null;
+            if (isAar) {
+                marketIntent = getAppSearchIntent(firstPackage);
+            } else {
+                marketIntent = getOemAppSearchIntent(firstPackage);
+            }
             if (marketIntent != null && dispatch.tryStartActivity(marketIntent)) {
-                if (DBG) Log.i(TAG, "matched AAR to market launch");
+                if (DBG) {
+                    if (isAar) {
+                        Log.i(TAG, "matched AAR to market launch");
+                    } else {
+                        Log.i(TAG, "matched OEM to market launch");
+                    }
+                }
                 return true;
             }
         }
+        return false;
+    }
+
+    boolean tryNdef(DispatchInfo dispatch, NdefMessage message) {
+        if (message == null) {
+            return false;
+        }
+        Intent intent = dispatch.setNdefIntent();
+
+        // Bail out if the intent does not contain filterable NDEF data
+        if (intent == null) return false;
+
+        // Try to start AAR activity (OEM proprietary format) with matching filter
+        List<String> oemPackages = extractOemPackages(message);
+        if (oemPackages.size() > 0) {
+            return tryActivityOrLaunchAppStore(dispatch, oemPackages, false);
+        }
+
+        // Try to start AAR activity with matching filter
+        List<String> aarPackages = extractAarPackages(message);
+        if (aarPackages.size() > 0) {
+            return tryActivityOrLaunchAppStore(dispatch, aarPackages, true);
+        }
+
+        List<UserHandle> luh = dispatch.getCurrentActiveUserHandles();
 
         // regular launch
         dispatch.intent.setPackage(null);
