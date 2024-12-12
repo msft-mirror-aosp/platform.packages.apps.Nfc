@@ -42,6 +42,7 @@ import static org.mockito.Mockito.when;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.nfc.ComponentNameAndUser;
 import android.nfc.INfcCardEmulation;
@@ -57,10 +58,12 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
+import android.telephony.SubscriptionManager;
 
 import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.nfc.ForegroundUtils;
 import com.android.nfc.NfcEventLog;
+import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 import com.android.nfc.R;
@@ -76,7 +79,9 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
+import java.util.ArrayList;
 import java.util.List;
+import android.nfc.INfcEventListener;
 
 public class CardEmulationManagerTest {
 
@@ -162,6 +167,7 @@ public class CardEmulationManagerTest {
                         .mockStatic(Binder.class)
                         .mockStatic(UserHandle.class)
                         .mockStatic(NfcAdapter.class)
+                        .mockStatic(NfcInjector.NfcProperties.class)
                         .startMocking();
         MockitoAnnotations.initMocks(this);
         when(NfcAdapter.getDefaultAdapter(mContext)).thenReturn(mNfcAdapter);
@@ -2386,4 +2392,257 @@ public class CardEmulationManagerTest {
                 componentName, "test");
         assertThat(true).isTrue();
     }
-}
+
+    @Test
+    public void testSetOffHostForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.setOffHostSecureElement(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation
+                .setOffHostForService(1, componentName, "test");
+        assertThat(result).isTrue();
+        verify(mNfcService).onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+    }
+
+    @Test
+    public void testUnsetOffHostForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.resetOffHostSecureElement(anyInt(),
+                anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation.unsetOffHostForService(1, componentName);
+        assertThat(result).isTrue();
+        verify(mNfcService).onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+    }
+
+    @Test
+    public void testGetAidGroupForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        AidGroup aidGroup = mock(AidGroup.class);
+        when(mRegisteredServicesCache.getAidGroupForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(aidGroup);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        AidGroup result = iNfcCardEmulation
+                .getAidGroupForService(1, componentName, "test");
+        assertThat(result).isEqualTo(aidGroup);
+    }
+
+    @Test
+    public void testRemoveAidGroupForService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        when(mRegisteredServicesCache.removeAidGroupForService(anyInt(),
+                anyInt(), any(), anyString())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        boolean result = iNfcCardEmulation
+                .removeAidGroupForService(1, componentName, "payment");
+        assertThat(result).isTrue();
+        verify(mNfcService).onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_UPDATED);
+        verify(mNfcEventLog).logEvent(any());
+    }
+
+    @Test
+    public void testSetServices() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredServicesCache.hasService(anyInt(), any())).thenReturn(true);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mPreferredServices.registerPreferredForegroundService(any(), anyInt()))
+                .thenReturn(true);
+        boolean result = iNfcCardEmulation.setPreferredService(componentName);
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testGetServices() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ApduServiceInfo apduServiceInfo = mock(ApduServiceInfo.class);
+        List<ApduServiceInfo> apduServiceInfoList =  new ArrayList<>();
+        apduServiceInfoList.add(apduServiceInfo);
+        when(mRegisteredServicesCache.getServicesForCategory(1, "payment"))
+                .thenReturn(apduServiceInfoList);
+        List<ApduServiceInfo> result = iNfcCardEmulation
+                .getServices(1, "payment");
+        assertThat(result).isEqualTo(apduServiceInfoList);
+    }
+
+    @Test
+    public void testUnsetPreferredService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mPreferredServices
+                .unregisteredPreferredForegroundService(anyInt())).thenReturn(true);
+        boolean result = iNfcCardEmulation.unsetPreferredService();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testSupportsAidPrefixRegistration()  throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRegisteredAidCache
+                .supportsAidPrefixRegistration()).thenReturn(true);
+        boolean result = iNfcCardEmulation.supportsAidPrefixRegistration();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testGetPreferredPaymentService() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ComponentNameAndUser componentNameAndUser = mock(ComponentNameAndUser.class);
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(componentNameAndUser.getComponentName()).thenReturn(componentName);
+        when(mRegisteredAidCache.getPreferredService()).thenReturn(componentNameAndUser);
+        ApduServiceInfo apduServiceInfo = mock(ApduServiceInfo.class);
+        when(mRegisteredServicesCache.getService(1, componentName))
+                .thenReturn(apduServiceInfo);
+        ApduServiceInfo result = iNfcCardEmulation.getPreferredPaymentService(1);
+        assertThat(result).isNotNull();
+        assertThat(result).isEqualTo(apduServiceInfo);
+        verify(mRegisteredAidCache).getPreferredService();
+    }
+
+    @Test
+    public void testSetServiceEnabledForCategoryOther() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        ComponentName componentName = ComponentName
+                .unflattenFromString("com.android.test.component/.Component");
+        when(mResources.getBoolean(R.bool.enable_service_for_category_other))
+                .thenReturn(true);
+        when(mRegisteredServicesCache.registerOtherForService(1,
+                componentName, true)).thenReturn(1);
+        int result = iNfcCardEmulation
+                .setServiceEnabledForCategoryOther(1, componentName, true);
+        assertThat(result).isEqualTo(1);
+        verify(mRegisteredServicesCache)
+                .registerOtherForService(1, componentName, true);
+    }
+
+    @Test
+    public void testIsDefaultPaymentRegistered() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mWalletRoleObserver.isWalletRoleFeatureEnabled()).thenReturn(true);
+        when(Binder.getCallingUserHandle()).thenReturn(USER_HANDLE);
+        when(mWalletRoleObserver.getDefaultWalletRoleHolder(0))
+                .thenReturn("com.android.test");
+        boolean result = iNfcCardEmulation.isDefaultPaymentRegistered();
+        assertThat(result).isTrue();
+
+        when(mWalletRoleObserver.isWalletRoleFeatureEnabled()).thenReturn(false);
+        when(Settings.Secure.getString(any(), anyString())).thenReturn("com.android.test");
+        result = iNfcCardEmulation.isDefaultPaymentRegistered();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testOverrideRoutingTable() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(android.nfc.Flags.nfcOverrideRecoverRoutingTable()).thenReturn(false);
+        when(mForegroundUtils.registerUidToBackgroundCallback(any(), anyInt()))
+                .thenReturn(true);
+        iNfcCardEmulation.overrideRoutingTable(1,
+                "eSE", "SIM", "com.android.test");
+        verify(mRoutingOptionManager).overrideDefaultIsoDepRoute(anyInt());
+        verify(mRoutingOptionManager).overrideDefaultOffHostRoute(anyInt());
+        verify(mRegisteredAidCache).onRoutingOverridedOrRecovered();
+    }
+
+    @Test
+    public void testRecoverRoutingTable() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mForegroundUtils.isInForeground(anyInt())).thenReturn(true);
+        iNfcCardEmulation.recoverRoutingTable(1);
+        verify(mRoutingOptionManager).recoverOverridedRoutingTable();
+        verify(mRegisteredAidCache).onRoutingOverridedOrRecovered();
+    }
+
+    @Test
+    public void testGetRoutingStatus() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRoutingOptionManager.isRoutingTableOverrided()).thenReturn(true);
+        when(mRoutingOptionManager.getOverrideDefaultRoute()).thenReturn(0x01);
+        when(mRoutingOptionManager.getOverrideDefaultIsoDepRoute()).thenReturn(0x02);
+        when(mRoutingOptionManager.getOverrideDefaultOffHostRoute()).thenReturn(0x03);
+        when(mRoutingOptionManager.getSecureElementForRoute(anyInt()))
+                .thenReturn("DH", "SIM", "eSE");
+        List<String> result = iNfcCardEmulation.getRoutingStatus();
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isGreaterThan(0);
+        assertThat(result.get(0)).isEqualTo("DH");
+    }
+
+    @Test
+    public void testSetAutoChangeStatus() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        iNfcCardEmulation.setAutoChangeStatus(true);
+        verify(mRoutingOptionManager).setAutoChangeStatus(true);
+    }
+
+    @Test
+    public void testIsAutoChangeEnabled() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mRoutingOptionManager.isAutoChangeEnabled()).thenReturn(true);
+        boolean result = iNfcCardEmulation.isAutoChangeEnabled();
+        assertThat(result).isTrue();
+        verify(mRoutingOptionManager).isAutoChangeEnabled();
+    }
+
+    @Test
+    public void testIsEuiccSupported() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        when(mResources.getBoolean(anyInt())).thenReturn(true);
+        when(NfcInjector.NfcProperties.isEuiccSupported()).thenReturn(true);
+        boolean result = iNfcCardEmulation.isEuiccSupported();
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    public void testSetDefaultNfcSubscriptionId() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        PackageManager packageManager = mock(PackageManager.class);
+        when(packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION))
+                .thenReturn(true);
+        when(mContext.getPackageManager()).thenReturn(packageManager);
+        int result = iNfcCardEmulation.setDefaultNfcSubscriptionId(1, "com.android.test");
+        assertThat(result)
+                .isEqualTo(CardEmulation.SET_SUBSCRIPTION_ID_STATUS_FAILED_INVALID_SUBSCRIPTION_ID);
+    }
+
+    @Test
+    public void testGetDefaultNfcSubscriptionId() throws RemoteException {
+        INfcCardEmulation iNfcCardEmulation = mCardEmulationManager.getNfcCardEmulationInterface();
+        assertThat(iNfcCardEmulation).isNotNull();
+        PackageManager packageManager = mock(PackageManager.class);
+        when(packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION))
+                .thenReturn(true);
+        when(mContext.getPackageManager()).thenReturn(packageManager);
+        int result = iNfcCardEmulation.getDefaultNfcSubscriptionId("com.android.test");
+        assertThat(result)
+                .isEqualTo(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+    }
+ }

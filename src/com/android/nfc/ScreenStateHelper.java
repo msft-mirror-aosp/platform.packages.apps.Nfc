@@ -6,6 +6,8 @@ import android.hardware.display.DisplayManager;
 import android.os.PowerManager;
 import android.view.Display;
 
+import androidx.annotation.VisibleForTesting;
+
 /**
  * Helper class for determining the current screen state for NFC activities.
  */
@@ -26,9 +28,9 @@ class ScreenStateHelper {
     private final DisplayManager mDisplayManager;
 
     ScreenStateHelper(Context context) {
-        mKeyguardManager = context.getSystemService(KeyguardManager.class);
-        mPowerManager = context.getSystemService(PowerManager.class);
-        mDisplayManager = context.getSystemService(DisplayManager.class);
+        this(context.getSystemService(KeyguardManager.class),
+                context.getSystemService(PowerManager.class),
+                context.getSystemService(DisplayManager.class));
     }
 
     private boolean isDisplayOn() {
@@ -95,5 +97,13 @@ class ScreenStateHelper {
             default:
                 return NfcServiceDumpProto.SCREEN_STATE_UNKNOWN;
         }
+    }
+
+    @VisibleForTesting
+    ScreenStateHelper(KeyguardManager keyguardManager, PowerManager powerManager,
+            DisplayManager displayManager) {
+        mKeyguardManager = keyguardManager;
+        mPowerManager = powerManager;
+        mDisplayManager = displayManager;
     }
 }
