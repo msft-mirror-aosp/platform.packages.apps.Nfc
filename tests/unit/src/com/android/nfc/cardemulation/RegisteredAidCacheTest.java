@@ -796,7 +796,7 @@ public class RegisteredAidCacheTest {
             boolean requiresScreenOn,
             int uid,
             boolean isCategoryOtherServiceEnabled,
-            boolean shareRolePriority) {
+            boolean wantsRoleHolderPriority) {
         ApduServiceInfo apduServiceInfo = Mockito.mock(ApduServiceInfo.class);
         when(apduServiceInfo.isOnHost()).thenReturn(onHost);
         when(apduServiceInfo.getAids()).thenReturn(aids);
@@ -806,7 +806,7 @@ public class RegisteredAidCacheTest {
         when(apduServiceInfo.isCategoryOtherServiceEnabled())
                 .thenReturn(isCategoryOtherServiceEnabled);
         when(apduServiceInfo.getComponent()).thenReturn(componentName);
-        when(apduServiceInfo.shareRolePriority()).thenReturn(shareRolePriority);
+        when(apduServiceInfo.wantsRoleHolderPriority()).thenReturn(wantsRoleHolderPriority);
         for (int i = 0; i < aids.size(); i++) {
             String aid = aids.get(i);
             String category = categories.get(i);
