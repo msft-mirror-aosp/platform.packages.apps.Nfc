@@ -432,12 +432,18 @@ public class HostEmulationManager {
             if (packageManager == null) {
                 return false;
             }
-            for (Integer uid : foregroundUtils.getForegroundUids()) {
-                for (String packageName :  packageManager.getPackagesForUid(uid)) {
-                    if (packageName != null) {
-                        for (String servicePackageName : mServicePackageNames) {
-                            if (Objects.equals(servicePackageName, packageName)) {
-                                return true;
+            List<Integer> uids = foregroundUtils.getForegroundUids();
+            if (uids != null && mServicePackageNames != null) {
+                for (Integer uid : uids) {
+                    String[] packageNames = packageManager.getPackagesForUid(uid);
+                    if (packageNames != null) {
+                        for (String packageName :  packageNames) {
+                            if (packageName != null) {
+                                for (String servicePackageName : mServicePackageNames) {
+                                    if (Objects.equals(servicePackageName, packageName)) {
+                                        return true;
+                                    }
+                                }
                             }
                         }
                     }
