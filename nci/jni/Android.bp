@@ -98,6 +98,11 @@ cc_defaults {
         "libnfc-nci.conf-default",
     ],
     min_sdk_version: "35", // Make it 36 once available.
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+    ],
 }
 
 cc_test {

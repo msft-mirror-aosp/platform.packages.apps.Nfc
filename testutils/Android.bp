@@ -15,6 +15,12 @@ android_library {
         "androidx.test.uiautomator_uiautomator",
 
     ],
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 android_app {
@@ -36,6 +42,12 @@ android_app {
         "androidx.compose.ui_ui",
         "com.google.android.material_material",
     ],
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 android_test {
@@ -54,6 +66,12 @@ android_test {
         "androidx.test.runner",
     ],
     min_sdk_version: "35",
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 android_test {
@@ -69,6 +87,12 @@ android_test {
         "nfc-multidevice-utils",
     ],
     min_sdk_version: "35",
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 python_library {
@@ -79,6 +103,12 @@ python_library {
     ],
     host_supported: true,
     device_supported: true,
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
+    ],
 }
 
 android_library {
@@ -90,6 +120,12 @@ android_library {
     sdk_version: "test_current",
     static_libs: [
         "error_prone_annotations",
+    ],
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+        "//vendor:__subpackages__",
     ],
 }
 
