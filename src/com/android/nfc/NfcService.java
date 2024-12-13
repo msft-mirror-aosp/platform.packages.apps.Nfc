@@ -802,6 +802,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onEeListenActivated(boolean isActivated) {
         mEeListenActivated = isActivated;
+        mCardEmulationManager.onEeListenActivated(isActivated);
         try {
             if (mNfcOemExtensionCallback != null) {
                 mNfcOemExtensionCallback.onEeListenActivated(isActivated);
