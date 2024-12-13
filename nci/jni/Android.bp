@@ -8,6 +8,7 @@ cc_library_static {
     defaults: ["libnfc_nci_jni_defaults"],
     visibility: [
         "//packages/apps/Nfc/nci/jni",
+        "//packages/modules/Nfc:__subpackages__",
     ],
 }
 
@@ -146,7 +147,7 @@ cc_test {
     ],
 
     include_dirs: [
-        "packages/apps/Nfc/nci/jni",
+        ".",
         "system/nfc/src/include",
         "system/nfc/src/gki/common",
         "system/nfc/src/gki/ulinux",
