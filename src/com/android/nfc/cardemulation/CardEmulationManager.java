@@ -451,6 +451,13 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
         mEnabledNfcFServices.onServicesUpdated();
     }
 
+    public void onEeListenActivated(boolean isActivated) {
+        if (!isActivated) {
+            Log.d(TAG, "Listen Mode is deactivated, try to recovery routing table");
+            mPreferredServices.onHostEmulationDeactivated();
+        }
+    }
+
     void verifyDefaults(int userId, List<ApduServiceInfo> services, boolean validateInstalled) {
         UserManager um = mContext.createContextAsUser(
                 UserHandle.of(userId), /*flags=*/0).getSystemService(UserManager.class);
