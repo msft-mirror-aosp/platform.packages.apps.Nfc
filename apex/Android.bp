@@ -45,7 +45,6 @@ custom_apex {
     manifest: "manifest.json",
     apps: ["NfcNciApex"],
     defaults: ["b-launched-apex-module"],
-    updatable: false, // TODO: fix this.
     min_sdk_version: "35", // Make it 36 once available.
     multilib: {
         first: {
