@@ -2030,6 +2030,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.d(TAG, "Disabling reader mode because app died or moved to background");
                 mReaderModeParams = null;
                 StopPresenceChecking();
+                // listenTech is different from the default value, the stored listenTech will be included.
+                // When using enableReaderMode, change listenTech to default & restore to the previous value.
+                if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+                    Log.d(TAG, "Restore listenTech to saved value");
+                    int pollTech = getNfcPollTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                    int listenTech = getNfcListenTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                    mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                }
                 mNfcEventLog.logEvent(
                         NfcEventProto.EventType.newBuilder()
                                 .setReaderModeChange(NfcEventProto.NfcReaderModeChange.newBuilder()
@@ -2683,6 +2691,18 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             mDeviceHost.startStopPolling(true);
                             if (DBG) Log.d(TAG, "setReaderMode() polling is started");
                         }
+                        // listenTech is different from the default value, the stored listenTech will be included.
+                        // When using setReaderMode, change listenTech to default & restore to previous value.
+                        if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+                            Log.d(TAG, "Change listenTech to default value");
+                            int pollTech = (NfcAdapter.FLAG_READER_KEEP |
+                                NfcAdapter.FLAG_USE_ALL_TECH | NfcAdapter.FLAG_SET_DEFAULT_TECH);
+                            int listenTech = (NfcAdapter.FLAG_LISTEN_KEEP |
+                                NfcAdapter.FLAG_USE_ALL_TECH | NfcAdapter.FLAG_SET_DEFAULT_TECH);
+                            if(disablePolling)
+                                listenTech &= ~NfcAdapter.FLAG_USE_ALL_TECH;
+                            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        }
                         updateReaderModeParams(callback, flags, extras, binder, callingUid);
                     } catch (RemoteException e) {
                         Log.e(TAG, "Remote binder has already died.");
@@ -2706,6 +2726,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         }
                     } catch (NoSuchElementException e) {
                         Log.e(TAG, "Reader mode Binder was never registered.");
+                    } finally {
+                        // listenTech is different from the default value, the stored listenTech will be included.
+                        // When using enableReaderMode, change listenTech to default & restore to the previous value.
+                        if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+                            Log.d(TAG, "Restore listenTech to saved value");
+                            int pollTech = getNfcPollTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                            int listenTech = getNfcListenTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        }
                     }
                 }
                 mNfcEventLog.logEvent(
