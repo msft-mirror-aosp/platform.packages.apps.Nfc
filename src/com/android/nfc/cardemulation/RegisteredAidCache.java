@@ -1089,7 +1089,7 @@ public class RegisteredAidCache {
                 Log.d(TAG, "aid cache entry" + key + " val:" + mAidCache.get(key).toString());
             }
         }
-        updateRoutingLocked(false);
+        updateRoutingLocked(false, false);
     }
 
     private int computeAidPowerState(boolean isOnHost, boolean requiresScreenOn,
@@ -1123,10 +1123,11 @@ public class RegisteredAidCache {
         mNfcOemExtensionCallback = nfcOemExtensionCallback;
     }
 
-    void updateRoutingLocked(boolean force) {
+    @AidRoutingManager.ConfigureRoutingResult
+    public int updateRoutingLocked(boolean force, boolean isOverrideOrRecover) {
         if (!mNfcEnabled) {
             if (DBG) Log.d(TAG, "Not updating routing table because NFC is off.");
-            return;
+            return AidRoutingManager.CONFIGURE_ROUTING_FAILURE_UNKNOWN;
         }
         final HashMap<String, AidRoutingManager.AidEntry> routingEntries = new HashMap<>();
         boolean requiresScreenOnServiceExist = false;
@@ -1147,16 +1148,16 @@ public class RegisteredAidCache {
                     resolveInfo.prefixInfo.matchingSubset)) {
                 aidType.aidInfo |= AID_ROUTE_QUAL_PREFIX;
             }
-            if (resolveInfo.services.size() == 0) {
+            if (resolveInfo.services.isEmpty()) {
                 // No interested services
                 // prevent unchecked offhost aids route to offhostSE
-		if (!resolveInfo.unCheckedOffHostSecureElement.isEmpty()) {
+		        if (!resolveInfo.unCheckedOffHostSecureElement.isEmpty()) {
                     aidType.unCheckedOffHostSE.addAll(resolveInfo.unCheckedOffHostSecureElement);
                     aidType.isOnHost = true;
                     aidType.power = POWER_STATE_SWITCH_ON;
                     routingEntries.put(aid, aidType);
                     force = true;
-		}
+		        }
             } else if (resolveInfo.defaultService != null) {
                 // There is a default service set, route to where that service resides -
                 // either on the host (HCE) or on an SE.
@@ -1212,7 +1213,7 @@ public class RegisteredAidCache {
                             requiresScreenOn = service.requiresScreenOn();
                         } else if (!offHostSE.equals(
                                 service.getOffHostSecureElement())) {
-                            // There are registerations to different SEs, route this
+                            // There are registrations to different SEs, route this
                             // to host and have user choose a service for this AID
                             offHostSE = null;
                             onHost = true;
@@ -1244,14 +1245,16 @@ public class RegisteredAidCache {
             }
         }
         mRequiresScreenOnServiceExist = requiresScreenOnServiceExist;
-        boolean isBufferFull = mRoutingManager.configureRouting(routingEntries, force);
-        if (isBufferFull && mNfcOemExtensionCallback != null) {
+        int result = mRoutingManager.configureRouting(routingEntries, force, isOverrideOrRecover);
+        if (result == AidRoutingManager.CONFIGURE_ROUTING_FAILURE_TABLE_FULL
+                && mNfcOemExtensionCallback != null) {
             try {
                 mNfcOemExtensionCallback.onRoutingTableFull();
             } catch (RemoteException exception) {
                 Log.e(TAG, "Error in onLaunchRoutingTableFullDialog: " + exception);
             }
         }
+        return result;
     }
 
     public void onServicesUpdated(int userId, List<ApduServiceInfo> services) {
@@ -1395,19 +1398,20 @@ public class RegisteredAidCache {
     public void onNfcEnabled() {
         synchronized (mLock) {
             mNfcEnabled = true;
-            updateRoutingLocked(false);
+            updateRoutingLocked(false, false);
         }
     }
 
     public void onSecureNfcToggled() {
         synchronized (mLock) {
-            updateRoutingLocked(true);
+            updateRoutingLocked(true, false);
         }
     }
 
-    public void onRoutingOverridedOrRecovered() {
+    @AidRoutingManager.ConfigureRoutingResult
+    public int onRoutingOverridedOrRecovered() {
         synchronized (mLock) {
-            updateRoutingLocked(true);
+            return updateRoutingLocked(true, true);
         }
     }
 
