@@ -45,7 +45,6 @@ android_test {
         "src/**/*.java",
         // TODO(b/263565193): Temp hack until NFC APK can link against module_current.
         ":framework-nfc-updatable-sources",
-        ":framework-nfc-non-updatable-sources",
         ":nfc-sources",
     ],
 
