@@ -40,7 +40,7 @@ def generate_test(
     The name of the JSON file containing APDUs needed to run the test.
   """
   # The name of the test file is based on the name of the snoop log
-  python_local_file = name + ".py"
+  python_local_file = name + "_test.py"
   file_path = (
       os.path.dirname(os.path.realpath(__file__)) + "/" + python_local_file
   )
@@ -54,6 +54,7 @@ def generate_test(
   file.write(create_imports())
   file.write(create_replace_aids_method())
   file.write(create_polling_loop_methods())
+  file.write(create_apdu_exchange_method())
   file.write(create_setup())
   file.write(create_test_opening(name))
 
@@ -134,12 +135,12 @@ def create_test_opening(name: str):
   s = create_line("def test_{}(self):".format(name), indent=1)
   s += create_line("# Read in APDU commands and responses from file", indent=2)
   s += create_line(
-      'file_path = self.user_params.get("file_path", "")', indent=2
+      'file_path_name = self.user_params.get("file_path", "")', indent=2
   )
   s += create_line("apdu_cmds = []", indent=2)
   s += create_line("apdu_rsps = []", indent=2)
-  s += create_line("if file_path:", indent=2)
-  s += create_line('with open(file_path, "r") as json_data:', indent=3)
+  s += create_line("if file_path_name:", indent=2)
+  s += create_line('with open(file_path_name, "r") as json_data:', indent=3)
   s += create_line("d = json.load(json_data)", indent=4)
   s += create_line("for entry in d:", indent=4)
   s += create_line("apdu_cmds.append(", indent=5)
@@ -203,7 +204,7 @@ def create_apdu_test(entry: FullApduEntry, last_timestamp: int):
   s += create_line("commands = replace_aids(commands)", indent=3)
   s += create_line("responses = apdu_rsps[0]", indent=2)
   s += create_line(
-      "tag_found, transacted = poll_and_transact(self.reader, commands,"
+      "tag_found, transacted = conduct_apdu_exchange(self.reader, commands,"
       " responses)",
       indent=2,
   )
@@ -231,14 +232,12 @@ def create_imports():
   s = create_line('"""Test generated from the NFC Replay Tool."""')
   s += create_line()
   s += create_line("import json")
-  s += create_line("import sys")
   s += create_line("import time")
   s += create_line("from mobly import asserts")
   s += create_line("from mobly import base_test")
   s += create_line("from mobly import test_runner")
   s += create_line("from mobly.controllers import android_device")
   s += create_line("import pn532")
-  s += create_line("from pn532.nfcutils import poll_and_transact")
   s += create_line()
   s += create_line("# Number of polling loops to perform.")
   s += create_line("_NUM_POLLING_LOOPS = 50")
@@ -258,6 +257,10 @@ def create_replace_aids_method():
   s += create_line()
   s += create_line()
   s += create_line("def replace_aids(commands: list[bytearray]):")
+  s += create_line(
+      '"""Replaces SELECT AID commands with AIDs from the emulator app."""',
+      indent=1,
+  )
   s += create_line("new_commands = []", indent=1)
   s += create_line("is_first_aid = True", indent=1)
   s += create_line("for command in commands:", indent=1)
@@ -327,6 +330,33 @@ def create_polling_loop_methods():
   return s
 
 
+def create_apdu_exchange_method():
+  """Creates method to conduct an APDU exchange between the emulator and reader."""
+  s = create_line()
+  s += create_line()
+  s += create_line("def conduct_apdu_exchange(")
+  s += create_line(
+      "reader: pn532.PN532, commands: list[bytearray], responses:"
+      " list[bytearray]",
+      indent=2,
+  )
+  s += create_line(") -> tuple[bool, bool]:")
+  s += create_line(
+      '"""Conducts an APDU exchange with the PN532 reader."""', indent=1
+  )
+  s += create_line("transacted = False", indent=1)
+  s += create_line("tag = None", indent=1)
+  s += create_line("for _ in range(_NUM_POLLING_LOOPS):", indent=1)
+  s += create_line("tag = reader.poll_a()", indent=2)
+  s += create_line("if tag is not None:", indent=2)
+  s += create_line("transacted = tag.transact(commands, responses)", indent=3)
+  s += create_line("reader.mute()", indent=3)
+  s += create_line("break", indent=3)
+  s += create_line("reader.mute()", indent=2)
+  s += create_line("return tag, transacted", indent=1)
+  return s
+
+
 def create_setup():
   """Creates methods to prepare the PN532 reader and emulator before the test.
 
@@ -346,23 +376,7 @@ def create_setup():
   s += create_line(
       "self.emulator = self.register_controller(android_device)[0]", indent=2
   )
-  s += create_line(
-      'self.emulator.load_snippet("nfc_emulator", "com.android.nfc.emulator")',
-      indent=2,
-  )
   s += create_line('self.emulator.debug_tag = "emulator"', indent=2)
-  s += create_line("asserts.skip_if(", indent=2)
-  s += create_line(
-      "not self.emulator.nfc_emulator.isNfcHceSupported(), ", indent=3
-  )
-  s += create_line('"Nfc is not supported on {self.emulator}"', indent=3)
-  s += create_line(")", indent=2)
-  s += create_line(
-      'self.emulator.adb.shell(["svc", "nfc", "disable"])', indent=2
-  )
-  s += create_line(
-      'self.emulator.adb.shell(["svc", "nfc", "enable"])', indent=2
-  )
   s += create_line(
       'pn532_serial_path = self.user_params.get("pn532_serial_path", "")',
       indent=2,
@@ -372,39 +386,27 @@ def create_setup():
       " False)",
       indent=2,
   )
+  s += create_line(
+      'self.emulator.adb.shell(["svc", "nfc", "disable"])', indent=2
+  )
+  s += create_line(
+      'self.emulator.adb.shell(["svc", "nfc", "enable"])', indent=2
+  )
   s += create_line("self.reader = pn532.PN532(pn532_serial_path)", indent=2)
   s += create_line("self.reader.mute()", indent=2)
-  s += create_line()
-  s += create_line("def setup_test(self):", indent=1)
-  s += create_line("self.emulator.nfc_emulator.logInfo(", indent=2)
-  s += create_line(
-      '"*** TEST START: " + self.current_test_info.name + " ***"', indent=3
-  )
-  s += create_line(")", indent=2)
-  s += create_line("self.emulator.nfc_emulator.turnScreenOn()", indent=2)
-  s += create_line("self.emulator.nfc_emulator.pressMenu()", indent=2)
   s += create_line()
   return s
 
 
 def create_teardown_test():
   s = create_line("def teardown_test(self):", indent=1)
-  s += create_line("self.reader.reset_buffers()", indent=2)
   s += create_line("self.reader.mute()", indent=2)
-  s += create_line("self.emulator.nfc_emulator.logInfo(", indent=2)
-  s += create_line(
-      '"*** TEST END: " + self.current_test_info.name + " ***"', indent=4
-  )
-  s += create_line(")", indent=2)
   return s
 
 
 def create_main_function():
   s = create_line()
   s += create_line('if __name__ == "__main__":')
-  s += create_line('if "--" in sys.argv:', indent=1)
-  s += create_line('index = sys.argv.index("--")', indent=2)
-  s += create_line("sys.argv = sys.argv[:1] + sys.argv[index + 1 :]", indent=2)
   s += create_line("test_runner.main()", indent=1)
   s += create_line()
   return s

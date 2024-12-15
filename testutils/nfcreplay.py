@@ -278,7 +278,7 @@ def create_file_for_emulator_app(
     file = open(full_path, "wt")
   except Exception as e:
     raise RuntimeError(
-        "Error occurred while opening file: {}".format(file_path)
+        "Error occurred while opening file: {}".format(full_path)
     ) from e
   for entry in output:
     if isinstance(entry, FullApduEntry):
@@ -295,6 +295,7 @@ def create_file_for_emulator_app(
 
 def get_name_for_test_case(filename: str) -> str:
   return "Generated" + filename.replace("/", "").replace(".txt", "")
+
 
 def main():
   parser = argparse.ArgumentParser(prog="pn532")
