@@ -338,6 +338,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
 
+    public static final int WAIT_FOR_COMMIT_ROUTING_TIMEOUT_MS = 10000;
+
     private static final long TIME_TO_MONITOR_AFTER_FIELD_ON_MS = 10000L;
 
     private final Looper mLooper;
@@ -519,6 +521,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private  INfcVendorNciCallback mNfcVendorNciCallBack = null;
     private  INfcOemExtensionCallback mNfcOemExtensionCallback = null;
+
+    private CountDownLatch mCommitRoutingCountDownLatch = null;
+    private int mCommitRoutingStatus;
     private final DisplayListener mDisplayListener = new DisplayListener() {
         @Override
         public void onDisplayAdded(int displayId) {
@@ -4436,8 +4441,28 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         return mDeviceHost.getLfT3tMax();
     }
 
-    public void commitRouting() {
+    public int commitRouting(boolean isOverrideOrRecover) {
+        if (!isOverrideOrRecover) {
+            mHandler.sendEmptyMessage(MSG_COMMIT_ROUTING);
+            return STATUS_OK;
+        }
+        mCommitRoutingCountDownLatch = new CountDownLatch(1);
         mHandler.sendEmptyMessage(MSG_COMMIT_ROUTING);
+        try {
+            boolean success = mCommitRoutingCountDownLatch
+                    .await(WAIT_FOR_COMMIT_ROUTING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (!success) {
+                Log.e(TAG, "commit routing timed out!");
+                return STATUS_UNKNOWN_ERROR;
+            } else {
+                Log.i(TAG, "Commit routing status: " + mCommitRoutingStatus);
+                return mCommitRoutingStatus;
+            }
+        } catch (InterruptedException e) {
+            return STATUS_UNKNOWN_ERROR;
+        } finally {
+            mCommitRoutingCountDownLatch = null;
+        }
     }
 
     public boolean sendScreenMessageAfterNfcCharging() {
@@ -4592,7 +4617,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                     return;
                                 }
                             }
-                            mDeviceHost.commitRouting();
+                            mCommitRoutingStatus = mDeviceHost.commitRouting();
+                            if (mCommitRoutingCountDownLatch != null) {
+                                mCommitRoutingCountDownLatch.countDown();
+                            }
                         } else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
                         }

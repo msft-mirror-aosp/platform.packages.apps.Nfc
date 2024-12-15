@@ -1085,8 +1085,15 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
 //            mRoutingOptionManager.overrideDefaultRoute(protocolRoute);
             mRoutingOptionManager.overrideDefaultIsoDepRoute(protocolRoute);
             mRoutingOptionManager.overrideDefaultOffHostRoute(technologyRoute);
-            mAidCache.onRoutingOverridedOrRecovered();
-//            NfcService.getInstance().commitRouting();
+            int result = mAidCache.onRoutingOverridedOrRecovered();
+            switch (result) {
+                case AidRoutingManager.CONFIGURE_ROUTING_SUCCESS:
+                    break;
+                case AidRoutingManager.CONFIGURE_ROUTING_FAILURE_TABLE_FULL:
+                    throw new IllegalArgumentException("CONFIGURE_ROUTING_FAILURE_TABLE_FULL");
+                case AidRoutingManager.CONFIGURE_ROUTING_FAILURE_UNKNOWN:
+                    throw new IllegalArgumentException("CONFIGURE_ROUTING_FAILURE_UNKNOWN");
+            }
         }
 
         @Override
@@ -1102,8 +1109,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             mForegroundUid = Process.INVALID_UID;
 
             mRoutingOptionManager.recoverOverridedRoutingTable();
-            mAidCache.onRoutingOverridedOrRecovered();
-//            NfcService.getInstance().commitRouting();
+            if (mAidCache.onRoutingOverridedOrRecovered()
+                        != AidRoutingManager.CONFIGURE_ROUTING_SUCCESS) {
+                throw new IllegalArgumentException("onRoutingOverridedOrRecovered() failed");
+            }
         }
 
         @Override
@@ -1141,7 +1150,10 @@ public class CardEmulationManager implements RegisteredServicesCache.Callback,
             if (aids != null || protocol != null || technology != null || sc != null) {
                 mRoutingOptionManager.overwriteRoutingTable();
             }
-            mAidCache.onRoutingOverridedOrRecovered();
+            if (mAidCache.onRoutingOverridedOrRecovered()
+                        != AidRoutingManager.CONFIGURE_ROUTING_SUCCESS) {
+                throw new IllegalArgumentException("onRoutingOverridedOrRecovered() failed");
+            }
         }
 
         @Override

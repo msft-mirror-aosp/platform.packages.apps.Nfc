@@ -87,7 +87,7 @@ public class SystemCodeRoutingManager {
         }
 
         // And finally commit the routing
-        NfcService.getInstance().commitRouting();
+        NfcService.getInstance().commitRouting(false);
 
         return true;
     }

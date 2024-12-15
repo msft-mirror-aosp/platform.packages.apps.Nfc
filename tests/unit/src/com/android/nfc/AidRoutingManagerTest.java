@@ -16,12 +16,11 @@
 
 package com.android.nfc;
 
+import static com.android.nfc.cardemulation.AidRoutingManager.CONFIGURE_ROUTING_FAILURE_TABLE_FULL;
+import static com.android.nfc.cardemulation.AidRoutingManager.CONFIGURE_ROUTING_SUCCESS;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
-import android.content.Context;
-import android.content.ContextWrapper;
-import android.content.pm.PackageManager;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -39,7 +38,6 @@ import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
 import java.util.HashMap;
-import java.util.Map;
 
 @RunWith(AndroidJUnit4.class)
 public class AidRoutingManagerTest {
@@ -104,8 +102,8 @@ public class AidRoutingManagerTest {
         when(NfcService.getInstance()).thenReturn(nfcService);
         when(nfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_2_0);
         HashMap<String, AidRoutingManager.AidEntry> aidEntryMap = new HashMap<>();
-        boolean isConfigureRouting = mAidRoutingManager.configureRouting(aidEntryMap, true);
-        Assert.assertTrue(isConfigureRouting);
+        int configureRoutingStatus = mAidRoutingManager.configureRouting(aidEntryMap, true, false);
+        Assert.assertEquals(configureRoutingStatus, CONFIGURE_ROUTING_FAILURE_TABLE_FULL);
         ExtendedMockito.verify(() -> NfcStatsLog.write(
                 NfcStatsLog.NFC_ERROR_OCCURRED,
                 NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__AID_OVERFLOW,
@@ -120,8 +118,8 @@ public class AidRoutingManagerTest {
         when(nfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_2_0);
         HashMap<String, AidRoutingManager.AidEntry> aidEntryMap = new HashMap<>();
         aidEntryMap.put("aidEntry", mock(AidRoutingManager.AidEntry.class));
-        boolean isConfigureRouting = mAidRoutingManager.configureRouting(aidEntryMap, true);
-        Assert.assertTrue(isConfigureRouting);
+        int configureRoutingStatus = mAidRoutingManager.configureRouting(aidEntryMap, true, false);
+        Assert.assertEquals(configureRoutingStatus, CONFIGURE_ROUTING_FAILURE_TABLE_FULL);
         ExtendedMockito.verify(() -> NfcStatsLog.write(
                 NfcStatsLog.NFC_ERROR_OCCURRED,
                 NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__AID_OVERFLOW,
