@@ -1242,13 +1242,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context context, Intent intent) {
+                        mIsNfcUserChangeRestricted = isNfcUserChangeRestricted();
                         if (mIsNfcUserRestricted == isNfcUserRestricted()) {
                             return;
                         }
                         Log.i(TAG, "Disallow NFC user restriction changed from "
                             + mIsNfcUserRestricted + " to " + !mIsNfcUserRestricted + ".");
                         mIsNfcUserRestricted = !mIsNfcUserRestricted;
-                        mIsNfcUserChangeRestricted = isNfcUserChangeRestricted();
                         if (shouldEnableNfc()) {
                             new EnableDisableTask().execute(TASK_ENABLE);
                         } else {
