@@ -48,3 +48,8 @@ rule android.app.Flags com.android.nfc.x.@0
 rule android.service.chooser.*Flags* com.android.nfc.x.@0
 rule android.service.chooser.Flags com.android.nfc.x.@0
 rule android.permission.flags.** com.android.nfc.x.@0
+# Nfc & permission flag libs are coming framework-nfc.impl's static copy.
+rule android.nfc.*Flags* com.android.nfc.x.@0
+rule android.nfc.Flags com.android.nfc.x.@0
+rule android.permission.*Flags* com.android.nfc.x.@0
+rule android.permission.Flags com.android.nfc.x.@0
