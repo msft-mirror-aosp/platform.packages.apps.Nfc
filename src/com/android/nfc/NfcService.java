@@ -33,6 +33,7 @@ import android.app.AlarmManager;
 import android.app.Application;
 import android.app.BroadcastOptions;
 import android.app.KeyguardManager;
+import android.app.KeyguardManager.DeviceLockedStateListener;
 import android.app.KeyguardManager.KeyguardLockedStateListener;
 import android.app.PendingIntent;
 import android.app.VrManager;
@@ -165,6 +166,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -334,6 +337,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static final int POWER_STATE_SWITCH_ON = 0x01;
 
     public static final int WAIT_FOR_OEM_CALLBACK_TIMEOUT_MS = 3000;
+
+    public static final int WAIT_FOR_COMMIT_ROUTING_TIMEOUT_MS = 10000;
 
     private static final long TIME_TO_MONITOR_AFTER_FIELD_ON_MS = 10000L;
 
@@ -516,6 +521,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private  INfcVendorNciCallback mNfcVendorNciCallBack = null;
     private  INfcOemExtensionCallback mNfcOemExtensionCallback = null;
+
+    private CountDownLatch mCommitRoutingCountDownLatch = null;
+    private int mCommitRoutingStatus;
     private final DisplayListener mDisplayListener = new DisplayListener() {
         @Override
         public void onDisplayAdded(int displayId) {
@@ -539,6 +547,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private boolean mRfFieldActivated = false;
     private boolean mRfDiscoveryStarted = false;
     private boolean mEeListenActivated = false;
+    // Scheduled executor for routing table update
+    private final ScheduledExecutorService mRtUpdateScheduler = Executors.newScheduledThreadPool(1);
+    private ScheduledFuture<?> mRtUpdateScheduledTask = null;
 
     private static final int STATUS_OK = NfcOemExtension.STATUS_OK;
     private static final int STATUS_UNKNOWN_ERROR = NfcOemExtension.STATUS_UNKNOWN_ERROR;
@@ -729,7 +740,19 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.e(TAG, "Failed to send onEeUpdated", e);
             }
         }
-        new ApplyRoutingTask().execute();
+        if (mRtUpdateScheduledTask != null && !mRtUpdateScheduledTask.isDone()) {
+            mRtUpdateScheduledTask.cancel(false);
+        }
+        // Delay routing table update to allow remove useless operations when several
+        // ntf are received
+        mRtUpdateScheduledTask =
+                mRtUpdateScheduler.schedule(
+                    () -> {
+                        if (DBG) Log.d(TAG, "onEeUpdated: ApplyRoutingTask");
+                        new ApplyRoutingTask().execute();
+                    },
+                    50,
+                    TimeUnit.MILLISECONDS);
     }
 
     private void restartStack() {
@@ -784,6 +807,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     @Override
     public void onEeListenActivated(boolean isActivated) {
         mEeListenActivated = isActivated;
+        mCardEmulationManager.onEeListenActivated(isActivated);
         try {
             if (mNfcOemExtensionCallback != null) {
                 mNfcOemExtensionCallback.onEeListenActivated(isActivated);
@@ -1112,7 +1136,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         ownerFilter.addDataScheme("package");
         mContext.registerReceiverForAllUsers(mOwnerReceiver, ownerFilter, null, null);
 
-        addKeyguardLockedStateListener();
+        addDeviceLockedStateListener();
 
         updatePackageCache();
 
@@ -1218,13 +1242,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 new BroadcastReceiver() {
                     @Override
                     public void onReceive(Context context, Intent intent) {
+                        mIsNfcUserChangeRestricted = isNfcUserChangeRestricted();
                         if (mIsNfcUserRestricted == isNfcUserRestricted()) {
                             return;
                         }
                         Log.i(TAG, "Disallow NFC user restriction changed from "
                             + mIsNfcUserRestricted + " to " + !mIsNfcUserRestricted + ".");
                         mIsNfcUserRestricted = !mIsNfcUserRestricted;
-                        mIsNfcUserChangeRestricted = isNfcUserChangeRestricted();
                         if (shouldEnableNfc()) {
                             new EnableDisableTask().execute(TASK_ENABLE);
                         } else {
@@ -2011,6 +2035,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 Log.d(TAG, "Disabling reader mode because app died or moved to background");
                 mReaderModeParams = null;
                 StopPresenceChecking();
+                // listenTech is different from the default value, the stored listenTech will be included.
+                // When using enableReaderMode, change listenTech to default & restore to the previous value.
+                if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+                    Log.d(TAG, "Restore listenTech to saved value");
+                    int pollTech = getNfcPollTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                    int listenTech = getNfcListenTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                    mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                }
                 mNfcEventLog.logEvent(
                         NfcEventProto.EventType.newBuilder()
                                 .setReaderModeChange(NfcEventProto.NfcReaderModeChange.newBuilder()
@@ -2032,8 +2064,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 mReaderModeParams.binder.unlinkToDeath(mReaderModeDeathRecipient, 0);
                 resetReaderModeParams();
             }
-        }
-        synchronized (NfcService.this) {
             if (mDiscoveryTechParams != null && mDiscoveryTechParams.uid == uid) {
                 mDiscoveryTechParams.binder.unlinkToDeath(mDiscoveryTechDeathRecipient, 0);
                 mDeviceHost.resetDiscoveryTech();
@@ -2329,8 +2359,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean setNfcSecure(boolean enable) {
             NfcPermissions.enforceAdminPermissions(mContext);
-            if(mKeyguard.isKeyguardLocked() && !enable) {
-                Log.i(TAG, "KeyGuard need to be unlocked before setting Secure NFC OFF");
+            if (mNfcInjector.isDeviceLocked() && !enable) {
+                Log.i(TAG, "Device need to be unlocked before setting Secure NFC OFF");
                 return false;
             }
 
@@ -2666,6 +2696,18 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             mDeviceHost.startStopPolling(true);
                             if (DBG) Log.d(TAG, "setReaderMode() polling is started");
                         }
+                        // listenTech is different from the default value, the stored listenTech will be included.
+                        // When using setReaderMode, change listenTech to default & restore to previous value.
+                        if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+                            Log.d(TAG, "Change listenTech to default value");
+                            int pollTech = (NfcAdapter.FLAG_READER_KEEP |
+                                NfcAdapter.FLAG_USE_ALL_TECH | NfcAdapter.FLAG_SET_DEFAULT_TECH);
+                            int listenTech = (NfcAdapter.FLAG_LISTEN_KEEP |
+                                NfcAdapter.FLAG_USE_ALL_TECH | NfcAdapter.FLAG_SET_DEFAULT_TECH);
+                            if(disablePolling)
+                                listenTech &= ~NfcAdapter.FLAG_USE_ALL_TECH;
+                            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        }
                         updateReaderModeParams(callback, flags, extras, binder, callingUid);
                     } catch (RemoteException e) {
                         Log.e(TAG, "Remote binder has already died.");
@@ -2689,6 +2731,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         }
                     } catch (NoSuchElementException e) {
                         Log.e(TAG, "Reader mode Binder was never registered.");
+                    } finally {
+                        // listenTech is different from the default value, the stored listenTech will be included.
+                        // When using enableReaderMode, change listenTech to default & restore to the previous value.
+                        if (isNfcEnabled() && getNfcListenTech() != DEFAULT_LISTEN_TECH) {
+                            Log.d(TAG, "Restore listenTech to saved value");
+                            int pollTech = getNfcPollTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                            int listenTech = getNfcListenTech() | NfcAdapter.FLAG_SET_DEFAULT_TECH;
+                            mDeviceHost.setDiscoveryTech(pollTech, listenTech);
+                        }
                     }
                 }
                 mNfcEventLog.logEvent(
@@ -3265,7 +3316,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                                 .build())
                                 .build());
             }
-            // TODO: Implement this.
+            mPrefsEditor.clear();
+            mPrefsEditor.putBoolean(
+                PREF_NFC_READER_OPTION_ON, mDeviceConfigFacade.getDefaultReaderOption());
+            mPrefsEditor.commit();
         }
 
         @Override
@@ -3869,36 +3923,45 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public int writeData(final int fileId, byte[] data) {
-          NfcPermissions.enforceAdminPermissions(mContext);
-          int status = T4tNdefNfcee.WRITE_DATA_ERROR_INTERNAL;
-          try {
-            ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
-            fileIdInBytes.putShort((short)fileId);
-            status = mDeviceHost.doWriteData(fileIdInBytes.array(), data);
-            if(status > 0) status = T4tNdefNfcee.WRITE_DATA_SUCCESS;
-          } catch (Exception e) {
-            Log.e(TAG, "Exception occurred while writing NDEF NFCEE data", e);
-          }
-          Log.i(TAG, "writeData : " + status);
-          return status;
+            NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                return T4tNdefNfcee.WRITE_DATA_ERROR_DEVICE_BUSY;
+            }
+            int status = T4tNdefNfcee.WRITE_DATA_ERROR_INTERNAL;
+            try {
+                ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
+                fileIdInBytes.putShort((short)fileId);
+                status = mDeviceHost.doWriteData(fileIdInBytes.array(), data);
+                if(status > 0) status = T4tNdefNfcee.WRITE_DATA_SUCCESS;
+            } catch (Exception e) {
+                Log.e(TAG, "Exception occurred while writing NDEF NFCEE data", e);
+            }
+            Log.i(TAG, "writeData : " + status);
+            return status;
         }
 
         @Override
         public byte[] readData(final int fileId) {
-          NfcPermissions.enforceAdminPermissions(mContext);
-          byte[] readData = {};
-          ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
-          fileIdInBytes.putShort((short)fileId);
-          readData = mDeviceHost.doReadData(fileIdInBytes.array());
-          if (readData == null) {
-            throw new IllegalStateException("Ndef Nfcee read failed");
-          }
-          return readData;
+            NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                throw new IllegalStateException("Device is busy");
+            }
+            byte[] readData = {};
+            ByteBuffer fileIdInBytes = ByteBuffer.allocate(2);
+            fileIdInBytes.putShort((short)fileId);
+            readData = mDeviceHost.doReadData(fileIdInBytes.array());
+            if (readData == null) {
+                throw new IllegalStateException("Ndef Nfcee read failed");
+            }
+            return readData;
         }
 
         @Override
         public T4tNdefNfceeCcFileInfo readCcfile() {
             NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                throw new IllegalStateException("Device is busy");
+            }
             T4tNdefNfceeCcFileInfo ccFileInfo = null;
             byte[] readData = {};
 
@@ -3908,18 +3971,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     int cclen = ((Byte.toUnsignedInt(readData[0])) << 8)
                             + (Byte.toUnsignedInt(readData[1]));
                     int version = Byte.toUnsignedInt(readData[2]);
-                    int maxLe = ((Byte.toUnsignedInt(readData[3])) << 8)
-                            + Byte.toUnsignedInt(readData[4]);
-                    int maxLc = ((Byte.toUnsignedInt(readData[5])) << 8)
-                            + Byte.toUnsignedInt(readData[6]);
                     int ndefFileId = ((Byte.toUnsignedInt(readData[9])) << 8)
                             + Byte.toUnsignedInt(readData[10]);
                     int ndefMaxFileSize = ((Byte.toUnsignedInt(readData[11])) << 8)
                             + Byte.toUnsignedInt(readData[12]);
-                    int ndefReadAccess = Byte.toUnsignedInt(readData[13]);
-                    int ndefWriteAccess = Byte.toUnsignedInt(readData[14]);
-                    ccFileInfo = new T4tNdefNfceeCcFileInfo(cclen,  version,  maxLe,  maxLc,
-                            ndefFileId,  ndefMaxFileSize, ndefReadAccess,  ndefWriteAccess);
+                    boolean isReadAllowed = readData[13] == 0;
+                    boolean isWriteAllowed = readData[14] == 0;
+                    ccFileInfo = new T4tNdefNfceeCcFileInfo(cclen,  version,
+                            ndefFileId,  ndefMaxFileSize, isReadAllowed,  isWriteAllowed);
                 } else {
                     Log.e(TAG, "Empty data received while reading T4T NDEF NFCEE CC data");
                 }
@@ -3932,6 +3991,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int clearNdefData() {
             NfcPermissions.enforceAdminPermissions(mContext);
+            if (mDeviceHost.isNdefOperationOngoing()) {
+                return T4tNdefNfcee.CLEAR_DATA_FAILED_DEVICE_BUSY;
+            }
             boolean status  = mDeviceHost.doClearNdefData();
             Log.i(TAG, "doClearNdefT4tData : " + status);
             return status
@@ -4041,12 +4103,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         return data;
     }
 
-    private void addKeyguardLockedStateListener() {
-        try {
-            mKeyguard.addKeyguardLockedStateListener(mContext.getMainExecutor(),
-                    mIKeyguardLockedStateListener);
-        } catch (Exception e) {
-            Log.e(TAG, "Exception in addKeyguardLockedStateListener " + e);
+    private void addDeviceLockedStateListener() {
+        if (android.app.Flags.deviceUnlockListener() && Flags.useDeviceLockListener()) {
+            try {
+                mKeyguard.addDeviceLockedStateListener(
+                        mContext.getMainExecutor(), mDeviceLockedStateListener);
+            } catch (Exception e) {
+                Log.e(TAG, "Exception in addDeviceLockedStateListener " + e);
+            }
+        } else {
+            try {
+                mKeyguard.addKeyguardLockedStateListener(mContext.getMainExecutor(),
+                        mIKeyguardLockedStateListener);
+            } catch (Exception e) {
+                Log.e(TAG, "Exception in addKeyguardLockedStateListener " + e);
+            }
         }
     }
 
@@ -4059,6 +4130,20 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         public void onKeyguardLockedStateChanged(boolean isKeyguardLocked) {
             if (!mIsWlcCapable || !mNfcCharging.NfcChargingOnGoing) {
                 applyScreenState(mScreenStateHelper.checkScreenState(mCheckDisplayStateForScreenState));
+            }
+        }
+    };
+
+    /**
+     * Receives Device lock state updates
+     */
+    private DeviceLockedStateListener mDeviceLockedStateListener =
+            new DeviceLockedStateListener() {
+        @Override
+        public void onDeviceLockedStateChanged(boolean isDeviceLocked) {
+            if (!mIsWlcCapable || !mNfcCharging.NfcChargingOnGoing) {
+                applyScreenState(mScreenStateHelper.checkScreenState(
+                                     mCheckDisplayStateForScreenState));
             }
         }
     };
@@ -4356,8 +4441,28 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         return mDeviceHost.getLfT3tMax();
     }
 
-    public void commitRouting() {
+    public int commitRouting(boolean isOverrideOrRecover) {
+        if (!isOverrideOrRecover) {
+            mHandler.sendEmptyMessage(MSG_COMMIT_ROUTING);
+            return STATUS_OK;
+        }
+        mCommitRoutingCountDownLatch = new CountDownLatch(1);
         mHandler.sendEmptyMessage(MSG_COMMIT_ROUTING);
+        try {
+            boolean success = mCommitRoutingCountDownLatch
+                    .await(WAIT_FOR_COMMIT_ROUTING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (!success) {
+                Log.e(TAG, "commit routing timed out!");
+                return STATUS_UNKNOWN_ERROR;
+            } else {
+                Log.i(TAG, "Commit routing status: " + mCommitRoutingStatus);
+                return mCommitRoutingStatus;
+            }
+        } catch (InterruptedException e) {
+            return STATUS_UNKNOWN_ERROR;
+        } finally {
+            mCommitRoutingCountDownLatch = null;
+        }
     }
 
     public boolean sendScreenMessageAfterNfcCharging() {
@@ -4434,7 +4539,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
      * Send require device unlock for NFC intent to system UI.
      */
     public void sendRequireUnlockIntent() {
-        if (!mIsRequestUnlockShowed && mKeyguard.isKeyguardLocked()) {
+        if (!mIsRequestUnlockShowed && mNfcInjector.isDeviceLocked()) {
             if (DBG) Log.d(TAG, "Request unlock");
             mIsRequestUnlockShowed = true;
             mRequireUnlockWakeLock.acquire();
@@ -4512,7 +4617,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                     return;
                                 }
                             }
-                            mDeviceHost.commitRouting();
+                            mCommitRoutingStatus = mDeviceHost.commitRouting();
+                            if (mCommitRoutingCountDownLatch != null) {
+                                mCommitRoutingCountDownLatch.countDown();
+                            }
                         } else {
                             Log.d(TAG, "Not committing routing because discovery is disabled.");
                         }

@@ -189,7 +189,9 @@ public class ForegroundUtils implements ActivityManager.OnUidImportanceListener 
     }
     @VisibleForTesting
     public SparseArray<List<Callback>> getBackgroundCallbacks() {
-        return mBackgroundCallbacks;
+        synchronized (mLock) {
+            return mBackgroundCallbacks;
+        }
     }
 
     @VisibleForTesting

@@ -20,8 +20,13 @@ import static com.android.nfc.cardemulation.AidRoutingManager.AID_MATCHING_EXACT
 import static com.android.nfc.cardemulation.AidRoutingManager.AID_MATCHING_EXACT_OR_PREFIX;
 import static com.android.nfc.cardemulation.AidRoutingManager.AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX;
 import static com.android.nfc.cardemulation.AidRoutingManager.AID_MATCHING_PREFIX_ONLY;
+import static com.android.nfc.cardemulation.AidRoutingManager.CONFIGURE_ROUTING_FAILURE_TABLE_FULL;
+import static com.android.nfc.cardemulation.AidRoutingManager.CONFIGURE_ROUTING_SUCCESS;
 import static com.android.nfc.cardemulation.AidRoutingManager.ROUTE_HOST;
+
 import static com.google.common.truth.Truth.assertThat;
+
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -36,21 +41,20 @@ import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 import com.android.nfc.cardemulation.AidRoutingManager.AidEntry;
 
-import java.io.PrintWriter;
-import java.util.HashMap;
-import java.util.HashSet;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
+
+import java.io.PrintWriter;
+import java.util.HashMap;
+import java.util.HashSet;
 
 @RunWith(AndroidJUnit4.class)
 public class AidRoutingManagerTest {
@@ -191,10 +195,10 @@ public class AidRoutingManagerTest {
   public void testConfigureRoutingWithEmptyMap_ReturnsFalse() {
     manager = new AidRoutingManager();
 
-    boolean result = manager.configureRouting(/* aidMap = */ new HashMap<String, AidEntry>(),
-        /* force = */ false);
+    int result = manager.configureRouting(/* aidMap = */ new HashMap<String, AidEntry>(),
+            /* force = */ false, /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isFalse();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
   }
 
   /**
@@ -223,9 +227,10 @@ public class AidRoutingManagerTest {
     manager.mRouteForAid.put("second#", 0);
     manager.mRouteForAid.put("third", 0);
 
-    boolean result = manager.configureRouting(getAidMap(), /* force = */ false);
+    int result = manager.configureRouting(getAidMap(), /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
     verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
     assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("second#")).isTrue();
@@ -248,7 +253,7 @@ public class AidRoutingManagerTest {
     assertThat(powerCaptor.getAllValues().get(0)).isEqualTo(RegisteredAidCache.POWER_STATE_ALL);
     assertThat(powerCaptor.getAllValues().get(1)).isEqualTo(FIRST_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(FOURTH_AID_ENTRY_POWER);
-    verify(mNfcService).commitRouting();
+    verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
     assertThat(manager.mRouteForAid.size()).isEqualTo(3);
     assertThat(manager.mPowerForAid.size()).isEqualTo(3);
@@ -279,12 +284,13 @@ public class AidRoutingManagerTest {
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
 
-    boolean result = manager.configureRouting(getAidMap(), /* force = */ false);
+    int result = manager.configureRouting(getAidMap(), /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_FAILURE_TABLE_FULL);
     verify(mNfcService, never()).unrouteAids(anyString());
     verify(mNfcService, never()).routeAids(anyString(), anyInt(), anyInt(), anyInt());
-    verify(mNfcService, never()).commitRouting();
+    verify(mNfcService, never()).commitRouting(anyBoolean());
     ExtendedMockito.verify(() -> NfcStatsLog.write(codeCaptor.capture(),
                                                    arg1Captor.capture(),
                                                    arg2Captor.capture(),
@@ -334,9 +340,10 @@ public class AidRoutingManagerTest {
     aidEntry.aidInfo = 2;
     aidMap.put("firstAidEntry*", aidEntry);
 
-    boolean result = manager.configureRouting(aidMap, /* force = */ false);
+    int result = manager.configureRouting(aidMap, /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
 
     verify(mNfcService, times(3)).unrouteAids(unroutedAidsCaptor.capture());
     assertThat(unroutedAidsCaptor.getAllValues().contains("first*")).isTrue();
@@ -386,10 +393,11 @@ public class AidRoutingManagerTest {
     aidEntry.aidInfo = 2;
     aidMap.put("firstAidEntry*", aidEntry);
 
-    boolean result = manager.configureRouting(aidMap, /* force = */ true);
+    int result = manager.configureRouting(aidMap, /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
-    verify(mNfcService).commitRouting();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
+    verify(mNfcService).commitRouting(anyBoolean());
   }
 
   /**
@@ -418,9 +426,10 @@ public class AidRoutingManagerTest {
     manager.mRouteForAid.put("second#", 0);
     manager.mRouteForAid.put("third", 0);
 
-    boolean result = manager.configureRouting(getAidMap(), /* force = */ false);
+    int result = manager.configureRouting(getAidMap(), /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
     verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
     assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("second#")).isTrue();
@@ -447,7 +456,7 @@ public class AidRoutingManagerTest {
     assertThat(powerCaptor.getAllValues().get(1)).isEqualTo(FOURTH_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(THIRD_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(3)).isEqualTo(FIRST_AID_ENTRY_POWER);
-    verify(mNfcService).commitRouting();
+    verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
     assertThat(manager.mRouteForAid.size()).isEqualTo(4);
     assertThat(manager.mPowerForAid.size()).isEqualTo(4);
@@ -481,9 +490,10 @@ public class AidRoutingManagerTest {
     manager.mRouteForAid.put("second#", 0);
     manager.mRouteForAid.put("third", 0);
 
-    boolean result = manager.configureRouting(getAidMap(), /* force = */ false);
+    int result = manager.configureRouting(getAidMap(), /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
     verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
     assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("second")).isTrue();
@@ -514,7 +524,7 @@ public class AidRoutingManagerTest {
     assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(FOURTH_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(3)).isEqualTo(THIRD_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(4)).isEqualTo(FIRST_AID_ENTRY_POWER);
-    verify(mNfcService).commitRouting();
+    verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
     assertThat(manager.mRouteForAid.size()).isEqualTo(4);
     assertThat(manager.mPowerForAid.size()).isEqualTo(4);
@@ -544,9 +554,10 @@ public class AidRoutingManagerTest {
     when(mNfcService.getAidRoutingTableSize()).thenReturn(100);
     manager = new AidRoutingManager();
 
-    boolean result = manager.configureRouting(getAidMap(), /* force = */ false);
+    int result = manager.configureRouting(getAidMap(), /* force = */ false,
+            /* isOverrideOrRecover = */ false);
 
-    assertThat(result).isTrue();
+    assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
     verify(mNfcService, never()).unrouteAids(anyString());
     verify(mNfcService, times(3)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
@@ -564,7 +575,7 @@ public class AidRoutingManagerTest {
     assertThat(powerCaptor.getAllValues().get(0)).isEqualTo(FOURTH_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(1)).isEqualTo(FIRST_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(THIRD_AID_ENTRY_POWER);
-    verify(mNfcService).commitRouting();
+    verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(DEFAULT_ROUTE);
     assertThat(manager.mRouteForAid.size()).isEqualTo(4);
     assertThat(manager.mPowerForAid.size()).isEqualTo(4);

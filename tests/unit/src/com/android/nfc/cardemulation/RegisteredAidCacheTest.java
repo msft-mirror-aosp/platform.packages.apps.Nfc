@@ -292,7 +292,8 @@ public class RegisteredAidCacheTest {
         assertEquals(NON_PAYMENT_SERVICE, nonPaymentResolveInfo.defaultService.getComponent());
         assertEquals(1, nonPaymentResolveInfo.services.size());
         assertEquals(CardEmulation.CATEGORY_OTHER, nonPaymentResolveInfo.category);
-        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false));
+        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false),
+                eq(false));
         HashMap<String, AidRoutingManager.AidEntry> routingEntries =
                 mRoutingEntryMapCaptor.getValue();
         assertTrue(routingEntries.containsKey(PAYMENT_AID_1));
@@ -589,7 +590,8 @@ public class RegisteredAidCacheTest {
         assertEquals(
                 PAYMENT_SERVICE,
                 mRegisteredAidCache.mAidServices.get(PAYMENT_AID_1).get(1).service.getComponent());
-        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false));
+        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false),
+                eq(false));
         HashMap<String, AidRoutingManager.AidEntry> routingEntries =
                 mRoutingEntryMapCaptor.getValue();
         assertTrue(routingEntries.containsKey(NON_PAYMENT_AID_1));
@@ -643,7 +645,8 @@ public class RegisteredAidCacheTest {
 
         verify(mAidRoutingManager).supportsAidPrefixRouting();
         verify(mAidRoutingManager).supportsAidSubsetRouting();
-        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false));
+        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false),
+                eq(false));
         assertFalse(mRegisteredAidCache.isRequiresScreenOnServiceExist());
     }
 
@@ -796,7 +799,7 @@ public class RegisteredAidCacheTest {
             boolean requiresScreenOn,
             int uid,
             boolean isCategoryOtherServiceEnabled,
-            boolean shareRolePriority) {
+            boolean wantsRoleHolderPriority) {
         ApduServiceInfo apduServiceInfo = Mockito.mock(ApduServiceInfo.class);
         when(apduServiceInfo.isOnHost()).thenReturn(onHost);
         when(apduServiceInfo.getAids()).thenReturn(aids);
@@ -806,7 +809,7 @@ public class RegisteredAidCacheTest {
         when(apduServiceInfo.isCategoryOtherServiceEnabled())
                 .thenReturn(isCategoryOtherServiceEnabled);
         when(apduServiceInfo.getComponent()).thenReturn(componentName);
-        when(apduServiceInfo.shareRolePriority()).thenReturn(shareRolePriority);
+        when(apduServiceInfo.wantsRoleHolderPriority()).thenReturn(wantsRoleHolderPriority);
         for (int i = 0; i < aids.size(); i++) {
             String aid = aids.get(i);
             String category = categories.get(i);

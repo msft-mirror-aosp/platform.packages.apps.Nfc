@@ -8,6 +8,7 @@ cc_library_static {
     defaults: ["libnfc_nci_jni_defaults"],
     visibility: [
         "//packages/apps/Nfc/nci/jni",
+        "//packages/modules/Nfc:__subpackages__",
     ],
 }
 
@@ -96,6 +97,12 @@ cc_defaults {
         // does not ship one in /product
         "libnfc-nci.conf-default",
     ],
+    min_sdk_version: "35", // Make it 36 once available.
+    visibility: [
+        "//cts:__subpackages__",
+        "//packages/apps/Nfc:__subpackages__",
+        "//packages/modules/Nfc:__subpackages__",
+    ],
 }
 
 cc_test {
@@ -145,7 +152,7 @@ cc_test {
     ],
 
     include_dirs: [
-        "packages/apps/Nfc/nci/jni",
+        ".",
         "system/nfc/src/include",
         "system/nfc/src/gki/common",
         "system/nfc/src/gki/ulinux",
@@ -171,5 +178,4 @@ cc_test {
         },
     },
     auto_gen_config: true,
-    min_sdk_version: "current",
 }

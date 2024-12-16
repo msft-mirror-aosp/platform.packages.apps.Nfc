@@ -16,9 +16,9 @@
 
 package com.android.nfc.cardemulation;
 
+import android.annotation.FlaggedApi;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.FlaggedApi;
 import android.annotation.TargetApi;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
@@ -432,12 +432,18 @@ public class HostEmulationManager {
             if (packageManager == null) {
                 return false;
             }
-            for (Integer uid : foregroundUtils.getForegroundUids()) {
-                for (String packageName :  packageManager.getPackagesForUid(uid)) {
-                    if (packageName != null) {
-                        for (String servicePackageName : mServicePackageNames) {
-                            if (Objects.equals(servicePackageName, packageName)) {
-                                return true;
+            List<Integer> uids = foregroundUtils.getForegroundUids();
+            if (uids != null && mServicePackageNames != null) {
+                for (Integer uid : uids) {
+                    String[] packageNames = packageManager.getPackagesForUid(uid);
+                    if (packageNames != null) {
+                        for (String packageName :  packageNames) {
+                            if (packageName != null) {
+                                for (String servicePackageName : mServicePackageNames) {
+                                    if (Objects.equals(servicePackageName, packageName)) {
+                                        return true;
+                                    }
+                                }
                             }
                         }
                     }
@@ -781,10 +787,9 @@ public class HostEmulationManager {
                         mStatsdUtils.setCardEmulationEventCategory(resolveInfo.category);
                         mStatsdUtils.setCardEmulationEventUid(defaultServiceInfo.getUid());
                     }
-
                     if ((defaultServiceInfo.requiresUnlock()
                             || NfcService.getInstance().isSecureNfcEnabled())
-                          && mKeyguard.isKeyguardLocked()) {
+                          && NfcInjector.getInstance().isDeviceLocked()) {
                         NfcService.getInstance().sendRequireUnlockIntent();
                         NfcService.getInstance().sendData(AID_NOT_FOUND);
                         if (DBG) Log.d(TAG, "requiresUnlock()! show toast");
@@ -1054,7 +1059,7 @@ public class HostEmulationManager {
 
     void sendDataToServiceLocked(Messenger service, byte[] data) {
         mState = STATE_XFER;
-        if (service != mActiveService) {
+        if (!Objects.equals(service, mActiveService)) {
             sendDeactivateToActiveServiceLocked(HostApduService.DEACTIVATION_DESELECTED);
             mActiveService = service;
             if (service.equals(mPaymentService)) {
@@ -1139,8 +1144,10 @@ public class HostEmulationManager {
         Log.d(TAG, "Unbinding payment service");
         if (mPaymentServiceBound) {
             try {
-                if (!isMultipleBindingSupported()) {
-                    mContext.unbindService(mPaymentConnection);
+                mContext.unbindService(mPaymentConnection);
+                if (isMultipleBindingSupported()) {
+                    mComponentNameToConnectionsMap.remove(
+                        new ComponentNameAndUser(mPaymentServiceUserId, mPaymentServiceName));
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Failed to unbind payment service: " + mPaymentServiceName, e);
