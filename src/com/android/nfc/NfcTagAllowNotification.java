@@ -24,6 +24,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.nfc.NfcAdapter;
 
+import java.util.List;
+
 /**
  * This class handles the Notification Manager for the tag app allowlist info
  */
@@ -33,7 +35,7 @@ public class NfcTagAllowNotification {
     private NotificationChannel mNotificationChannel;
     public static final int NOTIFICATION_ID_NFC = -1000003;
     Context mContext;
-    String mAppName;
+    List<String> mAppNames;
 
     /**
      * Constructor
@@ -41,25 +43,41 @@ public class NfcTagAllowNotification {
      * @param ctx The context to use to obtain access to the resources
      * @param appName The tag application name
      */
-    public NfcTagAllowNotification(Context ctx, String appName) {
+    public NfcTagAllowNotification(Context ctx, List<String> appNames) {
         mContext = ctx;
-        mAppName = appName;
+        mAppNames = appNames;
     }
 
     /**
      * Start the notification.
      */
     public void startNotification() {
-        Intent infoIntent = new Intent().setAction(NfcAdapter.ACTION_CHANGE_TAG_INTENT_PREFERENCE);
+        if (mAppNames.size() == 0) return;
+
         Notification.Builder builder = new Notification.Builder(mContext, NFC_NOTIFICATION_CHANNEL);
-        String formatString = mContext.getString(R.string.nfc_tag_alert_title);
-        builder.setContentTitle(String.format(formatString, mAppName))
-                .setContentText(mContext.getString(R.string.nfc_tag_alert_message))
+        String formatString;
+        if (mAppNames.size() == 1) {
+            formatString = mContext.getString(R.string.tag_app_alert_message);
+            builder.setContentText(String.format(formatString, mAppNames.get(0)));
+        } else if (mAppNames.size() > 1) {
+            StringBuilder sb = new StringBuilder();
+            formatString = mContext.getString(R.string.tag_app_alert_message_multiple);
+            mAppNames.forEach(name -> sb.append(String.format("\n%s", name)));
+            String message = String.format(formatString, sb.toString());
+            builder.setContentText(message)
+                    .setStyle(new Notification.BigTextStyle().bigText(message));
+        }
+        Intent infoIntent = new Intent().setAction(NfcAdapter.ACTION_CHANGE_TAG_INTENT_PREFERENCE);
+        PendingIntent pIntent = PendingIntent.getActivity(mContext, 0, infoIntent,
+                PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+        Notification.Action action = new Notification.Action.Builder(null,
+                mContext.getString(R.string.tag_app_alert_action_button), pIntent).build();
+        builder.setContentTitle(mContext.getString(R.string.tag_app_alert_title))
                 .setSmallIcon(R.drawable.nfc_icon)
                 .setPriority(NotificationManager.IMPORTANCE_DEFAULT)
                 .setAutoCancel(true)
-                .setContentIntent(PendingIntent.getActivity(mContext, 0, infoIntent,
-                      PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE));
+                .addAction(action)
+                .setContentIntent(pIntent);
         mNotificationChannel = new NotificationChannel(NFC_NOTIFICATION_CHANNEL,
                 mContext.getString(R.string.nfcUserLabel), NotificationManager.IMPORTANCE_DEFAULT);
         NotificationManager notificationManager =
