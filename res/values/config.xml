@@ -69,4 +69,5 @@
     <bool name="removal_detection_default">false</bool>
     <!-- Waiting time for removal detection -->
     <integer name="removal_detection_waiting_time">19</integer>
+    <integer name="inactive_presence_check_allowed_time">20000</integer>
 </resources>

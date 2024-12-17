@@ -703,4 +703,7 @@ public class NativeNfcManager implements DeviceHost {
         mListener.onEndpointRemoved(reason);
 
     }
+
+    @Override
+    public native boolean isRemovalDetectionInPollModeSupported();
 }

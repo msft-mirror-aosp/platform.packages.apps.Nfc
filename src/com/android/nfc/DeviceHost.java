@@ -77,6 +77,8 @@ public interface DeviceHost {
         void startPresenceChecking(int presenceCheckDelay,
                                    @Nullable TagDisconnectedCallback callback);
         void stopPresenceChecking();
+        boolean isPresenceCheckStopped();
+        void prepareForRemovalDetectionMode();
 
         int[] getTechList();
         void removeTechnology(int tech); // TODO remove this one
@@ -317,4 +319,5 @@ public interface DeviceHost {
      * Get the active NFCEE list
      */
     public Map<String, Integer> dofetchActiveNfceeList();
+    public boolean isRemovalDetectionInPollModeSupported();
 }

@@ -71,6 +71,8 @@ public class NativeNfcTag implements TagEndpoint {
 
     private PresenceCheckWatchdog mWatchdog;
 
+    private boolean mIsRemovalDetectionModeReq = false;
+
     class PresenceCheckWatchdog extends Thread {
 
         private final int watchdogTimeout;
@@ -85,6 +87,10 @@ public class NativeNfcTag implements TagEndpoint {
                 int presenceCheckDelay, @Nullable DeviceHost.TagDisconnectedCallback callback) {
             watchdogTimeout = presenceCheckDelay;
             tagDisconnectedCallback = callback;
+        }
+
+        public synchronized int getPresenceCheckTimeout() {
+            return watchdogTimeout;
         }
 
         public synchronized void pause() {
@@ -139,14 +145,26 @@ public class NativeNfcTag implements TagEndpoint {
             synchronized (NativeNfcTag.this) {
                 mIsPresent = false;
             }
-            // Restart the polling loop
 
-            Log.d(TAG, "Tag lost, restarting polling loop");
-            doDisconnect();
+            if (!isRemovalDetectionModeRequested()) {
+                // Restart the polling loop
+                Log.d(TAG, "Tag lost, restarting polling loop");
+                doDisconnect();
+            }
             if (tagDisconnectedCallback != null) {
                 tagDisconnectedCallback.onTagDisconnected();
             }
             if (DBG) Log.d(TAG, "Stopping background presence check");
+        }
+    }
+
+    private synchronized boolean isRemovalDetectionModeRequested() {
+        if (mIsRemovalDetectionModeReq) {
+            Log.d(TAG, "Poll Removal Detection Mode Requested");
+            mIsRemovalDetectionModeReq = false;
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -214,6 +232,28 @@ public class NativeNfcTag implements TagEndpoint {
     }
 
     @Override
+    public boolean isPresenceCheckStopped() {
+        PresenceCheckWatchdog watchdog;
+
+        synchronized (this) {
+            watchdog = mWatchdog;
+        }
+        if (watchdog == null) {
+           return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void prepareForRemovalDetectionMode() {
+        synchronized (this) {
+            mIsRemovalDetectionModeReq = true;
+        }
+        doTerminatePresenceCheckThread(true);
+        clearConnectedContext();
+    }
+
+    @Override
     public synchronized void stopPresenceChecking() {
         mIsPresent = false;
         if (mWatchdog != null) {
@@ -242,9 +282,8 @@ public class NativeNfcTag implements TagEndpoint {
 
     native boolean doDisconnect();
 
-    @Override
-    public boolean disconnect() {
-        boolean result = false;
+    private boolean doTerminatePresenceCheckThread(boolean disableCallback) {
+
         PresenceCheckWatchdog watchdog;
         synchronized (this) {
             mIsPresent = false;
@@ -252,7 +291,7 @@ public class NativeNfcTag implements TagEndpoint {
         }
         if (watchdog != null) {
             // Watchdog has already disconnected or will do it
-            watchdog.end(false);
+            watchdog.end(disableCallback);
             try {
                 watchdog.join();
             } catch (InterruptedException e) {
@@ -261,14 +300,24 @@ public class NativeNfcTag implements TagEndpoint {
             synchronized (this) {
                 mWatchdog = null;
             }
-            result = true;
-        } else {
-            result = doDisconnect();
+            return true;
         }
-
+        return false;
+    }
+    private void clearConnectedContext() {
         mConnectedTechIndex = -1;
         mConnectedHandle = -1;
         mClassifyT2T = true;
+    }
+
+    @Override
+    public boolean disconnect() {
+        boolean result = false;
+        result = doTerminatePresenceCheckThread(false);
+        if (!result) {
+            result = doDisconnect();
+        }
+        clearConnectedContext();
         return result;
     }
 
