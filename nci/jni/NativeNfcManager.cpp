@@ -2374,6 +2374,21 @@ static jboolean nfcManager_doDetectEpRemoval(JNIEnv* e, jobject o,
   return stat;
 }
 
+/*******************************************************************************
+**
+** Function:        nfcManager_isRemovalDetectionSupported
+**
+** Description:     Check if the Removal Detection in Poll mode is supported.
+**                  e: JVM environment.
+**                  o: Java object.
+**
+** Returns:         True if supports 'Removal Detection Mode'
+**
+*******************************************************************************/
+static jboolean nfcManager_isRemovalDetectionSupported(JNIEnv* e, jobject o) {
+  return NFA_IsRfRemovalDetectionSupported();
+}
+
 static void nfcManager_updateIsoDepProtocolRoute(JNIEnv* e, jobject o,
                                                  jint route) {
   LOG(DEBUG) << StringPrintf("%s: route=0x%X", __func__, route);
@@ -2652,6 +2667,8 @@ static JNINativeMethod gMethods[] = {
      (void*)ncfManager_nativeEnableVendorNciNotifications},
     {"injectNtf", "([B)V", (void*)nfcManager_injectNtf},
     {"doDetectEpRemoval", "(I)Z", (void*)nfcManager_doDetectEpRemoval},
+    {"isRemovalDetectionInPollModeSupported", "()Z",
+     (void*)nfcManager_isRemovalDetectionSupported},
 };
 
 /*******************************************************************************
