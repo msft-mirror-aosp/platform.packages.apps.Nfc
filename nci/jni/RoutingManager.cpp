@@ -380,11 +380,11 @@ bool RoutingManager::removeAidRouting(const uint8_t* aid, uint8_t aidLen) {
   LOG(DEBUG) << fn << ": enter";
 
   if (aidLen != 0) {
-    LOG(DEBUG) << StringPrintf("%s : len=%d, 0x%x 0x%x 0x%x 0x%x 0x%x", fn,
-                               aidLen, *(aid), *(aid + 1), *(aid + 2),
-                               *(aid + 3), *(aid + 4));
+    LOG(DEBUG) << StringPrintf(": len=%d, 0x%x 0x%x 0x%x 0x%x 0x%x", aidLen,
+                               *(aid), *(aid + 1), *(aid + 2), *(aid + 3),
+                               *(aid + 4));
   } else {
-    LOG(DEBUG) << fn << "Remove Empty aid";
+    LOG(DEBUG) << fn << ": Remove Empty aid";
   }
 
   SyncEventGuard guard(mAidAddRemoveEvent);
@@ -1350,65 +1350,44 @@ void RoutingManager::eeSetPwrAndLinkCtrl(uint8_t config) {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        clearRoutingEntry
+**
+** Description:     Receive execution environment-related events from stack.
+**                  event: Event code.
+**                  eventData: Event data.
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::clearRoutingEntry(int clearFlags) {
   static const char fn[] = "RoutingManager::clearRoutingEntry";
 
-  LOG(DEBUG) << StringPrintf("%s: Enter . Clear flags = %d", fn, clearFlags);
+  LOG(DEBUG) << StringPrintf("%s;  clearFlags = %x", fn, clearFlags);
   tNFA_STATUS nfaStat = NFA_STATUS_FAILED;
+  bool clear_tech = false, clear_proto = false, clear_sc = false;
 
   if (clearFlags & CLEAR_AID_ENTRIES) {
-    LOG(DEBUG) << StringPrintf("clear all of aid based routing");
-    uint8_t clearAID[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    uint8_t aidLen = 0x08;
-    RoutingManager::getInstance().removeAidRouting(clearAID, aidLen);
+    LOG(DEBUG) << StringPrintf("%s; clear all of aid based routing", fn);
+    RoutingManager::getInstance().removeAidRouting((uint8_t*)NFA_REMOVE_ALL_AID,
+                                                   NFA_REMOVE_ALL_AID_LEN);
   }
 
   if (clearFlags & CLEAR_PROTOCOL_ENTRIES) {
-    for (uint8_t i = 0; i < mEeInfo.num_ee; i++) {
-      tNFA_HANDLE eeHandle = mEeInfo.ee_disc_info[i].ee_handle;
-      {
-        SyncEventGuard guard(mRoutingEvent);
-        nfaStat =
-            NFA_EeClearDefaultProtoRouting(eeHandle, NFA_PROTOCOL_MASK_ISO_DEP);
-        if (nfaStat == NFA_STATUS_OK) {
-          mRoutingEvent.wait();
-        }
-      }
-    }
-
-    {
-      SyncEventGuard guard(mRoutingEvent);
-      nfaStat =
-          NFA_EeClearDefaultProtoRouting(NFC_DH_ID, NFA_PROTOCOL_MASK_ISO_DEP);
-      if (nfaStat == NFA_STATUS_OK) {
-        mRoutingEvent.wait();
-      }
-    }
+    clear_proto = true;
   }
 
   if (clearFlags & CLEAR_TECHNOLOGY_ENTRIES) {
-    for (uint8_t i = 0; i < mEeInfo.num_ee; i++) {
-      tNFA_HANDLE eeHandle = mEeInfo.ee_disc_info[i].ee_handle;
-      {
-        SyncEventGuard guard(mRoutingEvent);
-        nfaStat = NFA_EeClearDefaultTechRouting(
-            eeHandle, (NFA_TECHNOLOGY_MASK_A | NFA_TECHNOLOGY_MASK_B |
-                       NFA_TECHNOLOGY_MASK_F));
-        if (nfaStat == NFA_STATUS_OK) {
-          mRoutingEvent.wait();
-        }
-      }
-    }
+    clear_tech = true;
+  }
 
-    {
-      SyncEventGuard guard(mRoutingEvent);
-      nfaStat = NFA_EeClearDefaultTechRouting(
-          NFC_DH_ID, (NFA_TECHNOLOGY_MASK_A | NFA_TECHNOLOGY_MASK_B |
-                      NFA_TECHNOLOGY_MASK_F));
-      if (nfaStat == NFA_STATUS_OK) {
-        mRoutingEvent.wait();
-      }
-    }
+  if (clearFlags & CLEAR_SC_ENTRIES) {
+    clear_sc = true;
+  }
+
+  if (clearFlags > CLEAR_AID_ENTRIES) {
+    NFA_EeClearRoutingTable(clear_tech, clear_proto, clear_sc);
   }
 }
 
