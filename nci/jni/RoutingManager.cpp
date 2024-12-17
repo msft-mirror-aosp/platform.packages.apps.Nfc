@@ -763,6 +763,7 @@ void RoutingManager::updateDefaultProtocolRoute() {
     nfaStat = NFA_EeClearDefaultProtoRouting(NFC_DH_ID, protoMask);
     nfaStat = NFA_EeSetDefaultProtoRouting(
         NFC_DH_ID, protoMask, 0, 0, mSecureNfcEnabled ? 0 : protoMask, 0, 0);
+    mDefaultIsoDepRoute = NFC_DH_ID;
   }
   if (nfaStat == NFA_STATUS_OK)
     LOG(DEBUG) << fn << ": Succeed to register default ISO-DEP route";
