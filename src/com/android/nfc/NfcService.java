@@ -62,7 +62,6 @@ import android.nfc.Entry;
 import android.nfc.ErrorCodes;
 import android.nfc.FormatException;
 import android.nfc.IAppCallback;
-import android.nfc.IT4tNdefNfcee;
 import android.nfc.INfcAdapter;
 import android.nfc.INfcAdapterExtras;
 import android.nfc.INfcCardEmulation;
@@ -74,13 +73,14 @@ import android.nfc.INfcTag;
 import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcVendorNciCallback;
 import android.nfc.INfcWlcStateListener;
+import android.nfc.IT4tNdefNfcee;
 import android.nfc.ITagRemovedCallback;
 import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAntennaInfo;
 import android.nfc.NfcOemExtension;
-import android.nfc.T4tNdefNfcee;
 import android.nfc.OemLogItems;
+import android.nfc.T4tNdefNfcee;
 import android.nfc.T4tNdefNfceeCcFileInfo;
 import android.nfc.Tag;
 import android.nfc.TechListParcel;
@@ -367,8 +367,12 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     HashMap<Integer, HashMap<String, Boolean>> mTagAppPrefList =
             new HashMap<Integer, HashMap<String, Boolean>>();
 
-    // Tag app preference blocked list from overlay.
-    List<String> mTagAppDefaultBlockList = new ArrayList<String>();
+    // Tag app blocklist hash
+    static final String PREF_TAG_APP_BLOCK_LIST_HASH = "tag_app_block_list_hash";
+    // Tag app blocklist hash default
+    static final int PREF_TAG_APP_BLOCK_LIST_HASH_DEFAULT = 0;
+    // Tag app preference blocked list.
+    static final List<String> TAG_APP_BLOCKLIST = new ArrayList<String>();
 
     // cached version of installed packages requesting Android.permission.NFC_TRANSACTION_EVENTS
     // for current user and profiles. The Integer part is the userId.
@@ -503,6 +507,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     boolean mIsVrModeEnabled;
 
     private final boolean mIsTagAppPrefSupported;
+    private int mTagAppBlockListHash;
 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
@@ -1206,12 +1211,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         mIsTagAppPrefSupported =
             mContext.getResources().getBoolean(R.bool.tag_intent_app_pref_supported);
-        if (mIsTagAppPrefSupported) {
-            // Get default blocked package list from resource file overlay
-            mTagAppDefaultBlockList = new ArrayList<>(
-                    Arrays.asList(mContext.getResources().getStringArray(
-                            R.array.tag_intent_blocked_app_list)));
-        }
+        mTagAppBlockListHash = mPrefs.getInt(PREF_TAG_APP_BLOCK_LIST_HASH,
+                PREF_TAG_APP_BLOCK_LIST_HASH_DEFAULT);
+
+        // Get default blocked package list from resource file
+        TAG_APP_BLOCKLIST.addAll(
+                Arrays.asList(mContext.getResources().getStringArray(
+                        R.array.tag_intent_blocked_app_list)));
 
         Uri uri = Settings.Global.getUriFor(Constants.SETTINGS_SATELLITE_MODE_ENABLED);
         if (uri == null) {
@@ -1305,6 +1311,13 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     private void initTagAppPrefList() {
         if (!mIsTagAppPrefSupported) return;
+        boolean force = mTagAppBlockListHash != TAG_APP_BLOCKLIST.hashCode();
+        if (force) {
+            mTagAppBlockListHash = TAG_APP_BLOCKLIST.hashCode();
+            mPrefsEditor.putInt(PREF_TAG_APP_BLOCK_LIST_HASH,
+                    mTagAppBlockListHash);
+            mPrefsEditor.apply();
+        }
         mTagAppPrefList.clear();
         mTagAppPrefListPrefs = mContext.getSharedPreferences(PREF_TAG_APP_LIST,
                 Context.MODE_PRIVATE);
@@ -1329,9 +1342,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         if (DBG) Log.d(TAG, "uid:" + userId + "key:" + key + ": " + value);
                     }
                 }
-                // Put default blocked pkgs if not exist in the list
-                for (String pkg : mTagAppDefaultBlockList) {
-                    if (!map.containsKey(pkg) && isPackageInstalled(pkg, userId)) {
+                // Put default blocked pkgs
+                for (String pkg : TAG_APP_BLOCKLIST) {
+                    if ((force || !map.containsKey(pkg))
+                            && isPackageInstalled(pkg, userId)) {
                         map.put(pkg, false);
                         changed = true;
                     }
@@ -1387,7 +1401,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 if (action.equals(Intent.ACTION_PACKAGE_ADDED)) {
                     HashMap<String, Boolean> map =
                             mTagAppPrefList.getOrDefault(userId, new HashMap<>());
-                    for (String pkg : mTagAppDefaultBlockList) {
+                    for (String pkg : TAG_APP_BLOCKLIST) {
                         if (!map.containsKey(pkg) && isPackageInstalled(pkg, userId)) {
                             map.put(pkg, false);
                             changed = true;
