@@ -13,7 +13,7 @@
     <string name="cancel" msgid="61873902552555096">"Скасаваць"</string>
     <string name="beam_tap_to_view" msgid="7430394753262448349">"Краніце для прагляду"</string>
     <string name="beam_handover_not_supported" msgid="4083165921751489015">"Прылада атрымальніка не падтрымлівае перадачу вялікіх файлаў праз Beam."</string>
-    <string name="beam_try_again" msgid="3364677301009783455">"Зноў аб\'яднаць прылады"</string>
+    <string name="beam_try_again" msgid="3364677301009783455">"Зноў аб’яднаць прылады"</string>
     <string name="beam_busy" msgid="5253335587620612576">"Beam зараз заняты. Паспрабуйце яшчэ раз пасля завяршэння папярэдняй перадачы."</string>
     <string name="device" msgid="4459621591392478151">"прылада"</string>
     <string name="connecting_peripheral" msgid="1296182660525660935">"Падлучаецца <xliff:g id="DEVICE_NAME">%1$s</xliff:g>"</string>
@@ -53,6 +53,8 @@
     <string name="tag_dispatch_failed" msgid="3562984995049738400">"Няма праграм, якія падтрымліваюцца для гэтага цэтліка NFC"</string>
     <string name="nfc_blocking_alert_title" msgid="1086172436984457085">"Магчыма, NFC заблакіраваны"</string>
     <string name="nfc_blocking_alert_message" msgid="7003156052570107490">"Націсніце, каб даведацца, як вырашыць праблему."</string>
+    <string name="nfc_tag_alert_title" msgid="197917719004551090">"Праграма \"<xliff:g id="APPNAME">%1$s</xliff:g>\" запушчана з дапамогай NFC"</string>
+    <string name="nfc_tag_alert_message" msgid="3140894528184634873">"Націсніце, каб даведацца, як адключыць гэта."</string>
     <string name="nfc_logging_alert_title" msgid="5300867034660942987">"Даныя NFC запісваюцца"</string>
     <string name="nfc_logging_alert_message" msgid="1550187184825467942">"Націсніце, каб спыніць запіс."</string>
     <string name="title_package_enabling_nfc" msgid="5736481508428918024">"Даць пакету \"<xliff:g id="PKG">%1$s</xliff:g>\" дазвол уключыць NFC?"</string>

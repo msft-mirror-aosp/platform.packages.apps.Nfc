@@ -15,16 +15,22 @@
  */
 package com.android.nfc.cardemulation;
 
+import android.annotation.IntDef;
+import android.nfc.NfcOemExtension;
 import android.sysprop.NfcProperties;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
+
+import androidx.annotation.VisibleForTesting;
 
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -34,7 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import androidx.annotation.VisibleForTesting;
 
 public class AidRoutingManager {
 
@@ -64,7 +69,9 @@ public class AidRoutingManager {
     final byte[] mOffHostRouteEse;
     // Used for backward compatibility in case application doesn't specify the
     // SE
-    final int mDefaultOffHostRoute;
+    int mDefaultOffHostRoute;
+
+    int mDefaultFelicaRoute;
 
     // How the NFC controller can match AIDs in the routing table;
     // see AID_MATCHING constants
@@ -95,23 +102,19 @@ public class AidRoutingManager {
 
     public AidRoutingManager() {
         mDefaultRoute = mRoutingOptionManager.getDefaultRoute();
-        if (DBG)
-            Log.d(TAG, "mDefaultRoute=0x" + Integer.toHexString(mDefaultRoute));
+        if (DBG) Log.d(TAG, "mDefaultRoute=0x" + Integer.toHexString(mDefaultRoute));
         mDefaultOffHostRoute = mRoutingOptionManager.getDefaultOffHostRoute();
-        if (DBG)
-            Log.d(TAG, "mDefaultOffHostRoute=0x" + Integer.toHexString(mDefaultOffHostRoute));
+        if (DBG) Log.d(TAG, "mDefaultOffHostRoute=0x" + Integer.toHexString(mDefaultOffHostRoute));
+        mDefaultFelicaRoute = mRoutingOptionManager.getDefaultFelicaRoute();
+        if (DBG) Log.d(TAG, "mDefaultFelicaRoute=0x" + Integer.toHexString(mDefaultFelicaRoute));
         mOffHostRouteUicc = mRoutingOptionManager.getOffHostRouteUicc();
-        if (DBG)
-            Log.d(TAG, "mOffHostRouteUicc=" + Arrays.toString(mOffHostRouteUicc));
+        if (DBG) Log.d(TAG, "mOffHostRouteUicc=" + Arrays.toString(mOffHostRouteUicc));
         mOffHostRouteEse = mRoutingOptionManager.getOffHostRouteEse();
-        if (DBG)
-          Log.d(TAG, "mOffHostRouteEse=" + Arrays.toString(mOffHostRouteEse));
+        if (DBG) Log.d(TAG, "mOffHostRouteEse=" + Arrays.toString(mOffHostRouteEse));
         mAidMatchingSupport = mRoutingOptionManager.getAidMatchingSupport();
-        if (DBG)
-            Log.d(TAG, "mAidMatchingSupport=0x" + Integer.toHexString(mAidMatchingSupport));
+        if (DBG) Log.d(TAG, "mAidMatchingSupport=0x" + Integer.toHexString(mAidMatchingSupport));
         mDefaultIsoDepRoute = mRoutingOptionManager.getDefaultIsoDepRoute();
-        if (DBG)
-            Log.d(TAG, "mDefaultIsoDepRoute=0x" + Integer.toHexString(mDefaultIsoDepRoute));
+        if (DBG) Log.d(TAG, "mDefaultIsoDepRoute=0x" + Integer.toHexString(mDefaultIsoDepRoute));
     }
 
     public boolean supportsAidPrefixRouting() {
@@ -272,15 +275,47 @@ public class AidRoutingManager {
         }
     }
 
-    public boolean configureRouting(HashMap<String, AidEntry> aidMap, boolean force) {
+    public static final int CONFIGURE_ROUTING_SUCCESS = 0;
+    public static final int CONFIGURE_ROUTING_FAILURE_TABLE_FULL = 1;
+    public static final int CONFIGURE_ROUTING_FAILURE_UNKNOWN = 2;
+    @IntDef(flag = true, value = {
+        CONFIGURE_ROUTING_SUCCESS,
+        CONFIGURE_ROUTING_FAILURE_TABLE_FULL,
+        CONFIGURE_ROUTING_FAILURE_UNKNOWN,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ConfigureRoutingResult {}
+
+    /**
+     * Configures the routing table with the given {@code aidMap}.
+     *
+     * @param aidMap The map of AIDs to their corresponding {@link AidEntry}.
+     * @param force Whether to force the configuration even if the routing table is unchanged.
+     * @param isOverrideOrRecover Whether the configuration is requested when override/recover
+     *                            routing table.
+     * @return The failure reason if the configuration failed.
+     */
+    @ConfigureRoutingResult
+    public int configureRouting(HashMap<String, AidEntry> aidMap, boolean force,
+            boolean isOverrideOrRecover) {
         boolean aidRouteResolved = false;
         HashMap<String, AidEntry> aidRoutingTableCache = new HashMap<String, AidEntry>(aidMap.size());
         ArrayList<Integer> seList = new ArrayList<Integer>();
+
+        int prevDefaultRoute = mDefaultRoute;
+
         if (mRoutingOptionManager.isRoutingTableOverrided()) {
             mDefaultRoute = mRoutingOptionManager.getOverrideDefaultRoute();
+            mDefaultIsoDepRoute = mRoutingOptionManager.getOverrideDefaultIsoDepRoute();
+            mDefaultOffHostRoute = mRoutingOptionManager.getOverrideDefaultOffHostRoute();
+            mDefaultFelicaRoute = mRoutingOptionManager.getOverrideDefaultFelicaRoute();
         } else {
             mDefaultRoute = mRoutingOptionManager.getDefaultRoute();
+            mDefaultIsoDepRoute = mRoutingOptionManager.getDefaultIsoDepRoute();
+            mDefaultOffHostRoute = mRoutingOptionManager.getDefaultOffHostRoute();
+            mDefaultFelicaRoute = mRoutingOptionManager.getDefaultFelicaRoute();
         }
+
         boolean isPowerStateUpdated = false;
         seList.add(mDefaultRoute);
         if (mDefaultRoute != ROUTE_HOST) {
@@ -323,10 +358,17 @@ public class AidRoutingManager {
             infoForAid.put(aid, aidType);
         }
 
+        if (!mRoutingOptionManager.isAutoChangeEnabled() && seList.size() >= 2) {
+            Log.d(TAG, "AutoRouting is not enabled, make only one item in list");
+            int firstRoute = seList.get(0);
+            seList.clear();
+            seList.add(firstRoute);
+        }
+
         synchronized (mLock) {
             if (routeForAid.equals(mRouteForAid) && powerForAid.equals(mPowerForAid) && !force) {
                 if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
-                return false;
+                return CONFIGURE_ROUTING_SUCCESS;
             }
 
             // Otherwise, update internal structures and commit new routing
@@ -464,7 +506,7 @@ public class AidRoutingManager {
                 }
 
                 // Register additional offhost AIDs when their support power states are
-                // differernt from the default route entry
+                // different from the default route entry
                 if (mDefaultRoute != ROUTE_HOST) {
                     int default_route_power_state = RegisteredAidCache.POWER_STATE_ALL;
                     if (NfcService.getInstance().getNciVersion()
@@ -499,24 +541,33 @@ public class AidRoutingManager {
 
             boolean mIsUnrouteRequired = checkUnrouteAid(prevRouteForAid, prevPowerForAid);
             boolean isRouteTableUpdated = checkRouteAid(prevRouteForAid, prevPowerForAid);
+            boolean isRoutingOptionUpdated = (prevDefaultRoute != mDefaultRoute);
 
-            if (isPowerStateUpdated || isRouteTableUpdated || mIsUnrouteRequired || force) {
-                if (aidRouteResolved == true) {
-                    commit(aidRoutingTableCache);
+            if (isPowerStateUpdated || isRouteTableUpdated || mIsUnrouteRequired
+                    || isRoutingOptionUpdated || force) {
+                if (aidRouteResolved) {
+                    sendRoutingTable(isRoutingOptionUpdated, force);
+                    int result = commit(aidRoutingTableCache, isOverrideOrRecover);
+                    if (result != NfcOemExtension.COMMIT_ROUTING_STATUS_OK) {
+                        NfcStatsLog.write(NfcStatsLog.NFC_ERROR_OCCURRED,
+                                NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__UNKNOWN, 0, 0);
+                        return CONFIGURE_ROUTING_FAILURE_UNKNOWN;
+                    }
                 } else {
                     NfcStatsLog.write(NfcStatsLog.NFC_ERROR_OCCURRED,
                             NfcStatsLog.NFC_ERROR_OCCURRED__TYPE__AID_OVERFLOW, 0, 0);
                     Log.e(TAG, "RoutingTable unchanged because it's full, not updating");
+                    return CONFIGURE_ROUTING_FAILURE_TABLE_FULL;
                 }
             } else {
                 Log.e(TAG, "All AIDs routing to mDefaultRoute, RoutingTable"
                         + " update is not required");
             }
         }
-        return true;
+        return CONFIGURE_ROUTING_SUCCESS;
     }
 
-    private void commit(HashMap<String, AidEntry> routeCache ) {
+    private int commit(HashMap<String, AidEntry> routeCache, boolean isOverrideOrRecover) {
 
         if(routeCache != null) {
 
@@ -535,8 +586,32 @@ public class AidRoutingManager {
         }
 
         // And finally commit the routing
-        NfcService.getInstance().commitRouting();
+        return NfcService.getInstance().commitRouting(isOverrideOrRecover);
     }
+
+    private void sendRoutingTable(boolean optionChanged, boolean force) {
+        Log.d(TAG, "sendRoutingTable");
+        if (!mRoutingOptionManager.isRoutingTableOverrided()) {
+            if (mDefaultRoute != ROUTE_HOST) {
+                Log.d(TAG, "Protocol and Technology entries need to sync with"
+                    + " mDefaultRoute: " + mDefaultRoute);
+                mDefaultIsoDepRoute = mDefaultRoute;
+                mDefaultOffHostRoute = mDefaultRoute;
+                mDefaultFelicaRoute = mDefaultRoute;
+            } else {
+                Log.d(TAG, "Default route is DeviceHost, use previous protocol, technology");
+            }
+
+            if (force || optionChanged) {
+                NfcService.getInstance().setIsoDepProtocolRoute(mDefaultIsoDepRoute);
+                NfcService.getInstance().setTechnologyABFRoute(mDefaultOffHostRoute,
+                        mDefaultFelicaRoute);
+            }
+        } else {
+            Log.d(TAG, "Routing table is override, Do not send the protocol, tech");
+        }
+    }
+
 
     /**
      * This notifies that the AID routing table in the controller

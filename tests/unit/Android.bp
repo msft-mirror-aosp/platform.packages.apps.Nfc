@@ -9,9 +9,9 @@ android_test {
     certificate: "platform",
 
     libs: [
-        "android.test.runner",
-        "android.test.base",
-        "android.test.mock",
+        "android.test.runner.stubs.system",
+        "android.test.base.stubs.system",
+        "android.test.mock.stubs.system",
         "framework-nfc.impl",
         "unsupportedappusage",
     ],
@@ -20,6 +20,7 @@ android_test {
         "androidx.test.core",
         "androidx.test.rules",
         "androidx.test.ext.junit",
+        "com.android.nfc.flags-aconfig-java",
         "mockito-target-extended-minus-junit4",
         "frameworks-base-testutils",
         "truth",
@@ -27,7 +28,6 @@ android_test {
         "androidx.appcompat_appcompat",
         "com.google.android.material_material",
         "nfc-event-log-proto",
-        "nfc_flags_lib",
         "flag-junit",
         "platform-test-annotations",
         "testables",
@@ -45,12 +45,17 @@ android_test {
         "src/**/*.java",
         // TODO(b/263565193): Temp hack until NFC APK can link against module_current.
         ":framework-nfc-updatable-sources",
+        ":framework-nfc-non-updatable-sources",
         ":nfc-sources",
     ],
 
     platform_apis: true,
+    min_sdk_version: "current",
 
-    test_suites: ["device-tests"],
+    test_suites: [
+        "device-tests",
+        "mts-nfc",
+    ],
 
     instrumentation_for: "NfcNci",
 }
