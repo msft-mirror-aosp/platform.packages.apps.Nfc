@@ -29,7 +29,7 @@ public class ConflictingNonPaymentPrefixEmulatorActivity extends BaseEmulatorAct
 
     private String mAidConflictOccurred = null;
 
-    private CardEmulation.NfcEventListener mEventListener = new CardEmulation.NfcEventListener() {
+    private CardEmulation.NfcEventCallback mEventListener = new CardEmulation.NfcEventCallback() {
         @Override
         public void onAidConflictOccurred(String aid) {
             mAidConflictOccurred = aid;
@@ -75,7 +75,7 @@ public class ConflictingNonPaymentPrefixEmulatorActivity extends BaseEmulatorAct
 
     protected void onDestroy() {
         super.onDestroy();
-        mCardEmulation.unregisterNfcEventListener(mEventListener);
+        mCardEmulation.unregisterNfcEventCallback(mEventListener);
     }
 
     @Override
