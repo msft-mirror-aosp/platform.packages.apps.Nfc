@@ -33,7 +33,7 @@ public class EventListenerEmulatorActivity extends BaseEmulatorActivity {
     private ArrayList<Boolean> mFieldChanged = new ArrayList<>();
     private ArrayList<String> mAidNotRouted = new ArrayList<>();
 
-    private CardEmulation.NfcEventListener mEventListener = new CardEmulation.NfcEventListener() {
+    private CardEmulation.NfcEventCallback mEventListener = new CardEmulation.NfcEventCallback() {
         @Override
         public void onRemoteFieldChanged(boolean isDetected) {
             mFieldChanged.add(isDetected);
@@ -84,7 +84,7 @@ public class EventListenerEmulatorActivity extends BaseEmulatorActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mCardEmulation.unregisterNfcEventListener(mEventListener);
+        mCardEmulation.unregisterNfcEventCallback(mEventListener);
     }
 
     @Override

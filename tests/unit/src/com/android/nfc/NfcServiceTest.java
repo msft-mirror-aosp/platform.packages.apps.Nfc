@@ -49,18 +49,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import android.app.VrManager;
-import android.app.role.RoleManager;
-import android.hardware.display.DisplayManager;
-import android.nfc.ErrorCodes;
-import android.nfc.INfcUnlockHandler;
-
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.Application;
 import android.app.KeyguardManager;
 import android.app.VrManager;
 import android.app.backup.BackupManager;
+import android.app.role.RoleManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -73,10 +68,15 @@ import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.hardware.display.DisplayManager;
 import android.media.SoundPool;
+import android.nfc.ErrorCodes;
+import android.nfc.INfcAdapterExtras;
+import android.nfc.INfcControllerAlwaysOnListener;
+import android.nfc.INfcDta;
 import android.nfc.INfcOemExtensionCallback;
 import android.nfc.INfcUnlockHandler;
 import android.nfc.INfcVendorNciCallback;
 import android.nfc.INfcWlcStateListener;
+import android.nfc.ITagRemovedCallback;
 import android.nfc.NdefMessage;
 import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
@@ -110,7 +110,6 @@ import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.se.omapi.ISecureElementService;
 import android.sysprop.NfcProperties;
-import android.nfc.INfcOemExtensionCallback;
 import android.view.Display;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -122,7 +121,6 @@ import com.android.nfc.flags.FeatureFlags;
 import com.android.nfc.flags.Flags;
 import com.android.nfc.wlc.NfcCharging;
 
-import android.nfc.INfcVendorNciCallback;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -149,12 +147,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import android.nfc.INfcWlcStateListener;
-import android.nfc.INfcUnlockHandler;
-import android.nfc.INfcAdapterExtras;
-import android.nfc.INfcDta;
-import android.nfc.ITagRemovedCallback;
-import android.nfc.INfcControllerAlwaysOnListener;
 
 @RunWith(AndroidJUnit4.class)
 public final class NfcServiceTest {
@@ -276,7 +268,7 @@ public final class NfcServiceTest {
         when(mResources.getIntArray(R.array.antenna_x)).thenReturn(new int[0]);
         when(mResources.getIntArray(R.array.antenna_y)).thenReturn(new int[0]);
         when(mResources.getStringArray(R.array.tag_intent_blocked_app_list))
-                .thenReturn(new String[]{});
+                .thenReturn(new String[]{"com.android.test"});
         when(NfcProperties.info_antpos_X()).thenReturn(List.of());
         when(NfcProperties.info_antpos_Y()).thenReturn(List.of());
         when(NfcProperties.initialized()).thenReturn(Optional.of(Boolean.TRUE));
@@ -1126,7 +1118,7 @@ public final class NfcServiceTest {
         mNfcService.enableNfc();
         verify(mPreferences).edit();
         verify(mPreferencesEditor).putBoolean(PREF_NFC_ON, true);
-        verify(mPreferencesEditor).apply();
+        verify(mPreferencesEditor, atLeastOnce()).apply();
         verify(mBackupManager).dataChanged();
         mLooper.dispatchAll();
         verify(mUserManager, atLeastOnce()).getEnabledProfiles();
@@ -1168,11 +1160,10 @@ public final class NfcServiceTest {
         List<UserHandle> luh = new ArrayList<>();
         luh.add(uh);
         when(mUserManager.getEnabledProfiles()).thenReturn(luh);
-        mNfcService.mTagAppDefaultBlockList.add("com.android.test");
         mNfcService.enableNfc();
         verify(mPreferences).edit();
         verify(mPreferencesEditor).putBoolean(PREF_NFC_ON, true);
-        verify(mPreferencesEditor).apply();
+        verify(mPreferencesEditor, atLeastOnce()).apply();
         verify(mBackupManager).dataChanged();
         mLooper.dispatchAll();
         verify(mUserManager, atLeastOnce()).getEnabledProfiles();
@@ -1460,7 +1451,6 @@ public final class NfcServiceTest {
         when(mUserManager.getEnabledProfiles()).thenReturn(luh);
         String jsonString = "{}";
         when(mPreferences.getString(anyString(), anyString())).thenReturn(jsonString);
-        mNfcService.mTagAppDefaultBlockList.add("com.android.test");
         PackageInfo info = mock(PackageInfo.class);
         when(mPackageManager.getPackageInfo(anyString(), anyInt())).thenReturn(info);
         when(mPreferencesEditor.remove(any())).thenReturn(mPreferencesEditor);
@@ -1473,8 +1463,8 @@ public final class NfcServiceTest {
     @Test
     public void testSaveNfcPollTech() {
         mNfcService.saveNfcPollTech(NfcService.DEFAULT_POLL_TECH);
-        verify(mPreferencesEditor).putInt(anyString(), anyInt());
-        verify(mPreferencesEditor).apply();
+        verify(mPreferencesEditor, atLeastOnce()).putInt(anyString(), anyInt());
+        verify(mPreferencesEditor, atLeastOnce()).apply();
         verify(mBackupManager).dataChanged();
     }
 
@@ -1676,7 +1666,7 @@ public final class NfcServiceTest {
         boolean result = mNfcService.mNfcAdapter
                 .enableReaderOption(true, "com.android.test");
         assertThat(mNfcService.mIsReaderOptionEnabled).isTrue();
-        verify(mPreferencesEditor).apply();
+        verify(mPreferencesEditor, atLeastOnce()).apply();
         verify(mBackupManager).dataChanged();
         verify(callback).onReaderOptionChanged(true);
         verify(mNfcEventLog, times(2)).logEvent(any());
@@ -2084,7 +2074,7 @@ public final class NfcServiceTest {
         mNfcService.mIsHceCapable = true;
         adapterService.setNfcSecure(true);
         verify(mPreferencesEditor).putBoolean(anyString(), anyBoolean());
-        verify(mPreferencesEditor).apply();
+        verify(mPreferencesEditor, atLeastOnce()).apply();
         verify(mBackupManager).dataChanged();
         verify(mDeviceHost).setNfcSecure(true);
         verify(mNfcEventLog, times(2)).logEvent(any());
@@ -2115,7 +2105,7 @@ public final class NfcServiceTest {
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         adapterService.setWlcEnabled(true);
         verify(mPreferencesEditor).putBoolean(anyString(), anyBoolean());
-        verify(mPreferencesEditor).apply();
+        verify(mPreferencesEditor, atLeastOnce()).apply();
         verify(mBackupManager).dataChanged();
         verify(mBackupManager).dataChanged();
     }

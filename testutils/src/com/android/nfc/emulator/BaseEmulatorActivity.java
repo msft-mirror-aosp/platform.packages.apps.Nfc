@@ -88,10 +88,10 @@ public abstract class BaseEmulatorActivity extends Activity {
         registerReceiver(mReceiver, filter, RECEIVER_EXPORTED);
     }
 
-    public void registerEventListener(CardEmulation.NfcEventListener eventListener) {
+    public void registerEventListener(CardEmulation.NfcEventCallback eventListener) {
         if (android.nfc.Flags.nfcEventListener()) {
             Log.d(TAG, "registering event listener...");
-            mCardEmulation.registerNfcEventListener(getMainExecutor(), eventListener);
+            mCardEmulation.registerNfcEventCallback(getMainExecutor(), eventListener);
         }
     }
 
