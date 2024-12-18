@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -116,6 +117,8 @@ public class RegisteredServicesCacheTest {
     private static final List<String> PAYMENT_AIDS = List.of("A000000004101011",
             "A000000004101012", "A000000004101013");
     private static final List<String> NON_PAYMENT_AID = List.of("F053414950454D");
+    private static final String POLLING_LOOP_FILTER1 = "filter1";
+    private static final String POLLING_LOOP_FILTER2 = "filter2";
 
     @Mock
     private Context mContext;
@@ -293,13 +296,14 @@ public class RegisteredServicesCacheTest {
         verify(mOtherSettingsFile).exists();
         verify(mDynamicSettingsFile).openRead();
         verify(mOtherSettingsFile).openRead();
+        verify(mOtherSettingsFile).startWrite();
         verifyNoMoreInteractions(mDynamicSettingsFile);
         verifyNoMoreInteractions(mOtherSettingsFile);
         // Verify that user services are read properly
         assertEquals(1, mRegisteredServicesCache.mUserServices.size());
         RegisteredServicesCache.UserServices userServices
                 = mRegisteredServicesCache.mUserServices.get(USER_ID);
-        assertEquals(2, userServices.services.size());
+        assertEquals(3, userServices.services.size());
         assertTrue(userServices.services.containsKey(WALLET_HOLDER_SERVICE_COMPONENT));
         assertTrue(userServices.services.containsKey(ANOTHER_SERVICE_COMPONENT));
         assertEquals(3, userServices.dynamicSettings.size());
@@ -310,6 +314,8 @@ public class RegisteredServicesCacheTest {
         // Verify the details of service 1
         RegisteredServicesCache.DynamicSettings walletHolderSettings =
                 userServices.dynamicSettings.get(WALLET_HOLDER_SERVICE_COMPONENT);
+        assertTrue(walletHolderSettings.pollingLoopFilters.get(POLLING_LOOP_FILTER1));
+        assertFalse(walletHolderSettings.pollingLoopPatternFilters.get(POLLING_LOOP_FILTER2));
         assertEquals(OFFHOST_SE_STRING + "1", walletHolderSettings.offHostSE);
         assertEquals(1, walletHolderSettings.uid);
         assertEquals(TRUE_STRING, walletHolderSettings.shouldDefaultToObserveModeStr);
@@ -327,7 +333,7 @@ public class RegisteredServicesCacheTest {
         assertTrue(nonPaymentSettings.aidGroups.get(CardEmulation.CATEGORY_OTHER)
                 .getAids().containsAll(NON_PAYMENT_AID));
         // Verify that other settings are read properly
-        assertEquals(1, userServices.others.size());
+        assertEquals(2, userServices.others.size());
         assertTrue(userServices.others.containsKey(ANOTHER_SERVICE_COMPONENT));
         RegisteredServicesCache.OtherServiceStatus otherServiceStatus
                 = userServices.others.get(ANOTHER_SERVICE_COMPONENT);
@@ -359,7 +365,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(false));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
     }
@@ -388,7 +394,7 @@ public class RegisteredServicesCacheTest {
                 = mRegisteredServicesCache.mUserServices.get(USER_ID);
         assertTrue(userServices.dynamicSettings.isEmpty());
         // Verify that other settings are only read from system services
-        assertEquals(1, userServices.others.size());
+        assertEquals(2, userServices.others.size());
         assertTrue(userServices.others.containsKey(ANOTHER_SERVICE_COMPONENT));
         RegisteredServicesCache.OtherServiceStatus otherServiceStatus
                 = userServices.others.get(ANOTHER_SERVICE_COMPONENT);
@@ -398,7 +404,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(false));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         // Validate that other setting file is written properly with a setting
@@ -493,7 +499,7 @@ public class RegisteredServicesCacheTest {
 
         List<ApduServiceInfo> serviceInfos = mRegisteredServicesCache.getServices(USER_ID);
         assertFalse(serviceInfos.isEmpty());
-        assertEquals(2, serviceInfos.size());
+        assertEquals(3, serviceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, serviceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, serviceInfos.get(1).getComponent());
     }
@@ -524,7 +530,7 @@ public class RegisteredServicesCacheTest {
         List<ApduServiceInfo> serviceInfos = mRegisteredServicesCache
                 .getServicesForCategory(USER_ID, CardEmulation.CATEGORY_OTHER);
         assertFalse(serviceInfos.isEmpty());
-        assertEquals(1, serviceInfos.size());
+        assertEquals(2, serviceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, serviceInfos.get(0).getComponent());
     }
 
@@ -588,7 +594,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         verify(apduServiceInfos.get(1)).setOffHostSecureElement(eq(newOffHostValue));
@@ -608,6 +614,8 @@ public class RegisteredServicesCacheTest {
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT,
                 readDynamicSettingsFromFile.get(USER_ID).get(1).first);
         assertEquals(newOffHostValue, dynamicSettings.offHostSE);
+        assertFalse(dynamicSettings.pollingLoopFilters.isEmpty());
+        assertFalse(dynamicSettings.pollingLoopPatternFilters.isEmpty());
     }
 
     @Test
@@ -671,7 +679,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         verify(apduServiceInfos.get(0)).resetOffHostSecureElement();
@@ -691,6 +699,8 @@ public class RegisteredServicesCacheTest {
         assertEquals(ANOTHER_SERVICE_COMPONENT,
                 readDynamicSettingsFromFile.get(USER_ID).get(0).first);
         assertNull(dynamicSettings.offHostSE);
+        assertTrue(dynamicSettings.pollingLoopFilters.isEmpty());
+        assertTrue(dynamicSettings.pollingLoopPatternFilters.isEmpty());
     }
 
     @Test
@@ -769,12 +779,17 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0)
                 .getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1)
                 .getComponent());
         verify(apduServiceInfos.get(1)).addPollingLoopFilter(eq(plFilter), eq(true));
+        RegisteredServicesCache.UserServices services =
+                mRegisteredServicesCache.mUserServices.get(USER_ID);
+        RegisteredServicesCache.DynamicSettings dynamicSettings = services.dynamicSettings
+                .get(WALLET_HOLDER_SERVICE_COMPONENT);
+        assertTrue(dynamicSettings.pollingLoopFilters.get(plFilter));
     }
 
     @Test
@@ -811,7 +826,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         verify(apduServiceInfos.get(1)).removePollingLoopFilter(eq(plFilter));
@@ -853,10 +868,15 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         verify(apduServiceInfos.get(1)).addPollingLoopPatternFilter(eq(plFilter), eq(true));
+        RegisteredServicesCache.UserServices services =
+                mRegisteredServicesCache.mUserServices.get(USER_ID);
+        RegisteredServicesCache.DynamicSettings dynamicSettings = services.dynamicSettings
+                .get(WALLET_HOLDER_SERVICE_COMPONENT);
+        assertTrue(dynamicSettings.pollingLoopPatternFilters.get(plFilter));
     }
 
     @Test
@@ -893,7 +913,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         verify(apduServiceInfos.get(1)).removePollingLoopPatternFilter(eq(plFilter));
@@ -951,7 +971,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0).getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1).getComponent());
         // Verify that dynamic settings file is updated
@@ -1062,7 +1082,7 @@ public class RegisteredServicesCacheTest {
         verify(mCallback).onServicesUpdated(eq(USER_ID), mApduServiceListCaptor.capture(),
                 eq(true));
         List<ApduServiceInfo> apduServiceInfos = mApduServiceListCaptor.getValue();
-        assertEquals(2, apduServiceInfos.size());
+        assertEquals(3, apduServiceInfos.size());
         assertEquals(ANOTHER_SERVICE_COMPONENT, apduServiceInfos.get(0)
                 .getComponent());
         assertEquals(WALLET_HOLDER_SERVICE_COMPONENT, apduServiceInfos.get(1)

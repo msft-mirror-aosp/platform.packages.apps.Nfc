@@ -6,6 +6,8 @@ import android.hardware.display.DisplayManager;
 import android.os.PowerManager;
 import android.view.Display;
 
+import androidx.annotation.VisibleForTesting;
+
 /**
  * Helper class for determining the current screen state for NFC activities.
  */
@@ -26,9 +28,9 @@ class ScreenStateHelper {
     private final DisplayManager mDisplayManager;
 
     ScreenStateHelper(Context context) {
-        mKeyguardManager = context.getSystemService(KeyguardManager.class);
-        mPowerManager = context.getSystemService(PowerManager.class);
-        mDisplayManager = context.getSystemService(DisplayManager.class);
+        this(context.getSystemService(KeyguardManager.class),
+                context.getSystemService(PowerManager.class),
+                context.getSystemService(DisplayManager.class));
     }
 
     private boolean isDisplayOn() {
@@ -36,18 +38,14 @@ class ScreenStateHelper {
         return display.getState() == Display.STATE_ON;
     }
 
-    int checkScreenState() {
-        return checkScreenState(false /* checkDisplayState */);
-    }
-
     int checkScreenState(boolean checkDisplayState) {
         if (!mPowerManager.isInteractive() || (checkDisplayState && !isDisplayOn())) {
-            if (mKeyguardManager.isKeyguardLocked()) {
+            if (NfcInjector.getInstance().isDeviceLocked()) {
                 return SCREEN_STATE_OFF_LOCKED;
             } else {
                 return SCREEN_STATE_OFF_UNLOCKED;
             }
-        } else if (mKeyguardManager.isKeyguardLocked()) {
+        } else if (NfcInjector.getInstance().isDeviceLocked()) {
             return SCREEN_STATE_ON_LOCKED;
         } else {
             return SCREEN_STATE_ON_UNLOCKED;
@@ -56,12 +54,12 @@ class ScreenStateHelper {
 
     int checkScreenStateProvisionMode() {
         if (!mPowerManager.isInteractive()) {
-            if (mKeyguardManager.isDeviceLocked()) {
+            if (NfcInjector.getInstance().isDeviceLocked()) {
                 return SCREEN_STATE_OFF_LOCKED;
             } else {
                 return SCREEN_STATE_OFF_UNLOCKED;
             }
-        } else if (mKeyguardManager.isDeviceLocked()) {
+        } else if (NfcInjector.getInstance().isDeviceLocked()) {
             return SCREEN_STATE_ON_LOCKED;
         } else {
             return SCREEN_STATE_ON_UNLOCKED;
@@ -99,5 +97,13 @@ class ScreenStateHelper {
             default:
                 return NfcServiceDumpProto.SCREEN_STATE_UNKNOWN;
         }
+    }
+
+    @VisibleForTesting
+    ScreenStateHelper(KeyguardManager keyguardManager, PowerManager powerManager,
+            DisplayManager displayManager) {
+        mKeyguardManager = keyguardManager;
+        mPowerManager = powerManager;
+        mDisplayManager = displayManager;
     }
 }

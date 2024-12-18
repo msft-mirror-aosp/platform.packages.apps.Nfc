@@ -31,10 +31,11 @@ import android.util.Log;
 
 import com.android.nfc.DeviceHost;
 import com.android.nfc.NfcDiscoveryParameters;
+import com.android.nfc.NfcProprietaryCaps;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
 import com.android.nfc.NfcVendorNciResponse;
-import com.android.nfc.NfcProprietaryCaps;
+
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.nio.ByteBuffer;
@@ -42,8 +43,9 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Map;
 
 /** Native interface to the NFC Manager functions */
 public class NativeNfcManager implements DeviceHost {
@@ -57,6 +59,7 @@ public class NativeNfcManager implements DeviceHost {
 
     private int mIsoDepMaxTransceiveLength;
     private final DeviceHostListener mListener;
+    private final NativeT4tNfceeManager mT4tNfceeMgr;
     private final Context mContext;
 
     private final Object mLock = new Object();
@@ -82,6 +85,7 @@ public class NativeNfcManager implements DeviceHost {
         loadLibrary();
         initializeNativeStructure();
         mContext = context;
+        mT4tNfceeMgr = new NativeT4tNfceeManager();
     }
 
     public native boolean initializeNativeStructure();
@@ -100,14 +104,29 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public boolean initialize() {
         boolean ret = doInitialize();
-        if (mContext.getResources().getBoolean(
-                com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)) {
+        if (ret && isProprietaryGetCapsSupported()) {
             mProprietaryCaps = NfcProprietaryCaps.createFromByteArray(getProprietaryCaps());
             Log.i(TAG, "mProprietaryCaps: " + mProprietaryCaps);
             logProprietaryCaps(mProprietaryCaps);
         }
         mIsoDepMaxTransceiveLength = getIsoDepMaxTransceiveLength();
         return ret;
+    }
+
+    boolean isObserveModeSupportedWithoutRfDeactivation() {
+        if (!com.android.nfc.flags.Flags.observeModeWithoutRf()) {
+            return false;
+        }
+        return mProprietaryCaps != null &&
+                mProprietaryCaps.getPassiveObserveMode() ==
+                        NfcProprietaryCaps.PassiveObserveMode.SUPPORT_WITHOUT_RF_DEACTIVATION;
+    }
+
+    private native void doSetPartialInitMode(int mode);
+
+    @Override
+    public void setPartialInitMode(int mode) {
+        doSetPartialInitMode(mode);
     }
 
     private native void doEnableDtaMode();
@@ -168,7 +187,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean unrouteAid(byte[] aid);
 
     @Override
-    public native boolean commitRouting();
+    public native int commitRouting();
 
     public native int doRegisterT3tIdentifier(byte[] t3tIdentifier);
 
@@ -178,6 +197,12 @@ public class NativeNfcManager implements DeviceHost {
      * This is only used for testing.
      */
     public native void injectNtf(byte[] data);
+
+    public boolean isProprietaryGetCapsSupported() {
+        return mContext.getResources()
+                .getBoolean(com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)
+                && NfcProperties.get_caps_supported().orElse(true);
+    }
 
     @Override
     public boolean isObserveModeSupported() {
@@ -190,14 +215,32 @@ public class NativeNfcManager implements DeviceHost {
                 com.android.nfc.R.bool.nfc_observe_mode_supported)) {
             return false;
         }
-        if (!NfcProperties.info_observe_mode_supported().orElse(true)) {
+        if (!NfcProperties.observe_mode_supported().orElse(true)) {
             return false;
         }
-        if (mContext.getResources().getBoolean(
-                com.android.nfc.R.bool.nfc_proprietary_getcaps_supported)) {
-            return isObserveModeSupportedCaps(mProprietaryCaps);
+        if (com.android.nfc.flags.Flags.observeModeWithoutRf()) {
+            if (isProprietaryGetCapsSupported()) {
+                return isObserveModeSupportedWithoutRfDeactivation();
+            }
+            return false;
+        } else {
+            if (isProprietaryGetCapsSupported()) {
+                return isObserveModeSupportedCaps(mProprietaryCaps);
+            }
+            return true;
         }
-        return true;
+    }
+
+    @Override
+    public boolean isFirmwareExitFramesSupported() {
+        if (!com.android.nfc.flags.Flags.exitFrames()) {
+            return false;
+        }
+        if (isProprietaryGetCapsSupported()) {
+            return mProprietaryCaps.isAutotransactPollingLoopFilterSupported()
+                    && mProprietaryCaps.getNumberOfExitFramesSupported() > 0;
+        }
+        return false;
     }
 
     @Override
@@ -205,6 +248,41 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native boolean isObserveModeEnabled();
+
+    @Override
+    public int   getT4TNfceePowerState() {
+        return mT4tNfceeMgr.getT4TNfceePowerState();
+    }
+
+    @Override
+    public int getNdefNfceeRouteId() {
+        return mT4tNfceeMgr.getNdefNfceeRouteId();
+    }
+
+    @Override
+    public int doWriteData(byte[] fileId, byte[] data) {
+        return mT4tNfceeMgr.doWriteData(fileId, data);
+    }
+
+    @Override
+    public byte[] doReadData(byte[] fileId) {
+        return mT4tNfceeMgr.doReadData(fileId);
+    }
+
+    @Override
+    public boolean doClearNdefData() {
+        return mT4tNfceeMgr.doClearNdefData();
+    }
+
+    @Override
+    public boolean isNdefOperationOngoing() {
+        return mT4tNfceeMgr.isNdefOperationOngoing();
+    }
+
+    @Override
+    public boolean isNdefNfceeEmulationSupported() {
+        return mT4tNfceeMgr.isNdefNfceeEmulationSupported();
+    }
 
     @Override
     public void registerT3tIdentifier(byte[] t3tIdentifier) {
@@ -369,7 +447,7 @@ public class NativeNfcManager implements DeviceHost {
     public native boolean isMultiTag();
 
     @Override
-    public native List<String> dofetchActiveNfceeList();
+    public native Map<String, Integer> dofetchActiveNfceeList();
 
     private native NfcVendorNciResponse nativeSendRawVendorCmd(
             int mt, int gid, int oid, byte[] payload);
@@ -415,6 +493,27 @@ public class NativeNfcManager implements DeviceHost {
 
     private void notifyHwErrorReported() {
         mListener.onHwErrorReported();
+    }
+
+    private void notifyEeAidSelected(byte[] aid, String eventSrc) {
+        Log.i(TAG, "AID: " + HexFormat.of().formatHex(aid) + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
+    private void notifyEeProtocolSelected(int protocol, String eventSrc) {
+        Log.i(TAG, "Protocol: " + protocol + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
+    }
+
+    private void notifyEeTechSelected(int tech, String eventSrc) {
+        Log.i(TAG, "Tech: " + tech + " selected by " + eventSrc);
+        if (com.android.nfc.flags.Flags.eeAidSelect()) {
+            mListener.onSeSelected();
+        }
     }
 
     public void notifyPollingLoopFrame(int data_len, byte[] p_data) {
@@ -501,6 +600,9 @@ public class NativeNfcManager implements DeviceHost {
     private void notifyWlcStopped(int wpt_end_condition) {
         mListener.onWlcStopped(wpt_end_condition);
     }
+    private void notifyTagDiscovered(boolean discovered) {
+        mListener.onTagRfDiscovered(discovered);
+    }
     private void notifyVendorSpecificEvent(int event, int dataLen, byte[] pData) {
         if (pData.length < NCI_HEADER_MIN_LEN || dataLen != pData.length) {
             Log.e(TAG, "Invalid data");
@@ -510,6 +612,14 @@ public class NativeNfcManager implements DeviceHost {
             mListener.onVendorSpecificEvent(pData[NCI_GID_INDEX], pData[NCI_OID_INDEX],
                     Arrays.copyOfRange(pData, OP_CODE_INDEX, pData.length));
         }
+    }
+
+    private void notifyRFDiscoveryEvent(boolean isDiscoveryStarted) {
+        mListener.onRfDiscoveryEvent(isDiscoveryStarted);
+    }
+
+    private void notifyEeListenActivated(boolean isActivated) {
+        mListener.onEeListenActivated(isActivated);
     }
 
     @Override
@@ -525,7 +635,10 @@ public class NativeNfcManager implements DeviceHost {
     public native void setIsoDepProtocolRoute(int route);
 
     @Override
-    public native void setTechnologyABFRoute(int route);
+    public native void setTechnologyABFRoute(int route, int felicaRoute);
+
+    @Override
+    public native void setSystemCodeRoute(int route);
 
     private native byte[] getProprietaryCaps();
 
@@ -533,6 +646,9 @@ public class NativeNfcManager implements DeviceHost {
     public native void enableVendorNciNotifications(boolean enabled);
 
     private void notifyCommandTimeout() {
+        if (android.nfc.Flags.nfcEventListener()) {
+            mListener.onCommandTimeout();
+        }
         NfcService.getInstance().storeNativeCrashLogs();
     }
 
@@ -568,7 +684,8 @@ public class NativeNfcManager implements DeviceHost {
                 observeModeStatsd,
                 proprietaryCaps.isPollingFrameNotificationSupported(),
                 proprietaryCaps.isPowerSavingModeSupported(),
-                proprietaryCaps.isAutotransactPollingLoopFilterSupported());
+                proprietaryCaps.isAutotransactPollingLoopFilterSupported(),
+                proprietaryCaps.getNumberOfExitFramesSupported());
     }
 
     public void notifyObserveModeChanged(boolean enabled) {

@@ -24,13 +24,15 @@ java_library {
         "//apex_available:platform",
         "com.android.nfcservices",
     ],
-    min_sdk_version: "current",
+    min_sdk_version: "35", // Make it 36 once available.
     sdk_version: "module_current",
 }
 
 java_defaults {
     name: "NfcNciDefaults",
     static_libs: [
+        "android.app.flags-aconfig-java",
+        "android.service.chooser.flags-aconfig-java",
         "android.se.omapi-V1-java",
         "androidx.annotation_annotation",
         "androidx.appcompat_appcompat",
@@ -40,7 +42,10 @@ java_defaults {
         "modules-utils-shell-command-handler",
         "PlatformProperties",
         "nfc-event-log-proto",
-        "nfc_flags_lib",
+        "com.android.nfc.flags-aconfig-java",
+    ],
+    flags_packages: [
+        "com.android.nfc.flags-aconfig",
     ],
     privileged: true,
     optimize: {
@@ -89,7 +94,8 @@ android_app {
 android_app {
     name: "NfcNciApex",
     defaults: ["NfcNciDefaults"],
-    min_sdk_version: "current",
+    min_sdk_version: "35", // Make it 36 once available.
+    updatable: true,
     sdk_version: "module_current",
     certificate: "nfc",
     srcs: [
@@ -97,17 +103,16 @@ android_app {
         "shim_src/apex/**/*.java",
     ],
     libs: [
-        "framework-annotations-lib",
-        "framework-bluetooth",
-        "framework-configinfrastructure",
-        "framework-nfc.impl",
-        "framework-permission-s",
-        "framework-permission",
-        "framework-statsd.stubs.module_lib",
-        "framework-wifi",
         "android.nfc.flags-aconfig-java",
         "android.permission.flags-aconfig-java",
-        "android.service.chooser.flags-aconfig-java",
+        "framework-annotations-lib",
+        "framework-bluetooth.stubs.module_lib",
+        "framework-configinfrastructure.stubs.module_lib",
+        "framework-nfc.impl",
+        "framework-permission-s.stubs.module_lib",
+        "framework-permission.stubs.module_lib",
+        "framework-statsd.stubs.module_lib",
+        "framework-wifi.stubs.module_lib",
         "unsupportedappusage",
     ],
     // prevent NfcNciApex from using product-specific resources
@@ -131,6 +136,7 @@ filegroup {
     ],
     visibility: [
         "//packages/apps/Nfc/tests/unit",
+        "//packages/modules/Nfc:__subpackages__",
     ],
 }
 
