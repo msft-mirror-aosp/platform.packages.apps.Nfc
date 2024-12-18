@@ -4543,6 +4543,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     public void clearRoutingTable(int clearFlags) {
+        //Remove any previously sent messages not yet processed
+        mHandler.removeMessages(MSG_COMMIT_ROUTING);
+        mHandler.removeMessages(MSG_ROUTE_AID);
+        mHandler.removeMessages(MSG_CLEAR_ROUTING_TABLE);
+        mHandler.removeMessages(MSG_UNROUTE_AID);
         sendMessage(MSG_CLEAR_ROUTING_TABLE, clearFlags);
     }
 

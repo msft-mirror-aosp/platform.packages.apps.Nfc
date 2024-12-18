@@ -145,43 +145,8 @@ public class AidRoutingManager {
     }
 
     private void clearNfcRoutingTableLocked() {
-        for (Map.Entry<String, Integer> aidEntry : mRouteForAid.entrySet())  {
-            String aid = aidEntry.getKey();
-            if (aid.endsWith("*")) {
-                if (mAidMatchingSupport == AID_MATCHING_EXACT_ONLY) {
-                    Log.e(TAG, "Device does not support prefix AIDs but AID [" + aid
-                            + "] is registered");
-                } else if (mAidMatchingSupport == AID_MATCHING_PREFIX_ONLY) {
-                    if (DBG) Log.d(TAG, "Unrouting prefix AID " + aid);
-                    // Cut off '*' since controller anyway treats all AIDs as a prefix
-                    aid = aid.substring(0, aid.length() - 1);
-                } else if (mAidMatchingSupport == AID_MATCHING_EXACT_OR_PREFIX ||
-                    mAidMatchingSupport == AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX) {
-                    aid = aid.substring(0, aid.length() - 1);
-                    if (DBG) Log.d(TAG, "Unrouting prefix AID " + aid);
-                }
-            }  else if (aid.endsWith("#")) {
-                if (mAidMatchingSupport == AID_MATCHING_EXACT_ONLY) {
-                    Log.e(TAG, "Device does not support subset AIDs but AID [" + aid
-                            + "] is registered");
-                } else if (mAidMatchingSupport == AID_MATCHING_PREFIX_ONLY ||
-                    mAidMatchingSupport == AID_MATCHING_EXACT_OR_PREFIX) {
-                    Log.e(TAG, "Device does not support subset AIDs but AID [" + aid
-                            + "] is registered");
-                } else if (mAidMatchingSupport == AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX) {
-                    if (DBG) Log.d(TAG, "Unrouting subset AID " + aid);
-                    aid = aid.substring(0, aid.length() - 1);
-                }
-            } else {
-                if (DBG) Log.d(TAG, "Unrouting exact AID " + aid);
-            }
-
-            NfcService.getInstance().unrouteAids(aid);
-        }
-        if (NfcService.getInstance().getNciVersion() >= NfcService.getInstance().NCI_VERSION_2_0) {
-            // unRoute EmptyAid
-            NfcService.getInstance().unrouteAids("");
-        }
+        if (DBG) Log.d(TAG, "clearNfcRoutingTableLocked()");
+        NfcService.getInstance().clearRoutingTable(0x01);
     }
 
     //Checking in case of power/route update of any AID after conflict
@@ -360,7 +325,6 @@ public class AidRoutingManager {
             }
 
             // Otherwise, update internal structures and commit new routing
-            clearNfcRoutingTableLocked();
             prevRouteForAid = mRouteForAid;
             mRouteForAid = routeForAid;
             prevPowerForAid = mPowerForAid;
@@ -535,6 +499,7 @@ public class AidRoutingManager {
             if (isPowerStateUpdated || isRouteTableUpdated || mIsUnrouteRequired
                     || isRoutingOptionUpdated || force) {
                 if (aidRouteResolved) {
+                    clearNfcRoutingTableLocked();
                     sendRoutingTable(isRoutingOptionUpdated, force);
                     int result = commit(aidRoutingTableCache, isOverrideOrRecover);
                     if (result != NfcOemExtension.COMMIT_ROUTING_STATUS_OK) {
