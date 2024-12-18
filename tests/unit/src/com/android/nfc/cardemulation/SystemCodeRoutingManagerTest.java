@@ -17,6 +17,8 @@
 package com.android.nfc.cardemulation;
 
 import static com.google.common.truth.Truth.assertThat;
+
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.times;
@@ -97,7 +99,7 @@ public class SystemCodeRoutingManagerTest {
     assertThat(result).isFalse();
     verify(mNfcService, never()).deregisterT3tIdentifier(anyString(), anyString(), anyString());
     verify(mNfcService, never()).registerT3tIdentifier(anyString(), anyString(), anyString());
-    verify(mNfcService, never()).commitRouting();
+    verify(mNfcService, never()).commitRouting(anyBoolean());
     assertThat(manager.mConfiguredT3tIdentifiers).isEmpty();
   }
 
@@ -116,7 +118,7 @@ public class SystemCodeRoutingManagerTest {
     assertThat(systemCodeCaptor.getValue()).isEqualTo(IDENTIFIER_SYSTEM_CODE);
     assertThat(nfcId2Captor.getValue()).isEqualTo(IDENTIFIER_NFCID_2);
     assertThat(t3tPmmCaptor.getValue()).isEqualTo(IDENTIFIER_T3TPMM);
-    verify(mNfcService).commitRouting();
+    verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mConfiguredT3tIdentifiers.size()).isEqualTo(1);
     assertThat(manager.mConfiguredT3tIdentifiers.get(0)).isEqualTo(mIdentifier);
   }
@@ -135,7 +137,7 @@ public class SystemCodeRoutingManagerTest {
     assertThat(nfcId2Captor.getValue()).isEqualTo(IDENTIFIER_NFCID_2);
     assertThat(t3tPmmCaptor.getValue()).isEqualTo(IDENTIFIER_T3TPMM);
     verify(mNfcService, never()).registerT3tIdentifier(anyString(), anyString(), anyString());
-    verify(mNfcService).commitRouting();
+    verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mConfiguredT3tIdentifiers).isEmpty();
   }
 
