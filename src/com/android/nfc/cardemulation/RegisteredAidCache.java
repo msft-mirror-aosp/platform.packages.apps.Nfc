@@ -1398,7 +1398,7 @@ public class RegisteredAidCache {
     public void onNfcEnabled() {
         synchronized (mLock) {
             mNfcEnabled = true;
-            updateRoutingLocked(false, false);
+            updateRoutingLocked(true, false);
         }
     }
 
