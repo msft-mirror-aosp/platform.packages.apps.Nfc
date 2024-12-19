@@ -802,6 +802,7 @@ public final class NfcServiceTest {
     @Test
     public void testMsg_Update_Isodep_Protocol_Route() {
         Handler handler = mNfcService.getHandler();
+        mNfcService.mState = NfcAdapter.STATE_ON;
         Assert.assertNotNull(handler);
         Message msg = handler.obtainMessage(NfcService.MSG_UPDATE_ISODEP_PROTOCOL_ROUTE);
         msg.obj = 1;
@@ -816,6 +817,7 @@ public final class NfcServiceTest {
     public void testMsg_Update_Technology_Abf_Route() {
         Handler handler = mNfcService.getHandler();
         Assert.assertNotNull(handler);
+        mNfcService.mState = NfcAdapter.STATE_ON;
         Message msg = handler.obtainMessage(NfcService.MSG_UPDATE_TECHNOLOGY_ABF_ROUTE);
         msg.arg1 = 1;
         msg.arg2 = 2;
