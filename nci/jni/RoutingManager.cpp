@@ -69,6 +69,16 @@ static const uint16_t DEFAULT_SYS_CODE = 0xFEFE;
 
 static const uint8_t AID_ROUTE_QUAL_PREFIX = 0x10;
 
+
+/*******************************************************************************
+**
+** Function:        RoutingManager
+**
+** Description:     Constructor
+**
+** Returns:         None
+**
+*******************************************************************************/
 RoutingManager::RoutingManager()
     : mSecureNfcEnabled(false),
       mNativeData(NULL),
@@ -136,8 +146,27 @@ RoutingManager::RoutingManager()
   mEeInfoChanged = false;
 }
 
+/*******************************************************************************
+**
+** Function:        RoutingManager
+**
+** Description:     Destructor
+**
+** Returns:         None
+**
+*******************************************************************************/
 RoutingManager::~RoutingManager() {}
 
+/*******************************************************************************
+**
+** Function:        initialize
+**
+** Description:     Initialize the object
+**
+** Returns:         true if OK
+**                  false if failed
+**
+*******************************************************************************/
 bool RoutingManager::initialize(nfc_jni_native_data* native) {
   static const char fn[] = "RoutingManager::initialize()";
   mNativeData = native;
@@ -188,11 +217,29 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
   return true;
 }
 
+/*******************************************************************************
+**
+** Function:        getInstance
+**
+** Description:     Get an instance of RoutingManager object
+**
+** Returns:         handle to object
+**
+*******************************************************************************/
 RoutingManager& RoutingManager::getInstance() {
   static RoutingManager manager;
   return manager;
 }
 
+/*******************************************************************************
+**
+** Function:        enableRoutingToHost
+**
+** Description:     enabling the routing for HCE
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::enableRoutingToHost() {
   static const char fn[] = "RoutingManager::enableRoutingToHost()";
   tNFA_STATUS nfaStat;
@@ -259,6 +306,13 @@ void RoutingManager::enableRoutingToHost() {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        Disabling the routing for HCE
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::disableRoutingToHost() {
   static const char fn[] = "RoutingManager::disableRoutingToHost()";
   tNFA_STATUS nfaStat;
@@ -346,6 +400,16 @@ bool RoutingManager::isTypeATypeBTechSupportedInEe(tNFA_HANDLE eeHandle) {
   return status;
 }
 
+/*******************************************************************************
+**
+** Function:        addAidRouting
+**
+** Description:     Add an AID to be programmed in routing table.
+**
+** Returns:         true if procedure OK
+**                  false if procedure failed
+**
+*******************************************************************************/
 bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
                                    int route, int aidInfo, int power) {
   static const char fn[] = "RoutingManager::addAidRouting";
@@ -375,6 +439,16 @@ bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
   }
 }
 
+/*******************************************************************************
+**
+** Function:        removeAidRouting
+**
+** Description:     Removes an AID from the routing table
+**
+** Returns:         true if procedure OK
+**                  false if procedure failed
+**
+*******************************************************************************/
 bool RoutingManager::removeAidRouting(const uint8_t* aid, uint8_t aidLen) {
   static const char fn[] = "RoutingManager::removeAidRouting";
   LOG(DEBUG) << fn << ": enter";
@@ -402,6 +476,16 @@ bool RoutingManager::removeAidRouting(const uint8_t* aid, uint8_t aidLen) {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        commitRouting
+**
+** Description:     Ask for routing table update
+**
+** Returns:         true if procedure OK
+**                  false if procedure failed
+**
+*******************************************************************************/
 tNFA_STATUS RoutingManager::commitRouting() {
   static const char fn[] = "RoutingManager::commitRouting";
   tNFA_STATUS nfaStat = 0;
@@ -420,6 +504,15 @@ tNFA_STATUS RoutingManager::commitRouting() {
   return nfaStat;
 }
 
+/*******************************************************************************
+**
+** Function:        onNfccShutdown
+**
+** Description:     performs tasks for NFC shutdown
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::onNfccShutdown() {
   static const char fn[] = "RoutingManager:onNfccShutdown";
   if (mDefaultOffHostRoute == 0x00 && mDefaultFelicaRoute == 0x00) return;
@@ -460,6 +553,15 @@ void RoutingManager::onNfccShutdown() {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        notifyActivated
+**
+** Description:     Notify upper layers of CE activation
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::notifyActivated(uint8_t technology) {
   JNIEnv* e = NULL;
   ScopedAttach attach(mNativeData->vm, &e);
@@ -477,6 +579,16 @@ void RoutingManager::notifyActivated(uint8_t technology) {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        getNameOfEe
+**
+** Description:     Translates NFCEE Id into string name, if it exists
+**
+** Returns:         true if handle was found
+**                  false if not
+**
+*******************************************************************************/
 bool RoutingManager::getNameOfEe(tNFA_HANDLE ee_handle, std::string& eeName) {
   if (mOffHostRouteEse.size() == 0) {
     return false;
@@ -500,6 +612,16 @@ bool RoutingManager::getNameOfEe(tNFA_HANDLE ee_handle, std::string& eeName) {
   return false;
 }
 
+/*******************************************************************************
+**
+** Function:        notifyEeAidSelected
+**
+** Description:     Notify upper layers of RF_NFCEE_ACTION_NTF with trigger
+**                  AID
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::notifyEeAidSelected(tNFC_AID& nfcaid,
                                          tNFA_HANDLE ee_handle) {
   std::vector<uint8_t> aid(nfcaid.aid, nfcaid.aid + nfcaid.len_aid);
@@ -529,6 +651,16 @@ void RoutingManager::notifyEeAidSelected(tNFC_AID& nfcaid,
                     aidJavaArray.get(), srcJavaString.get());
 }
 
+/*******************************************************************************
+**
+** Function:        notifyEeProtocolSelected
+**
+** Description:     Notify upper layers of RF_NFCEE_ACTION_NTF with trigger
+**                  protocol
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::notifyEeProtocolSelected(uint8_t protocol,
                                               tNFA_HANDLE ee_handle) {
   JNIEnv* e = NULL;
@@ -547,6 +679,16 @@ void RoutingManager::notifyEeProtocolSelected(uint8_t protocol,
                     protocol, srcJavaString.get());
 }
 
+/*******************************************************************************
+**
+** Function:        notifyEeTechSelected
+**
+** Description:     Notify upper layers of RF_NFCEE_ACTION_NTF with trigger
+**                  technology
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::notifyEeTechSelected(uint8_t tech, tNFA_HANDLE ee_handle) {
   JNIEnv* e = NULL;
   ScopedAttach attach(mNativeData->vm, &e);
@@ -564,6 +706,15 @@ void RoutingManager::notifyEeTechSelected(uint8_t tech, tNFA_HANDLE ee_handle) {
                     srcJavaString.get());
 }
 
+/*******************************************************************************
+**
+** Function:        notifyDeactivated
+**
+** Description:     Notify upper layers for CE deactivation
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::notifyDeactivated(uint8_t technology) {
   mRxDataBuffer.clear();
   JNIEnv* e = NULL;
@@ -590,6 +741,15 @@ void RoutingManager::notifyDeactivated(uint8_t technology) {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        handleData
+**
+** Description:     Notify upper layers of received HCE data
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::handleData(uint8_t technology, const uint8_t* data,
                                 uint32_t dataLen, tNFA_STATUS status) {
   if (status == NFC_STATUS_CONTINUE) {
@@ -644,6 +804,15 @@ TheEnd:
   mRxDataBuffer.clear();
 }
 
+/*******************************************************************************
+**
+** Function:        notifyEeUpdated
+**
+** Description:     notify upper layers of NFCEE RF capabilities update
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::notifyEeUpdated() {
   JNIEnv* e = NULL;
   ScopedAttach attach(mNativeData->vm, &e);
@@ -660,6 +829,15 @@ void RoutingManager::notifyEeUpdated() {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        stackCallback
+**
+** Description:     Handles callback for completion of calls to NFA APIs
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::stackCallback(uint8_t event,
                                    tNFA_CONN_EVT_DATA* eventData) {
   static const char fn[] = "RoutingManager::stackCallback";
@@ -705,12 +883,33 @@ void RoutingManager::stackCallback(uint8_t event,
   }
 }
 
+
+/*******************************************************************************
+**
+** Function:        updateRoutingTable
+**
+** Description:     Receive execution environment-related events from stack.
+**                  event: Event code.
+**                  eventData: Event data.
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::updateRoutingTable() {
   updateEeTechRouteSetting();
   updateDefaultProtocolRoute();
   updateDefaultRoute();
 }
 
+/*******************************************************************************
+**
+** Function:        updateIsoDepProtocolRoute
+**
+** Description:     Updates the route for ISO-DEP protocol
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::updateIsoDepProtocolRoute(int route) {
   static const char fn[] = "RoutingManager::updateIsoDepProtocolRoute";
   tNFA_PROTOCOL_MASK protoMask = NFA_PROTOCOL_MASK_ISO_DEP;
@@ -745,6 +944,15 @@ void RoutingManager::updateSystemCodeRoute(int route) {
   updateDefaultRoute();
 }
 
+/*******************************************************************************
+**
+** Function:        updateDefaultProtocolRoute
+**
+** Description:     Updates the default protocol routes
+**
+** Returns:
+**
+*******************************************************************************/
 void RoutingManager::updateDefaultProtocolRoute() {
   static const char fn[] = "RoutingManager::updateDefaultProtocolRoute";
 
@@ -789,6 +997,15 @@ void RoutingManager::updateDefaultProtocolRoute() {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        updateDefaultRoute
+**
+** Description:     Updating default AID and SC (T3T) routes
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::updateDefaultRoute() {
   static const char fn[] = "RoutingManager::updateDefaultRoute";
   if (NFC_GetNCIVersion() != NCI_VERSION_2_0) return;
@@ -831,6 +1048,15 @@ void RoutingManager::updateDefaultRoute() {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        updateTechnologyABFRoute
+**
+** Description:     Updating default A/B/F routes
+**
+** Returns:         bitmask of routed technologies
+**
+*******************************************************************************/
 tNFA_TECHNOLOGY_MASK RoutingManager::updateTechnologyABFRoute(int route,
                                                               int felicaRoute) {
   static const char fn[] = "RoutingManager::updateTechnologyABFRoute";
@@ -858,6 +1084,15 @@ tNFA_TECHNOLOGY_MASK RoutingManager::updateTechnologyABFRoute(int route,
   return updateEeTechRouteSetting();
 }
 
+/*******************************************************************************
+**
+** Function:        updateEeTechRouteSetting
+**
+** Description:     Update the route of listen A/B/F technologies
+**
+** Returns:         None
+**
+*******************************************************************************/
 tNFA_TECHNOLOGY_MASK RoutingManager::updateEeTechRouteSetting() {
   static const char fn[] = "RoutingManager::updateEeTechRouteSetting";
   tNFA_TECHNOLOGY_MASK allSeTechMask = 0x00;
@@ -1170,6 +1405,15 @@ void RoutingManager::nfaEeCallback(tNFA_EE_EVT event,
   }
 }
 
+/*******************************************************************************
+**
+** Function:        registerT3tIdentifier
+**
+** Description:     register a t3T identifier for HCE-F purposes
+**
+** Returns:         None
+**
+*******************************************************************************/
 int RoutingManager::registerT3tIdentifier(uint8_t* t3tId, uint8_t t3tIdLen) {
   static const char fn[] = "RoutingManager::registerT3tIdentifier";
 
@@ -1224,6 +1468,15 @@ int RoutingManager::registerT3tIdentifier(uint8_t* t3tId, uint8_t t3tIdLen) {
   return mNfcFOnDhHandle;
 }
 
+/*******************************************************************************
+**
+** Function:        deregisterT3tIdentifier
+**
+** Description:     Deregisters the T3T identifier used for HCE-F purposes
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::deregisterT3tIdentifier(int handle) {
   static const char fn[] = "RoutingManager::deregisterT3tIdentifier";
 
@@ -1262,6 +1515,17 @@ void RoutingManager::deregisterT3tIdentifier(int handle) {
   }
 }
 
+/*******************************************************************************
+**
+** Function:        nfcFCeCallback
+**
+** Description:     Receive execution environment-related events from stack.
+**                  event: Event code.
+**                  eventData: Event data.
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::nfcFCeCallback(uint8_t event,
                                     tNFA_CONN_EVT_DATA* eventData) {
   static const char fn[] = "RoutingManager::nfcFCeCallback";
@@ -1305,7 +1569,7 @@ void RoutingManager::nfcFCeCallback(uint8_t event,
 **
 ** Function:        setNfcSecure
 **
-** Description:     get the NFC secure status
+** Description:     set the NFC secure status
 **
 ** Returns:         true
 **
@@ -1411,11 +1675,29 @@ void RoutingManager::setEeTechRouteUpdateRequired() {
   mEeInfoChanged = true;
 }
 
+/*******************************************************************************
+**
+** Function:        deinitialize
+**
+** Description:     Called for NFC disable
+**
+** Returns:         None
+**
+*******************************************************************************/
 void RoutingManager::deinitialize() {
   onNfccShutdown();
   NFA_EeDeregister(nfaEeCallback);
 }
 
+/*******************************************************************************
+**
+** Function:        registerJniFunctions
+**
+** Description:     called at object creation to register JNI function
+**
+** Returns:         None
+**
+*******************************************************************************/
 int RoutingManager::registerJniFunctions(JNIEnv* e) {
   static const char fn[] = "RoutingManager::registerJniFunctions";
   LOG(DEBUG) << StringPrintf("%s", fn);
@@ -1424,21 +1706,57 @@ int RoutingManager::registerJniFunctions(JNIEnv* e) {
       NELEM(sMethods));
 }
 
+/*******************************************************************************
+**
+** Function:        com_android_nfc_cardemulation_doGetDefaultRouteDestination
+**
+** Description:     Retrieves the default NFCEE route
+**
+** Returns:         default NFCEE route
+**
+*******************************************************************************/
 int RoutingManager::com_android_nfc_cardemulation_doGetDefaultRouteDestination(
     JNIEnv*) {
   return getInstance().mDefaultEe;
 }
 
+/*******************************************************************************
+**
+** Function: com_android_nfc_cardemulation_doGetDefaultOffHostRouteDestination
+**
+** Description:     retrieves the default off host route
+**
+** Returns:         off host route
+**
+*******************************************************************************/
 int RoutingManager::
     com_android_nfc_cardemulation_doGetDefaultOffHostRouteDestination(JNIEnv*) {
   return getInstance().mDefaultOffHostRoute;
 }
 
+/*******************************************************************************
+**
+** Function:        com_android_nfc_cardemulation_doGetDefaultFelicaRouteDestination
+**
+** Description:     retrieves the default Felica route
+**
+** Returns:         felica route
+**
+*******************************************************************************/
 int RoutingManager::
     com_android_nfc_cardemulation_doGetDefaultFelicaRouteDestination(JNIEnv*) {
   return getInstance().mDefaultFelicaRoute;
 }
 
+/*******************************************************************************
+**
+** Function:        com_android_nfc_cardemulation_doGetOffHostUiccDestination
+**
+** Description:     retrieves the default UICC NFCEE-ID
+**
+** Returns:         areay of NFCEE Id for UICC
+**
+*******************************************************************************/
 jbyteArray
 RoutingManager::com_android_nfc_cardemulation_doGetOffHostUiccDestination(
     JNIEnv* e) {
@@ -1453,9 +1771,19 @@ RoutingManager::com_android_nfc_cardemulation_doGetOffHostUiccDestination(
   return uiccJavaArray;
 }
 
+/*******************************************************************************
+**
+** Function: com_android_nfc_cardemulation_doGetOffHostEseDestination
+**
+** Description:     Retrieves the NFCEE id for eSE
+**
+** Returns:         array of NFCEE Ids
+
+**
+*******************************************************************************/
 jbyteArray
 RoutingManager::com_android_nfc_cardemulation_doGetOffHostEseDestination(
-    JNIEnv* e) {
+    JNIEnv * e) {
   std::vector<uint8_t> ese = getInstance().mOffHostRouteEse;
   if (ese.size() == 0) {
     return NULL;
@@ -1467,11 +1795,30 @@ RoutingManager::com_android_nfc_cardemulation_doGetOffHostEseDestination(
   return eseJavaArray;
 }
 
+/*******************************************************************************
+**
+** Function: com_android_nfc_cardemulation_doGetAidMatchingMode
+**
+** Description:     Retrieves the AID matching mode
+**
+** Returns:         matching mode
+**
+*******************************************************************************/
 int RoutingManager::com_android_nfc_cardemulation_doGetAidMatchingMode(
     JNIEnv*) {
   return getInstance().mAidMatchingMode;
 }
 
+/*******************************************************************************
+**
+** Function: com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination
+**
+** Description:     Retrieves the route for ISO-DEP
+**
+** Returns:         ISO-DEP route
+
+**
+*******************************************************************************/
 int RoutingManager::
     com_android_nfc_cardemulation_doGetDefaultIsoDepRouteDestination(JNIEnv*) {
   return getInstance().mDefaultIsoDepRoute;
