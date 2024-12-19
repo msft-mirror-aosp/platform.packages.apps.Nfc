@@ -1327,7 +1327,7 @@ public final class NfcServiceTest {
         mNfcService.mNfcAdapter.registerOemExtensionCallback(callback);
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         mNfcService.onRemoteFieldActivated();
-        verify(callback, atLeastOnce()).onRfFieldActivated(anyBoolean());
+        verify(callback, atLeastOnce()).onRfFieldDetected(anyBoolean());
         mLooper.dispatchAll();
         verify(mCardEmulationManager).onFieldChangeDetected(anyBoolean());
         verify(mApplication).sendBroadcastAsUser(any(), any());
@@ -1349,7 +1349,7 @@ public final class NfcServiceTest {
         mNfcService.mNfcAdapter.registerOemExtensionCallback(callback);
         when(android.nfc.Flags.nfcPersistLog()).thenReturn(true);
         mNfcService.onRemoteFieldDeactivated();
-        verify(callback, atLeastOnce()).onRfFieldActivated(anyBoolean());
+        verify(callback, atLeastOnce()).onRfFieldDetected(anyBoolean());
         mClock.mOffset += 60;
         mLooper.dispatchAll();
         verify(mCardEmulationManager).onFieldChangeDetected(anyBoolean());
