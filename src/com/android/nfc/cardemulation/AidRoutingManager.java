@@ -184,28 +184,6 @@ public class AidRoutingManager {
         }
     }
 
-    private int getRouteForSecureElement(String se) {
-        if (se == null || se.length() <= 3) {
-            return 0;
-        }
-        try {
-            if (se.startsWith("eSE") && mOffHostRouteEse != null) {
-                int index = Integer.parseInt(se.substring(3));
-                if (mOffHostRouteEse.length >= index && index > 0) {
-                    return mOffHostRouteEse[index - 1] & 0xFF;
-                }
-            } else if (se.startsWith("SIM") && mOffHostRouteUicc != null) {
-                int index = Integer.parseInt(se.substring(3));
-                if (mOffHostRouteUicc.length >= index && index > 0) {
-                    return mOffHostRouteUicc[index - 1] & 0xFF;
-                }
-            }
-            if (mOffHostRouteEse == null && mOffHostRouteUicc == null)
-              return mDefaultOffHostRoute;
-        } catch (NumberFormatException e) { }
-        return 0;
-    }
-
     //Checking in case of power/route update of any AID after conflict
     //resolution, is routing required or not?
     private boolean isAidEntryUpdated(HashMap<String, Integer> currRouteForAid,
@@ -252,6 +230,13 @@ public class AidRoutingManager {
         return false;
     }
 
+    private boolean checkRoutingOptionChanged(int prevDefaultRoute, int prevDefaultIsoDepRoute,
+                                              int prevDefaultOffHostRoute) {
+        return (prevDefaultRoute != mDefaultRoute)
+                || (prevDefaultIsoDepRoute != mDefaultIsoDepRoute)
+                || (prevDefaultOffHostRoute != mDefaultOffHostRoute);
+    }
+
     private void checkOffHostRouteToHost(HashMap<String, AidEntry> routeCache) {
         Iterator<Map.Entry<String, AidEntry> > it = routeCache.entrySet().iterator();
         while (it.hasNext()) {
@@ -263,7 +248,8 @@ public class AidRoutingManager {
                 continue;
             }
             boolean mustHostRoute = aidEntry.unCheckedOffHostSE.stream()
-                    .anyMatch(offHost -> getRouteForSecureElement(offHost) == mDefaultRoute);
+                    .anyMatch(offHost ->mRoutingOptionManager.getRouteForSecureElement(offHost)
+                            == mDefaultRoute);
             if (mustHostRoute) {
                 if (DBG) Log.d(TAG, aid + " is route to host due to unchecked off host and " +
                         "default route(0x" + Integer.toHexString(mDefaultRoute) + ") is same");
@@ -303,6 +289,8 @@ public class AidRoutingManager {
         ArrayList<Integer> seList = new ArrayList<Integer>();
 
         int prevDefaultRoute = mDefaultRoute;
+        int prevDefaultIsoDepRoute = mDefaultIsoDepRoute;
+        int prevDefaultOffHostRoute = mDefaultOffHostRoute;
 
         if (mRoutingOptionManager.isRoutingTableOverrided()) {
             mDefaultRoute = mRoutingOptionManager.getOverrideDefaultRoute();
@@ -336,7 +324,7 @@ public class AidRoutingManager {
                 if (offHostSE == null) {
                     route = mDefaultOffHostRoute;
                 } else {
-                    route = getRouteForSecureElement(offHostSE);
+                    route = mRoutingOptionManager.getRouteForSecureElement(offHostSE);
                     if (route == 0) {
                         Log.e(TAG, "Invalid Off host Aid Entry " + offHostSE);
                         continue;
@@ -541,7 +529,8 @@ public class AidRoutingManager {
 
             boolean mIsUnrouteRequired = checkUnrouteAid(prevRouteForAid, prevPowerForAid);
             boolean isRouteTableUpdated = checkRouteAid(prevRouteForAid, prevPowerForAid);
-            boolean isRoutingOptionUpdated = (prevDefaultRoute != mDefaultRoute);
+            boolean isRoutingOptionUpdated = checkRoutingOptionChanged(prevDefaultRoute,
+                    prevDefaultIsoDepRoute, prevDefaultOffHostRoute);
 
             if (isPowerStateUpdated || isRouteTableUpdated || mIsUnrouteRequired
                     || isRoutingOptionUpdated || force) {
@@ -568,9 +557,7 @@ public class AidRoutingManager {
     }
 
     private int commit(HashMap<String, AidEntry> routeCache, boolean isOverrideOrRecover) {
-
         if(routeCache != null) {
-
             for (Map.Entry<String, AidEntry> aidEntry : routeCache.entrySet())  {
                 int route = aidEntry.getValue().route;
                 int aidType = aidEntry.getValue().aidInfo;
@@ -580,7 +567,6 @@ public class AidRoutingManager {
                     Log.d(TAG, "commit aid:" + aid + ",route:" + route
                         + ",aidtype:" + aidType + ", power state:" + power);
                 }
-
                 NfcService.getInstance().routeAids(aid, route, aidType, power);
             }
         }
@@ -590,19 +576,9 @@ public class AidRoutingManager {
     }
 
     private void sendRoutingTable(boolean optionChanged, boolean force) {
-        Log.d(TAG, "sendRoutingTable");
         if (!mRoutingOptionManager.isRoutingTableOverrided()) {
-            if (mDefaultRoute != ROUTE_HOST) {
-                Log.d(TAG, "Protocol and Technology entries need to sync with"
-                    + " mDefaultRoute: " + mDefaultRoute);
-                mDefaultIsoDepRoute = mDefaultRoute;
-                mDefaultOffHostRoute = mDefaultRoute;
-                mDefaultFelicaRoute = mDefaultRoute;
-            } else {
-                Log.d(TAG, "Default route is DeviceHost, use previous protocol, technology");
-            }
-
             if (force || optionChanged) {
+                Log.d(TAG, "sendRoutingTable");
                 NfcService.getInstance().setIsoDepProtocolRoute(mDefaultIsoDepRoute);
                 NfcService.getInstance().setTechnologyABFRoute(mDefaultOffHostRoute,
                         mDefaultFelicaRoute);
@@ -611,7 +587,6 @@ public class AidRoutingManager {
             Log.d(TAG, "Routing table is override, Do not send the protocol, tech");
         }
     }
-
 
     /**
      * This notifies that the AID routing table in the controller

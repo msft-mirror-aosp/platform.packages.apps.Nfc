@@ -17,6 +17,7 @@ package com.android.nfc.cardemulation;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.Log;
@@ -25,6 +26,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.nfc.DeviceConfigFacade;
 import com.android.nfc.NfcService;
+import com.android.nfc.cardemulation.util.TelephonyUtils;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -32,12 +34,10 @@ import java.util.Map;
 import java.util.Optional;
 
 public class RoutingOptionManager {
-    public final String TAG = "RoutingOptionManager";
-
+    static final String TAG = "RoutingOptionManager";
     static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
 
     static final int ROUTE_UNKNOWN = -1;
-
     static final int ROUTE_DEFAULT = -2;
 
     public static final String DEVICE_HOST = "DH";
@@ -52,7 +52,6 @@ public class RoutingOptionManager {
     public static final String KEY_AUTO_CHANGE_CAPABLE = "allow_auto_routing_changed";
     Context mContext;
     private SharedPreferences mPrefs;
-
 
     int mDefaultRoute;
     int mDefaultIsoDepRoute;
@@ -72,6 +71,8 @@ public class RoutingOptionManager {
     boolean mIsRoutingTableOverrided = false;
 
     boolean mIsAutoChangeCapable = true;
+    boolean mIsUiccCapable = false;
+    boolean mIsEseCapable = false;
 
     // Look up table for secure element name to route id
     HashMap<String, Integer> mRouteForSecureElement = new HashMap<>();
@@ -79,7 +80,46 @@ public class RoutingOptionManager {
     // Look up table for route id to secure element name
     HashMap<Integer, String> mSecureElementForRoute = new HashMap<>();
 
+    // Helper class for SIM routing values
+    static class SimSettings {
+        int type;
+        int index;
+        // Up to two eUICCs can be supported depending on whether MEP is supported or not.
+        int[] eUiccIndexs = new int[2];
+        SimSettings(int numberOfUicc, int startIndexOfEuicc) {
+            type = TelephonyUtils.SIM_TYPE_UNKNOWN;
+            index = 0;
+            if (numberOfUicc != 0 && numberOfUicc > startIndexOfEuicc) {
+                eUiccIndexs[0] = startIndexOfEuicc;
+                eUiccIndexs[1] = (numberOfUicc > startIndexOfEuicc + 1) ?
+                        startIndexOfEuicc + 1 : startIndexOfEuicc;
+            }
+        }
+        String getName() {
+            return SE_PREFIX_SIM + (index + 1);
+        }
+        void setType(int type) {
+            this.type = type;
+            setIndex();
+        }
+        private void setIndex() {
+            switch (type) {
+                case TelephonyUtils.SIM_TYPE_UICC:
+                    index = 0;
+                    break;
+                case TelephonyUtils.SIM_TYPE_EUICC_1:
+                    index = eUiccIndexs[0];
+                    break;
+                case TelephonyUtils.SIM_TYPE_EUICC_2:
+                    index = eUiccIndexs[1];
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
 
+    SimSettings mPreferredSimSettings;
     @VisibleForTesting
     native int doGetDefaultRouteDestination();
     @VisibleForTesting
@@ -124,6 +164,8 @@ public class RoutingOptionManager {
         mAidMatchingSupport = doGetAidMatchingMode();
         if (DBG) Log.d(TAG, "mAidMatchingSupport=0x" + Integer.toHexString(mAidMatchingSupport));
 
+        mPreferredSimSettings = new SimSettings((mOffHostRouteUicc != null) ?
+                mOffHostRouteUicc.length : 0, 1);
         createLookUpTable();
     }
 
@@ -172,8 +214,7 @@ public class RoutingOptionManager {
                 Log.i(TAG, "overwriteRoutingTable() - mDefaultScRoute with default config value");
                 mDefaultScRoute = doGetDefaultScRouteDestination();
             } else {
-                Log.d(TAG,
-                        "overwriteRoutingTable() - mDefaultScRoute : "
+                Log.d(TAG, "overwriteRoutingTable() - mDefaultScRoute : "
                             + Integer.toHexString(mOverrideDefaultScRoute));
                 mDefaultScRoute = mOverrideDefaultScRoute;
             }
@@ -182,7 +223,7 @@ public class RoutingOptionManager {
         }
 
         mOverrideDefaultRoute = mOverrideDefaultIsoDepRoute = mOverrideDefaultOffHostRoute =
-            mOverrideDefaultScRoute = ROUTE_UNKNOWN;
+                mOverrideDefaultScRoute = mOverrideDefaultFelicaRoute = ROUTE_UNKNOWN;
     }
 
     public void overrideDefaultRoute(int defaultRoute) {
@@ -217,20 +258,23 @@ public class RoutingOptionManager {
     }
 
     public int getDefaultRoute() {
-        return mDefaultRoute;
+        return getAlternativeRouteIfSimIsInvalid(mDefaultRoute);
     }
 
-    public int getOverrideDefaultIsoDepRoute() { return mOverrideDefaultIsoDepRoute;}
+    public int getOverrideDefaultIsoDepRoute() {
+        return mOverrideDefaultIsoDepRoute;
+    }
 
     public int getDefaultIsoDepRoute() {
-        return mDefaultIsoDepRoute;
+        return getAlternativeRouteIfSimIsInvalid(mDefaultIsoDepRoute);
     }
 
     public int getOverrideDefaultOffHostRoute() {
         return mOverrideDefaultOffHostRoute;
     }
+
     public int getDefaultOffHostRoute() {
-        return mDefaultOffHostRoute;
+        return getAlternativeRouteIfSimIsInvalid(mDefaultOffHostRoute);
     }
 
     public int getDefaultFelicaRoute() {
@@ -240,9 +284,11 @@ public class RoutingOptionManager {
     public int getOverrideDefaultFelicaRoute() {
         return mOverrideDefaultFelicaRoute;
     }
+
     public int getOverrideDefaultScRoute() {
         return mOverrideDefaultScRoute;
     }
+
     public int getDefaultScRoute() {
         return mDefaultScRoute;
     }
@@ -297,6 +343,10 @@ public class RoutingOptionManager {
             Log.d(TAG, "create mPrefs in readRoutingOptions");
             mContext = context;
             mPrefs = context.getSharedPreferences(PREF_ROUTING_OPTIONS, Context.MODE_PRIVATE);
+            mIsUiccCapable = context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_NFC_OFF_HOST_CARD_EMULATION_UICC);
+            mIsEseCapable = context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_NFC_OFF_HOST_CARD_EMULATION_ESE);
         }
 
         // If the OEM does not set default routes in the overlay and if no app has overwritten
@@ -348,7 +398,9 @@ public class RoutingOptionManager {
         mIsAutoChangeCapable = status;
     }
 
-    public boolean isAutoChangeEnabled() { return mIsAutoChangeCapable;}
+    public boolean isAutoChangeEnabled() {
+        return mIsAutoChangeCapable;
+    }
 
     private void writeRoutingOption(String key, String name) {
         mPrefs.edit().putString(key, name).apply();
@@ -359,14 +411,35 @@ public class RoutingOptionManager {
     }
 
     public int getRouteForSecureElement(String se) {
-        return Optional.ofNullable(mRouteForSecureElement.get(se)).orElseGet(()->0x00);
+        return Optional.ofNullable(mRouteForSecureElement.get(renameSecureElementIfSimType(se)))
+                .orElseGet(() -> 0x00);
     }
 
     public String getSecureElementForRoute(int route) {
         return Optional.ofNullable(mSecureElementForRoute.get(route)).orElseGet(()->DEVICE_HOST);
     }
 
-
+    // Implement eSIM support
+    public void onPreferredSimChanged(int simType) {
+        mPreferredSimSettings.setType(simType);
+    }
+    public String getPreferredSim() {
+        return mPreferredSimSettings.getName();
+    }
+    public String renameSecureElementIfSimType(String seName) {
+        return seName.startsWith(SE_PREFIX_SIM) ? mPreferredSimSettings.getName() : seName;
+    }
+    private int getAlternativeRouteIfSimIsInvalid(int route) {
+        // TODO - Implement
+        if (getSecureElementForRoute(route).startsWith(SE_PREFIX_SIM)) {
+            if (mPreferredSimSettings.type == TelephonyUtils.SIM_TYPE_UNKNOWN) {
+                Log.e(TAG, "sim is invalid");
+                return getRouteForSecureElement(mIsEseCapable ? (SE_PREFIX_ESE + 1) : DEVICE_HOST);
+            }
+        }
+        return route;
+    }
+    // Implement eSIM support
     private void addOrUpdateTableItems(String prefix, byte[] routes) {
         if (routes != null && routes.length != 0) {
             for (int index = 1; index <= routes.length; index++) {

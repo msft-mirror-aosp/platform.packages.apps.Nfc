@@ -19,6 +19,10 @@ package com.android.nfc.cardemulation;
 import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_FAILURE_FEATURE_UNSUPPORTED;
 import static android.nfc.cardemulation.CardEmulation.SET_SERVICE_ENABLED_STATUS_OK;
 
+import static com.android.nfc.cardemulation.PreferredSubscriptionService.PREF_PREFERRED_SUB_ID;
+import static com.android.nfc.cardemulation.PreferredSubscriptionService.PREF_SUBSCRIPTION;
+import static com.android.nfc.cardemulation.util.TelephonyUtils.SUBSCRIPTION_ID_UNKNOWN;
+
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -42,6 +46,7 @@ import static org.mockito.Mockito.when;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.nfc.ComponentNameAndUser;
@@ -57,6 +62,7 @@ import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.platform.test.annotations.RequiresFlagsEnabled;
 import android.provider.Settings;
 import android.telephony.SubscriptionManager;
 
@@ -67,6 +73,7 @@ import com.android.nfc.NfcInjector;
 import com.android.nfc.NfcPermissions;
 import com.android.nfc.NfcService;
 import com.android.nfc.R;
+import com.android.nfc.cardemulation.util.TelephonyUtils;
 
 import org.junit.After;
 import org.junit.Before;
@@ -146,6 +153,7 @@ public class CardEmulationManagerTest {
     @Mock private UserManager mUserManager;
     @Mock private NfcAdapter mNfcAdapter;
     @Mock private NfcEventLog mNfcEventLog;
+    @Mock private PreferredSubscriptionService mPreferredSubscriptionService;
     @Captor private ArgumentCaptor<List<PollingFrame>> mPollingLoopFrameCaptor;
     @Captor private ArgumentCaptor<byte[]> mDataCaptor;
     @Captor private ArgumentCaptor<List<ApduServiceInfo>> mServiceListCaptor;
@@ -178,6 +186,7 @@ public class CardEmulationManagerTest {
         when(mContext.getSystemService(eq(UserManager.class))).thenReturn(mUserManager);
         when(mResources.getBoolean(R.bool.indicate_user_activity_for_hce)).thenReturn(true);
         when(android.nfc.Flags.nfcEventListener()).thenReturn(true);
+        when(android.nfc.Flags.enableCardEmulationEuicc()).thenReturn(true);
         mCardEmulationManager = createInstanceWithMockParams();
     }
 
@@ -1619,6 +1628,7 @@ public class CardEmulationManagerTest {
         verify(mRoutingOptionManager).overrideDefaultOffHostRoute(eq(TEST_DATA_1[0] & 0xFF));
         verify(mRoutingOptionManager).getOffHostRouteEse();
         verify(mRoutingOptionManager).getOffHostRouteUicc();
+        verify(mRoutingOptionManager, times(2)).getRouteForSecureElement(eq("eSE1"));
         verify(mRegisteredAidCache).onRoutingOverridedOrRecovered();
         verifyNoMoreInteractions(mRoutingOptionManager);
         verifyNoMoreInteractions(mRegisteredAidCache);
@@ -1641,6 +1651,7 @@ public class CardEmulationManagerTest {
         verify(mRoutingOptionManager).overrideDefaultOffHostRoute(eq(TEST_DATA_2[0] & 0xFF));
         verify(mRoutingOptionManager).getOffHostRouteEse();
         verify(mRoutingOptionManager).getOffHostRouteUicc();
+        verify(mRoutingOptionManager, times(2)).getRouteForSecureElement(eq("SIM1"));
         verify(mRegisteredAidCache).onRoutingOverridedOrRecovered();
         verifyNoMoreInteractions(mRoutingOptionManager);
         verifyNoMoreInteractions(mRegisteredAidCache);
@@ -2256,6 +2267,10 @@ public class CardEmulationManagerTest {
     private CardEmulationManager createInstanceWithMockParams() {
         when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(TEST_DATA_1);
         when(mRoutingOptionManager.getOffHostRouteUicc()).thenReturn(TEST_DATA_2);
+        when(mRoutingOptionManager.getRouteForSecureElement("eSE1")).thenReturn(
+                TEST_DATA_1[0] & 0xFF);
+        when(mRoutingOptionManager.getRouteForSecureElement("SIM1")).thenReturn(
+                TEST_DATA_2[0] & 0xFF);
         when(mWalletRoleObserver.isWalletRoleFeatureEnabled()).thenReturn(true);
         when(mWalletRoleObserver.getDefaultWalletRoleHolder(eq(USER_ID)))
                 .thenReturn(WALLET_HOLDER_PACKAGE_NAME);
@@ -2274,7 +2289,8 @@ public class CardEmulationManagerTest {
                 mEnabledNfcFServices,
                 mRoutingOptionManager,
                 mPowerManager,
-                mNfcEventLog);
+                mNfcEventLog,
+                mPreferredSubscriptionService);
     }
 
     @Test
@@ -2629,7 +2645,7 @@ public class CardEmulationManagerTest {
         when(mContext.getPackageManager()).thenReturn(packageManager);
         int result = iNfcCardEmulation.setDefaultNfcSubscriptionId(1, "com.android.test");
         assertThat(result)
-                .isEqualTo(CardEmulation.SET_SUBSCRIPTION_ID_STATUS_FAILED_INVALID_SUBSCRIPTION_ID);
+                .isEqualTo(CardEmulation.SET_SUBSCRIPTION_ID_STATUS_SUCCESS);
     }
 
     @Test
@@ -2640,6 +2656,8 @@ public class CardEmulationManagerTest {
         when(packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION))
                 .thenReturn(true);
         when(mContext.getPackageManager()).thenReturn(packageManager);
+        when(mPreferredSubscriptionService.getPreferredSubscriptionId())
+                .thenReturn(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
         int result = iNfcCardEmulation.getDefaultNfcSubscriptionId("com.android.test");
         assertThat(result)
                 .isEqualTo(SubscriptionManager.INVALID_SUBSCRIPTION_ID);

@@ -220,6 +220,10 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(OFFHOST_ROUTE_ESE);
     when(mRoutingOptionManager.getAidMatchingSupport()).thenReturn(AID_MATCHING_PREFIX_ONLY);
     when(mRoutingOptionManager.getDefaultIsoDepRoute()).thenReturn(ROUTE_HOST);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2"))
+            .thenReturn(OFFHOST_ROUTE_ESE[1] & 0xFF);
+    when(mRoutingOptionManager.getRouteForSecureElement("SIM1"))
+            .thenReturn(OFFHOST_ROUTE_UICC[0] & 0xFF);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_2_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
@@ -280,6 +284,10 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getAidMatchingSupport()).thenReturn(AID_MATCHING_PREFIX_ONLY);
     when(mRoutingOptionManager.getDefaultIsoDepRoute()).thenReturn(ROUTE_HOST);
     when(mRoutingOptionManager.isAutoChangeEnabled()).thenReturn(true);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2"))
+            .thenReturn(OFFHOST_ROUTE_ESE[1] & 0xFF);
+    when(mRoutingOptionManager.getRouteForSecureElement("SIM1"))
+            .thenReturn(OFFHOST_ROUTE_UICC[0] & 0xFF);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_1_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
@@ -325,6 +333,8 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(OFFHOST_ROUTE_ESE);
     when(mRoutingOptionManager.getAidMatchingSupport()).thenReturn(AID_MATCHING_EXACT_ONLY);
     when(mRoutingOptionManager.getDefaultIsoDepRoute()).thenReturn(OVERRIDE_ISODEP_ROUTE);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2"))
+            .thenReturn(OFFHOST_ROUTE_ESE[1] & 0xFF);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_1_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
@@ -378,6 +388,8 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(OFFHOST_ROUTE_ESE);
     when(mRoutingOptionManager.getAidMatchingSupport()).thenReturn(AID_MATCHING_EXACT_ONLY);
     when(mRoutingOptionManager.getDefaultIsoDepRoute()).thenReturn(OVERRIDE_ISODEP_ROUTE);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2"))
+            .thenReturn(OFFHOST_ROUTE_ESE[1] & 0xFF);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_1_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
@@ -419,6 +431,8 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getOffHostRouteUicc()).thenReturn(null);
     when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(null);
     when(mRoutingOptionManager.getAidMatchingSupport()).thenReturn(AID_MATCHING_EXACT_OR_PREFIX);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2")).thenReturn(DEFAULT_OFFHOST_ROUTE);
+    when(mRoutingOptionManager.getRouteForSecureElement("SIM1")).thenReturn(DEFAULT_OFFHOST_ROUTE);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_2_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
@@ -433,33 +447,28 @@ public class AidRoutingManagerTest {
     verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
     assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("second#")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("third")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("")).isTrue();
-    verify(mNfcService, times(4)).routeAids(routedAidsCaptor.capture(),
+    verify(mNfcService, times(3)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
                                             aidTypeCaptor.capture(),
                                             powerCaptor.capture());
     assertThat(routedAidsCaptor.getAllValues().get(0)).isEqualTo("");
     assertThat(routedAidsCaptor.getAllValues().get(1)).isEqualTo("fourthAidEntry");
-    assertThat(routedAidsCaptor.getAllValues().get(2)).isEqualTo("thirdAidEntry");
-    assertThat(routedAidsCaptor.getAllValues().get(3)).isEqualTo("firstAidEntry");
+    assertThat(routedAidsCaptor.getAllValues().get(2)).isEqualTo("firstAidEntry");
     assertThat(routeCaptor.getAllValues().get(0)).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
     assertThat(routeCaptor.getAllValues().get(1)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
     assertThat(routeCaptor.getAllValues().get(2)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
-    assertThat(routeCaptor.getAllValues().get(3)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
     assertThat(aidTypeCaptor.getAllValues().get(0))
         .isEqualTo(RegisteredAidCache.AID_ROUTE_QUAL_PREFIX);
     assertThat(aidTypeCaptor.getAllValues().get(1)).isEqualTo(FOURTH_AID_ENTRY_AID_INFO);
-    assertThat(aidTypeCaptor.getAllValues().get(2)).isEqualTo(THIRD_AID_ENTRY_AID_INFO);
-    assertThat(aidTypeCaptor.getAllValues().get(3)).isEqualTo(FIRST_AID_ENTRY_AID_INFO);
+    assertThat(aidTypeCaptor.getAllValues().get(2)).isEqualTo(FIRST_AID_ENTRY_AID_INFO);
     assertThat(powerCaptor.getAllValues().get(0)).isEqualTo(RegisteredAidCache.POWER_STATE_ALL);
     assertThat(powerCaptor.getAllValues().get(1)).isEqualTo(FOURTH_AID_ENTRY_POWER);
-    assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(THIRD_AID_ENTRY_POWER);
-    assertThat(powerCaptor.getAllValues().get(3)).isEqualTo(FIRST_AID_ENTRY_POWER);
+    assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(FIRST_AID_ENTRY_POWER);
     verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
-    assertThat(manager.mRouteForAid.size()).isEqualTo(4);
-    assertThat(manager.mPowerForAid.size()).isEqualTo(4);
+    assertThat(manager.mRouteForAid.size()).isEqualTo(3);
+    assertThat(manager.mPowerForAid.size()).isEqualTo(3);
     assertThat(manager.mAidRoutingTable.size()).isEqualTo(2);
   }
 
@@ -483,6 +492,8 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(null);
     when(mRoutingOptionManager.getAidMatchingSupport())
         .thenReturn(AID_MATCHING_EXACT_OR_SUBSET_OR_PREFIX);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2")).thenReturn(DEFAULT_OFFHOST_ROUTE);
+    when(mRoutingOptionManager.getRouteForSecureElement("SIM1")).thenReturn(DEFAULT_OFFHOST_ROUTE);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_2_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(0);
     manager = new AidRoutingManager();
@@ -497,37 +508,32 @@ public class AidRoutingManagerTest {
     verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
     assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("second")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("third")).isTrue();
     assertThat(unroutedAidsCaptor.getAllValues().contains("")).isTrue();
-    verify(mNfcService, times(5)).routeAids(routedAidsCaptor.capture(),
+    verify(mNfcService, times(4)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
                                             aidTypeCaptor.capture(),
                                             powerCaptor.capture());
     assertThat(routedAidsCaptor.getAllValues().get(0)).isEqualTo("");
     assertThat(routedAidsCaptor.getAllValues().get(1)).isEqualTo("secondAidEntry");
     assertThat(routedAidsCaptor.getAllValues().get(2)).isEqualTo("fourthAidEntry");
-    assertThat(routedAidsCaptor.getAllValues().get(3)).isEqualTo("thirdAidEntry");
-    assertThat(routedAidsCaptor.getAllValues().get(4)).isEqualTo("firstAidEntry");
+    assertThat(routedAidsCaptor.getAllValues().get(3)).isEqualTo("firstAidEntry");
     assertThat(routeCaptor.getAllValues().get(0)).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
     assertThat(routeCaptor.getAllValues().get(1)).isEqualTo(DEFAULT_ROUTE);
     assertThat(routeCaptor.getAllValues().get(2)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
     assertThat(routeCaptor.getAllValues().get(3)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
-    assertThat(routeCaptor.getAllValues().get(4)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
     assertThat(aidTypeCaptor.getAllValues().get(0))
         .isEqualTo(RegisteredAidCache.AID_ROUTE_QUAL_PREFIX);
     assertThat(aidTypeCaptor.getAllValues().get(1)).isEqualTo(SECOND_AID_ENTRY_AID_INFO);
     assertThat(aidTypeCaptor.getAllValues().get(2)).isEqualTo(FOURTH_AID_ENTRY_AID_INFO);
-    assertThat(aidTypeCaptor.getAllValues().get(3)).isEqualTo(THIRD_AID_ENTRY_AID_INFO);
-    assertThat(aidTypeCaptor.getAllValues().get(4)).isEqualTo(FIRST_AID_ENTRY_AID_INFO);
+    assertThat(aidTypeCaptor.getAllValues().get(3)).isEqualTo(FIRST_AID_ENTRY_AID_INFO);
     assertThat(powerCaptor.getAllValues().get(0)).isEqualTo(RegisteredAidCache.POWER_STATE_ALL);
     assertThat(powerCaptor.getAllValues().get(1)).isEqualTo(SECOND_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(FOURTH_AID_ENTRY_POWER);
-    assertThat(powerCaptor.getAllValues().get(3)).isEqualTo(THIRD_AID_ENTRY_POWER);
-    assertThat(powerCaptor.getAllValues().get(4)).isEqualTo(FIRST_AID_ENTRY_POWER);
+    assertThat(powerCaptor.getAllValues().get(3)).isEqualTo(FIRST_AID_ENTRY_POWER);
     verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(OVERRIDE_DEFAULT_ROUTE);
-    assertThat(manager.mRouteForAid.size()).isEqualTo(4);
-    assertThat(manager.mPowerForAid.size()).isEqualTo(4);
+    assertThat(manager.mRouteForAid.size()).isEqualTo(3);
+    assertThat(manager.mPowerForAid.size()).isEqualTo(3);
     assertThat(manager.mAidRoutingTable.size()).isEqualTo(2);
   }
 
@@ -550,6 +556,8 @@ public class AidRoutingManagerTest {
     when(mRoutingOptionManager.getOffHostRouteEse()).thenReturn(null);
     when(mRoutingOptionManager.getAidMatchingSupport()).thenReturn(AID_MATCHING_PREFIX_ONLY);
     when(mRoutingOptionManager.getDefaultIsoDepRoute()).thenReturn(ROUTE_HOST);
+    when(mRoutingOptionManager.getRouteForSecureElement("eSE2")).thenReturn(DEFAULT_OFFHOST_ROUTE);
+    when(mRoutingOptionManager.getRouteForSecureElement("SIM1")).thenReturn(DEFAULT_OFFHOST_ROUTE);
     when(mNfcService.getNciVersion()).thenReturn(NfcService.NCI_VERSION_1_0);
     when(mNfcService.getAidRoutingTableSize()).thenReturn(100);
     manager = new AidRoutingManager();
@@ -559,26 +567,22 @@ public class AidRoutingManagerTest {
 
     assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
     verify(mNfcService, never()).unrouteAids(anyString());
-    verify(mNfcService, times(3)).routeAids(routedAidsCaptor.capture(),
+    verify(mNfcService, times(2)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
                                             aidTypeCaptor.capture(),
                                             powerCaptor.capture());
     assertThat(routedAidsCaptor.getAllValues().get(0)).isEqualTo("fourthAidEntry");
     assertThat(routedAidsCaptor.getAllValues().get(1)).isEqualTo("firstAidEntry");
-    assertThat(routedAidsCaptor.getAllValues().get(2)).isEqualTo("thirdAidEntry");
     assertThat(routeCaptor.getAllValues().get(0)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
     assertThat(routeCaptor.getAllValues().get(1)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
-    assertThat(routeCaptor.getAllValues().get(2)).isEqualTo(DEFAULT_OFFHOST_ROUTE);
     assertThat(aidTypeCaptor.getAllValues().get(0)).isEqualTo(FOURTH_AID_ENTRY_AID_INFO);
     assertThat(aidTypeCaptor.getAllValues().get(1)).isEqualTo(FIRST_AID_ENTRY_AID_INFO);
-    assertThat(aidTypeCaptor.getAllValues().get(2)).isEqualTo(THIRD_AID_ENTRY_AID_INFO);
     assertThat(powerCaptor.getAllValues().get(0)).isEqualTo(FOURTH_AID_ENTRY_POWER);
     assertThat(powerCaptor.getAllValues().get(1)).isEqualTo(FIRST_AID_ENTRY_POWER);
-    assertThat(powerCaptor.getAllValues().get(2)).isEqualTo(THIRD_AID_ENTRY_POWER);
     verify(mNfcService).commitRouting(anyBoolean());
     assertThat(manager.mDefaultRoute).isEqualTo(DEFAULT_ROUTE);
-    assertThat(manager.mRouteForAid.size()).isEqualTo(4);
-    assertThat(manager.mPowerForAid.size()).isEqualTo(4);
+    assertThat(manager.mRouteForAid.size()).isEqualTo(3);
+    assertThat(manager.mPowerForAid.size()).isEqualTo(3);
     assertThat(manager.mAidRoutingTable.size()).isEqualTo(2);
   }
 

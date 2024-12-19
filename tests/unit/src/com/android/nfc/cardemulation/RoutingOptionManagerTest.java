@@ -53,7 +53,7 @@ public class RoutingOptionManagerTest {
     private static final int DEFAULT_OFF_HOST_ROUTE = 2;
     private static final int DEFAULT_FELICA_ROUTE = 3;
     private static final int DEFAULT_SC_ROUTE = 2;
-    private static final byte[] OFF_HOST_UICC = new byte[] {1, 2};
+    private static final byte[] OFF_HOST_UICC = new byte[] {5, 6};
     private static final byte[] OFF_HOST_ESE = new byte[] {3, 4};
     private static final int AID_MATCHING_MODE = 3;
 
