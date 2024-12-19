@@ -645,7 +645,7 @@ public class RegisteredAidCacheTest {
 
         verify(mAidRoutingManager).supportsAidPrefixRouting();
         verify(mAidRoutingManager).supportsAidSubsetRouting();
-        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(false),
+        verify(mAidRoutingManager).configureRouting(mRoutingEntryMapCaptor.capture(), eq(true),
                 eq(false));
         assertFalse(mRegisteredAidCache.isRequiresScreenOnServiceExist());
     }
