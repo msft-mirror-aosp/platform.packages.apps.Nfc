@@ -2233,80 +2233,96 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public synchronized boolean isObserveModeEnabled() {
-            if (!isNfcEnabled()) {
-                Log.e(TAG, "isObserveModeEnabled: NFC must be enabled but is: " + mState);
-                return false;
+        public boolean isObserveModeEnabled() {
+            synchronized (NfcService.this) {
+                if (!isNfcEnabled()) {
+                    Log.e(TAG, "isObserveModeEnabled: NFC must be enabled but is: " + mState);
+                    return false;
+                }
+                NfcPermissions.enforceUserPermissions(mContext);
+                return mDeviceHost.isObserveModeEnabled();
             }
-            NfcPermissions.enforceUserPermissions(mContext);
-            return mDeviceHost.isObserveModeEnabled();
         }
 
         @Override
-        public synchronized boolean setObserveMode(boolean enable, String packageName) {
-            if (Flags.checkPassedInPackage()) {
-                mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
-            }
-            if (!isNfcEnabled()) {
-                Log.e(TAG, "setObserveMode: NFC must be enabled but is: " + mState);
-                return false;
-            }
-            int callingUid = Binder.getCallingUid();
-            UserHandle callingUser = Binder.getCallingUserHandle();
-            int triggerSource =
-                    NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
-            if (!NfcInjector.isPrivileged(callingUid)) {
-                NfcPermissions.enforceUserPermissions(mContext);
-                if (packageName == null) {
-                    Log.e(TAG, "no package name associated with non-privileged calling UID");
+        public boolean setObserveMode(boolean enable, String packageName) {
+            synchronized (NfcService.this) {
+                if (Flags.checkPassedInPackage()) {
+                    mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
                 }
-                if (mCardEmulationManager.isPreferredServicePackageNameForUser(packageName,
-                        callingUser.getIdentifier())) {
-                    if (android.permission.flags.Flags.walletRoleEnabled()) {
-                        if (packageName != null) {
-                            triggerSource = packageName.equals(getWalletRoleHolder(callingUser))
-                                ? NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__WALLET_ROLE_HOLDER
-                                : NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
-                        }
-                    } else {
-                        if (mForegroundUtils.isInForeground(callingUid)) {
-                            triggerSource =
-                                NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
-                        }
-                    }
-                } else {
-                    Log.e(TAG, "setObserveMode: Caller not preferred NFC service.");
+                if (!isNfcEnabled()) {
+                    Log.e(TAG, "setObserveMode: NFC must be enabled but is: " + mState);
                     return false;
                 }
-            }
+                int callingUid = Binder.getCallingUid();
+                UserHandle callingUser = Binder.getCallingUserHandle();
+                int triggerSource =
+                        NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__TRIGGER_SOURCE_UNKNOWN;
+                final int triggerSource_WalletRoleHolder =
+                        NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__WALLET_ROLE_HOLDER;
+                final int triggerSource_Foreground =
+                        NFC_OBSERVE_MODE_STATE_CHANGED__TRIGGER_SOURCE__FOREGROUND_APP;
+                if (!NfcInjector.isPrivileged(callingUid)) {
+                    NfcPermissions.enforceUserPermissions(mContext);
+                    if (packageName == null) {
+                        Log.e(TAG, "no package name associated with non-privileged calling UID");
+                    }
+                    if (mCardEmulationManager.isPreferredServicePackageNameForUser(
+                            packageName, callingUser.getIdentifier())) {
+                        if (android.permission.flags.Flags.walletRoleEnabled()) {
+                            if (packageName != null) {
+                                triggerSource =
+                                        packageName.equals(getWalletRoleHolder(callingUser))
+                                                ? triggerSource_WalletRoleHolder
+                                                : triggerSource_Foreground;
+                            }
+                        } else {
+                            if (mForegroundUtils.isInForeground(callingUid)) {
+                                triggerSource = triggerSource_Foreground;
+                            }
+                        }
+                    } else {
+                        Log.e(TAG, "setObserveMode: Caller not preferred NFC service.");
+                        return false;
+                    }
+                }
 
-            if (mCardEmulationManager.isHostCardEmulationActivated()) {
-                Log.w(TAG, "setObserveMode: Cannot set observe mode during a transaction.");
-                return false;
-            }
+                if (mCardEmulationManager.isHostCardEmulationActivated()) {
+                    Log.w(TAG, "setObserveMode: Cannot set observe mode during a transaction.");
+                    return false;
+                }
 
-            Log.d(TAG, "setObserveMode: package " + packageName + " with UID (" + callingUid
-                    + ") setting observe mode to " + enable);
+                Log.d(
+                        TAG,
+                        "setObserveMode: package "
+                                + packageName
+                                + " with UID ("
+                                + callingUid
+                                + ") setting observe mode to "
+                                + enable);
 
-            long start = SystemClock.elapsedRealtime();
-            boolean result = mDeviceHost.setObserveMode(enable);
-            int latency = Math.toIntExact(SystemClock.elapsedRealtime() - start);
-            if (mStatsdUtils != null) {
-                mStatsdUtils.logObserveModeStateChanged(enable, triggerSource, latency);
+                long start = SystemClock.elapsedRealtime();
+                boolean result = mDeviceHost.setObserveMode(enable);
+                int latency = Math.toIntExact(SystemClock.elapsedRealtime() - start);
+                if (mStatsdUtils != null) {
+                    mStatsdUtils.logObserveModeStateChanged(enable, triggerSource, latency);
+                }
+                mNfcEventLog.logEvent(
+                        NfcEventProto.EventType.newBuilder()
+                                .setObserveModeChange(
+                                        NfcEventProto.NfcObserveModeChange.newBuilder()
+                                                .setAppInfo(
+                                                        NfcEventProto.NfcAppInfo.newBuilder()
+                                                                .setPackageName(packageName)
+                                                                .setUid(callingUid)
+                                                                .build())
+                                                .setEnable(enable)
+                                                .setLatencyMs(latency)
+                                                .setResult(result)
+                                                .build())
+                                .build());
+                return result;
             }
-            mNfcEventLog.logEvent(
-                    NfcEventProto.EventType.newBuilder()
-                            .setObserveModeChange(NfcEventProto.NfcObserveModeChange.newBuilder()
-                                    .setAppInfo(NfcEventProto.NfcAppInfo.newBuilder()
-                                            .setPackageName(packageName)
-                                            .setUid(callingUid)
-                                            .build())
-                                    .setEnable(enable)
-                                    .setLatencyMs(latency)
-                                    .setResult(result)
-                                    .build())
-                            .build());
-            return result;
         }
 
         private String getWalletRoleHolder(UserHandle user) {
