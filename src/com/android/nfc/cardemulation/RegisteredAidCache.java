@@ -38,6 +38,7 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.nfc.NfcService;
+import com.android.nfc.cardemulation.util.TelephonyUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -52,6 +53,7 @@ import java.util.NavigableMap;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 public class RegisteredAidCache {
     static final String TAG = "RegisteredAidCache";
@@ -177,6 +179,8 @@ public class RegisteredAidCache {
     boolean mRequiresScreenOnServiceExist = false;
 
     Set<ApduServiceInfo> mAssociatedRoleServices = new HashSet<>();
+
+    int mPreferredSimType =  TelephonyUtils.SIM_TYPE_UNKNOWN;
 
     public RegisteredAidCache(Context context, WalletRoleObserver walletRoleObserver) {
         this(context, walletRoleObserver, new AidRoutingManager());
@@ -437,7 +441,26 @@ public class RegisteredAidCache {
         ApduServiceInfo matchedPayment = null;
         List<ApduServiceInfo> defaultWalletServices = new ArrayList<>();
 
-        for (ServiceAidInfo serviceAidInfo : conflictingServices) {
+         // [nfc_w_temp] Implement eSIM
+         List<ServiceAidInfo> filteredServices;
+         if (mPreferredSimType == TelephonyUtils.SIM_TYPE_UNKNOWN) {
+             if (DBG) Log.i(TAG, "Sim based service is removed due to unknown sim type.");
+             filteredServices = conflictingServices.stream().filter(
+                     serviceAidInfo-> {
+                         if (serviceAidInfo.service.isOnHost()) return true;
+                         String offHost = serviceAidInfo.service.getOffHostSecureElement();
+                         if (offHost != null) {
+                             return !offHost.startsWith(RoutingOptionManager.SE_PREFIX_SIM);
+                         }
+                         return false;
+                     }
+             ).collect(Collectors.toList());
+         }
+         else {
+             filteredServices = conflictingServices.stream().collect(Collectors.toList());
+         }
+
+        for (ServiceAidInfo serviceAidInfo : filteredServices) {
             boolean serviceClaimsPaymentAid =
                     CardEmulation.CATEGORY_PAYMENT.equals(serviceAidInfo.category);
             int userId = UserHandle.getUserHandleForUid(serviceAidInfo.service.getUid())
@@ -1496,5 +1519,13 @@ public class RegisteredAidCache {
         long token = proto.start(RegisteredAidCacheProto.ROUTING_MANAGER);
         mRoutingManager.dumpDebug(proto);
         proto.end(token);
+    }
+
+    public void onPreferredSimChanged(int simType) {
+        synchronized (mLock) {
+            mPreferredSimType = simType;
+            mRoutingManager.onNfccRoutingTableCleared();
+            generateAidCacheLocked();
+        }
     }
 }
