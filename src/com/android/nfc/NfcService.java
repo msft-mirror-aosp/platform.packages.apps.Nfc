@@ -3230,7 +3230,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public synchronized int sendVendorNciMessage(int mt, int gid, int oid, byte[] payload)
+        public int sendVendorNciMessage(int mt, int gid, int oid, byte[] payload)
                 throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
             if ((!isNfcEnabled() && !mIsPowerSavingModeEnabled) && !isControllerAlwaysOn()) {
@@ -3239,7 +3239,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             FutureTask<Integer> sendVendorCmdTask = new FutureTask<>(
-                () -> {
+                () -> { synchronized (NfcService.this) {
                         if (isPowerSavingModeCmd(gid, oid, payload)) {
                             boolean status = setPowerSavingMode(payload[1] == 0x01);
                             return status ? NCI_STATUS_OK : NCI_STATUS_FAILED;
@@ -3264,7 +3264,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                             }
                             return Integer.valueOf(response.status);
                         }
-                });
+                }});
             int status = NCI_STATUS_FAILED;
             try {
                 status = runTaskOnSingleThreadExecutor(sendVendorCmdTask,
@@ -3280,21 +3280,25 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         @Override
-        public synchronized void registerVendorExtensionCallback(INfcVendorNciCallback callbacks)
+        public void registerVendorExtensionCallback(INfcVendorNciCallback callbacks)
                 throws RemoteException {
-            if (DBG) Log.i(TAG, "Register the callback");
-            NfcPermissions.enforceAdminPermissions(mContext);
-            mNfcVendorNciCallBack = callbacks;
-            mDeviceHost.enableVendorNciNotifications(true);
+            synchronized (NfcService.this) {
+                if (DBG) Log.i(TAG, "Register the callback");
+                NfcPermissions.enforceAdminPermissions(mContext);
+                mNfcVendorNciCallBack = callbacks;
+                mDeviceHost.enableVendorNciNotifications(true);
+            }
         }
 
         @Override
-        public synchronized void unregisterVendorExtensionCallback(INfcVendorNciCallback callbacks)
+        public void unregisterVendorExtensionCallback(INfcVendorNciCallback callbacks)
                 throws RemoteException {
-            if (DBG) Log.i(TAG, "Unregister the callback");
-            NfcPermissions.enforceAdminPermissions(mContext);
-            mNfcVendorNciCallBack = null;
-            mDeviceHost.enableVendorNciNotifications(false);
+            synchronized (NfcService.this) {
+                if (DBG) Log.i(TAG, "Unregister the callback");
+                NfcPermissions.enforceAdminPermissions(mContext);
+                mNfcVendorNciCallBack = null;
+                mDeviceHost.enableVendorNciNotifications(false);
+            }
         }
 
         @Override
