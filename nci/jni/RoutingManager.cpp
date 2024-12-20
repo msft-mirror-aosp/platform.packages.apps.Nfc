@@ -192,7 +192,6 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
       mEeInfoEvent.wait();
     }
   }
-  mSeTechMask = updateEeTechRouteSetting();
 
   // Set the host-routing Tech
   tNFA_STATUS nfaStat = NFA_CeSetIsoDepListenTech(
@@ -206,8 +205,7 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
   if (nfaStat != NFA_STATUS_OK)
     LOG(ERROR) << fn << "Failed to register wildcard AID for DH";
 
-  updateDefaultRoute();
-  updateDefaultProtocolRoute();
+  updateRoutingTable();
 
   // For startup case with NFC secure enabled.
   if (mSecureNfcEnabled) {
@@ -896,9 +894,12 @@ void RoutingManager::stackCallback(uint8_t event,
 **
 *******************************************************************************/
 void RoutingManager::updateRoutingTable() {
-  updateEeTechRouteSetting();
-  updateDefaultProtocolRoute();
+  static const char fn[] = "RoutingManager::updateRoutingTable";
+  LOG(DEBUG) << fn << "(enter)";
+  mSeTechMask = updateEeTechRouteSetting();
   updateDefaultRoute();
+  updateDefaultProtocolRoute();
+  LOG(DEBUG) << fn << "(exit)";
 }
 
 /*******************************************************************************

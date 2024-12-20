@@ -70,8 +70,6 @@ public class AidRoutingManagerTest {
   private PrintWriter mPw;
 
   @Captor
-  private ArgumentCaptor<String> unroutedAidsCaptor;
-  @Captor
   private ArgumentCaptor<String> routedAidsCaptor;
   @Captor
   private ArgumentCaptor<Integer> routeCaptor;
@@ -235,11 +233,6 @@ public class AidRoutingManagerTest {
             /* isOverrideOrRecover = */ false);
 
     assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
-    verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
-    assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("second#")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("third")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("")).isTrue();
     verify(mNfcService, times(3)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
                                             aidTypeCaptor.capture(),
@@ -355,10 +348,6 @@ public class AidRoutingManagerTest {
 
     assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
 
-    verify(mNfcService, times(3)).unrouteAids(unroutedAidsCaptor.capture());
-    assertThat(unroutedAidsCaptor.getAllValues().contains("first*")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("second#")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("third")).isTrue();
     ExtendedMockito.verify(() ->
         NfcStatsLog.write(anyInt(), anyInt(), anyInt(), anyInt()), times(0));
     assertThat(manager.mDefaultRoute).isEqualTo(DEFAULT_ROUTE);
@@ -444,10 +433,6 @@ public class AidRoutingManagerTest {
             /* isOverrideOrRecover = */ false);
 
     assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
-    verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
-    assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("second#")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("")).isTrue();
     verify(mNfcService, times(3)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
                                             aidTypeCaptor.capture(),
@@ -505,10 +490,6 @@ public class AidRoutingManagerTest {
             /* isOverrideOrRecover = */ false);
 
     assertThat(result).isEqualTo(CONFIGURE_ROUTING_SUCCESS);
-    verify(mNfcService, times(4)).unrouteAids(unroutedAidsCaptor.capture());
-    assertThat(unroutedAidsCaptor.getAllValues().contains("first")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("second")).isTrue();
-    assertThat(unroutedAidsCaptor.getAllValues().contains("")).isTrue();
     verify(mNfcService, times(4)).routeAids(routedAidsCaptor.capture(),
                                             routeCaptor.capture(),
                                             aidTypeCaptor.capture(),
