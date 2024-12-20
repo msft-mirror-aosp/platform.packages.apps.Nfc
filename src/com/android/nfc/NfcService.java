@@ -1438,37 +1438,35 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     void initSoundPoolIfNeededAndPlaySound(Runnable playSoundRunnable) {
-        synchronized (this) {
-            if (mSoundPool == null) {
-                // For the first sound play which triggers the sound pool initialization, play the
-                // sound after sound pool load is complete.
-                OnLoadCompleteListener onLoadCompleteListener = new OnLoadCompleteListener() {
-                    private int mNumLoadComplete = 0;
-                    @Override
-                    public void onLoadComplete(SoundPool soundPool, int sampleId, int status) {
-                        // Check that both end/error sounds are loaded before playing the sound.
-                        if (++mNumLoadComplete == 2) {
-                            Log.d(TAG, "Sound pool onLoadComplete: playing sound");
-                            playSoundRunnable.run();
-                        }
+        if (mSoundPool == null) {
+            // For the first sound play which triggers the sound pool initialization, play the
+            // sound after sound pool load is complete.
+            OnLoadCompleteListener onLoadCompleteListener = new OnLoadCompleteListener() {
+                private int mNumLoadComplete = 0;
+                @Override
+                public void onLoadComplete(SoundPool soundPool, int sampleId, int status) {
+                    // Check that both end/error sounds are loaded before playing the sound.
+                    if (++mNumLoadComplete == 2) {
+                        Log.d(TAG, "Sound pool onLoadComplete: playing sound");
+                        playSoundRunnable.run();
                     }
-                };
-                mSoundPool = new SoundPool.Builder()
-                        .setMaxStreams(1)
-                        .setAudioAttributes(
-                                new AudioAttributes.Builder()
-                                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                                        .build())
-                        .build();
-                mSoundPool.setOnLoadCompleteListener(onLoadCompleteListener);
-                mEndSound = mSoundPool.load(mContext, R.raw.end, 1);
-                mErrorSound = mSoundPool.load(mContext, R.raw.error, 1);
-            } else {
-                // sound pool already loaded, play the sound.
-                Log.d(TAG, "Sound pool is already loaded, playing sound");
-                playSoundRunnable.run();
-            }
+                }
+            };
+            mSoundPool = new SoundPool.Builder()
+                    .setMaxStreams(1)
+                    .setAudioAttributes(
+                            new AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                    .build())
+                    .build();
+            mSoundPool.setOnLoadCompleteListener(onLoadCompleteListener);
+            mEndSound = mSoundPool.load(mContext, R.raw.end, 1);
+            mErrorSound = mSoundPool.load(mContext, R.raw.error, 1);
+        } else {
+            // sound pool already loaded, play the sound.
+            Log.d(TAG, "Sound pool is already loaded, playing sound");
+            playSoundRunnable.run();
         }
     }
 
