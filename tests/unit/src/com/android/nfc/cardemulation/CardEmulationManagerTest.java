@@ -81,7 +81,6 @@ import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
 import java.util.List;
-import android.nfc.INfcEventListener;
 
 public class CardEmulationManagerTest {
 

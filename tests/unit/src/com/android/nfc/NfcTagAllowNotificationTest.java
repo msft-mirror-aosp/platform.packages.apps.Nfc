@@ -47,6 +47,8 @@ import org.mockito.Mockito;
 import org.mockito.MockitoSession;
 import org.mockito.quality.Strictness;
 
+import java.util.ArrayList;
+import java.util.List;
 
 @RunWith(AndroidJUnit4.class)
 public class NfcTagAllowNotificationTest {
@@ -54,10 +56,12 @@ public class NfcTagAllowNotificationTest {
     private static final String TAG = NfcTagAllowNotificationTest.class.getSimpleName();
     private static final String NAME = "name";
     private static final String TITLE = "title";
+    private static final String MESSAGE = "message";
     private MockitoSession mStaticMockSession;
     private Context mMockContext;
     private NfcTagAllowNotification mNfcTagAllowNotification;
     private NotificationManager mMockNotificationManager;
+    List<String> mAppNames;
 
     @Before
     public void setUp() throws Exception {
@@ -66,8 +70,10 @@ public class NfcTagAllowNotificationTest {
                 .startMocking();
         mMockNotificationManager = Mockito.mock(NotificationManager.class);
         Resources mockResources = Mockito.mock(Resources.class);
-        when(mockResources.getString(eq(R.string.nfc_tag_alert_title))).thenReturn(TITLE);
-
+        when(mockResources.getString(eq(R.string.tag_app_alert_title))).thenReturn(TITLE);
+        when(mockResources.getString(eq(R.string.tag_app_alert_message))).thenReturn(MESSAGE);
+        mAppNames = new ArrayList<String>();
+        mAppNames.add(NAME);
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         mMockContext = new ContextWrapper(context) {
             @Override
@@ -95,7 +101,8 @@ public class NfcTagAllowNotificationTest {
         };
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
-                () -> mNfcTagAllowNotification = new NfcTagAllowNotification(mMockContext, NAME));
+                () -> mNfcTagAllowNotification = new NfcTagAllowNotification(mMockContext,
+                                                                                 mAppNames));
         Assert.assertNotNull(mNfcTagAllowNotification);
     }
 
