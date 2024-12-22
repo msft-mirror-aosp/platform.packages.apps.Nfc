@@ -60,6 +60,7 @@ class RoutingManager {
   static const int CLEAR_AID_ENTRIES = 0x01;
   static const int CLEAR_PROTOCOL_ENTRIES = 0x02;
   static const int CLEAR_TECHNOLOGY_ENTRIES = 0x04;
+  static const int CLEAR_SC_ENTRIES = 0x08;
   SyncEvent mEeUpdateEvent;
 
  private:

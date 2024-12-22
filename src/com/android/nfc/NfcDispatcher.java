@@ -69,6 +69,8 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.nfc.RegisteredComponentCache.ComponentInfo;
 import com.android.nfc.flags.Flags;
 import com.android.nfc.handover.HandoverDataParser;
@@ -88,7 +90,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import androidx.annotation.VisibleForTesting;
 
 /**
  * Dispatch of NFC events to start activities
@@ -345,6 +346,10 @@ class NfcDispatcher {
         List<ResolveInfo> checkPrefList(List<ResolveInfo> activities, int userId) {
             if (!mIsTagAppPrefSupported) return activities;
             ArrayList<ResolveInfo> filtered = new ArrayList<>(activities);
+
+            // Collect AppNames to notify user about App launch for the first time
+            List<String> notifyAppNames = new ArrayList<String>();
+
             int muteAppCount = 0;
             for (ResolveInfo resolveInfo : activities) {
                 ActivityInfo activityInfo = resolveInfo.activityInfo;
@@ -365,7 +370,7 @@ class NfcDispatcher {
                     // Default sets allow to the preference list
                     mNfcAdapter.setTagIntentAppPreferenceForUser(userId, pkgName, true);
                     if (Flags.nfcAlertTagAppLaunch()) {
-                        new NfcTagAllowNotification(context, appName).startNotification();
+                        notifyAppNames.add(appName);
                     }
                 }
             }
@@ -381,6 +386,9 @@ class NfcDispatcher {
                                 TechListChooserActivity.EXTRA_RESOLVE_INFOS, filtered);
                     }
                 }
+            }
+            if (notifyAppNames.size() > 0) {
+                new NfcTagAllowNotification(context, notifyAppNames).startNotification();
             }
             return filtered;
         }
@@ -1016,6 +1024,9 @@ class NfcDispatcher {
         ArrayList<ResolveInfo> matches = new ArrayList<ResolveInfo>();
         List<ComponentInfo> registered = mTechListFilters.getComponents();
 
+        // Collect AppNames to notify user about App launch for the first time
+        List<String> notifyAppNames = new ArrayList<String>();
+
         PackageManager pm;
         List<UserHandle> luh = dispatch.getCurrentActiveUserHandles();
 
@@ -1053,8 +1064,7 @@ class NfcDispatcher {
                                     mNfcAdapter.setTagIntentAppPreferenceForUser(userId,
                                             pkgName, true);
                                     if (Flags.nfcAlertTagAppLaunch()) {
-                                        new NfcTagAllowNotification(mContext,
-                                                appName).startNotification();
+                                        notifyAppNames.add(appName);
                                     }
                                 }
                             }
@@ -1062,6 +1072,10 @@ class NfcDispatcher {
                     }
                 }
             }
+        }
+
+        if (notifyAppNames.size() > 0) {
+            new NfcTagAllowNotification(mContext, notifyAppNames).startNotification();
         }
 
         if (matches.size() == 1) {
