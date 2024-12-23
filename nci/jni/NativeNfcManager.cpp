@@ -114,6 +114,8 @@ jmethodID gCachedNfcManagerNotifyEeAidSelected;
 jmethodID gCachedNfcManagerNotifyEeProtocolSelected;
 jmethodID gCachedNfcManagerNotifyEeTechSelected;
 jmethodID gCachedNfcManagerNotifyEeListenActivated;
+jmethodID gCachedNfcManagerNotifyEndpointRemoved;
+
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
@@ -142,6 +144,8 @@ SyncEvent gNfaSetConfigEvent;                    // event for Set_Config....
 SyncEvent gNfaGetConfigEvent;                    // event for Get_Config....
 SyncEvent gNfaVsCommand;                         // event for VS commands
 SyncEvent gSendRawVsCmdEvent;  // event for NFA_SendRawVsCommand()
+SyncEvent gNfaRemoveEpEvent;   // event for StartRemoval....
+static bool sIsEpDetectStarted = false;
 static bool sIsNfaEnabled = false;
 static bool sDiscoveryEnabled = false;  // is polling or listening
 static bool sPollingEnabled = false;    // is polling for tag?
@@ -538,6 +542,40 @@ static void nfaConnectionCallback(uint8_t connEvent,
 
       break;
 
+    case NFA_DETECT_REMOVAL_STARTED_EVT: {  // whether EP Removal Detection
+                                            // successfully started
+      LOG(DEBUG) << StringPrintf(
+          "%s; NFA_DETECT_REMOVAL_STARTED_EVT: status = %d", __func__, status);
+
+      sIsEpDetectStarted = eventData->status == NFA_STATUS_OK;
+      SyncEventGuard guard(gNfaRemoveEpEvent);
+      gNfaRemoveEpEvent.notifyOne();
+    } break;
+
+    case NFA_DETECT_REMOVAL_RESULT_EVT: {  // Removal Detection complete
+      LOG(DEBUG) << StringPrintf(
+          "%s; NFA_DETECT_REMOVAL_RESULT_EVT: status = %d, reason = %d",
+          __func__, status, eventData->removal_detect.reason);
+
+      /* Return REMOVAL_DETECTION deactivation reason to service */
+      {
+        struct nfc_jni_native_data* nat = getNative(NULL, NULL);
+        JNIEnv* e = NULL;
+        ScopedAttach attach(nat->vm, &e);
+        if (e == NULL) {
+          LOG(ERROR) << StringPrintf("%s; jni env is null", __func__);
+          return;
+        }
+        e->CallVoidMethod(nat->manager,
+                          android::gCachedNfcManagerNotifyEndpointRemoved,
+                          (int)eventData->removal_detect.reason);
+        if (e->ExceptionCheck()) {
+          e->ExceptionClear();
+          LOG(ERROR) << StringPrintf("fail notify");
+        }
+      }
+    } break;
+
     case NFA_TLV_DETECT_EVT:  // TLV Detection complete
       status = eventData->tlv_detect.status;
       LOG(DEBUG) << StringPrintf(
@@ -752,6 +790,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyEeTechSelected = e->GetMethodID(
       cls.get(), "notifyEeTechSelected", "(ILjava/lang/String;)V");
+
+  gCachedNfcManagerNotifyEndpointRemoved =
+      e->GetMethodID(cls.get(), "notifyEndpointRemoved", "(I)V");
 
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
@@ -2295,6 +2336,43 @@ static void nfcManager_clearRoutingEntry(JNIEnv* e, jobject o,
   RoutingManager::getInstance().clearRoutingEntry(clearFlags);
 }
 
+/*******************************************************************************
+**
+** Function:        nfcManager_doDetectEpRemoval
+**
+** Description:     Start detection of WLC Listener removal
+**                  e: JVM environment.
+**                  waiting_time_int:
+
+**
+** Returns:         True if WLCL remove started properly
+**
+*******************************************************************************/
+static jboolean nfcManager_doDetectEpRemoval(JNIEnv* e, jobject o,
+                                             jint waiting_time_int) {
+  tNFA_STATUS stat = NFA_STATUS_FAILED;
+
+  LOG(DEBUG) << StringPrintf("%s: enter waiting_time = %04X", __func__,
+                             waiting_time_int);
+
+  nativeNfcTag_acquireRfInterfaceMutexLock();
+  stat = NFA_StartRemovalDetection((uint8_t)(waiting_time_int & 0xFF));
+  if (stat == NFA_STATUS_OK) {
+    LOG(DEBUG) << StringPrintf(
+        "%s: start detect EP Listener removal, wait for success confirmation",
+        __func__);
+    SyncEventGuard g(gNfaRemoveEpEvent);
+    gNfaRemoveEpEvent.wait();
+    stat = sIsEpDetectStarted ? JNI_TRUE : JNI_FALSE;
+  } else {
+    LOG(ERROR) << StringPrintf("%s: fail detect EP removal; error=0x%X",
+                               __func__, stat);
+    stat = false;
+  }
+  nativeNfcTag_releaseRfInterfaceMutexLock();
+  return stat;
+}
+
 static void nfcManager_updateIsoDepProtocolRoute(JNIEnv* e, jobject o,
                                                  jint route) {
   LOG(DEBUG) << StringPrintf("%s: route=0x%X", __func__, route);
@@ -2572,6 +2650,7 @@ static JNINativeMethod gMethods[] = {
     {"enableVendorNciNotifications", "(Z)V",
      (void*)ncfManager_nativeEnableVendorNciNotifications},
     {"injectNtf", "([B)V", (void*)nfcManager_injectNtf},
+    {"doDetectEpRemoval", "(I)Z", (void*)nfcManager_doDetectEpRemoval},
 };
 
 /*******************************************************************************
