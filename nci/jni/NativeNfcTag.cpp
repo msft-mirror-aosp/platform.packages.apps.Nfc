@@ -532,13 +532,16 @@ void nativeNfcTag_doDeactivateStatus(int status) {
 ** Description:     Connect to the tag in RF field.
 **                  e: JVM environment.
 **                  o: Java object.
-**                  targetHandle: Handle of the tag.
+**                  targetIdx: Index of the tag.
+**                  force: force reselect even if same interface
 **
 ** Returns:         Must return NXP status code, which NFC service expects.
 **
 *******************************************************************************/
-static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetIdx) {
-  LOG(DEBUG) << StringPrintf("%s: targetIdx = %d", __func__, targetIdx);
+static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetIdx,
+                                   jboolean force) {
+  LOG(DEBUG) << StringPrintf("%s: targetIdx = %d, force: %d", __func__,
+                             targetIdx, force);
   int i = targetIdx;
   NfcTag& natTag = NfcTag::getInstance();
   int retCode = NFCSTATUS_SUCCESS;
@@ -588,7 +591,7 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetIdx) {
     intfType = NFA_INTERFACE_ISO_DEP;
   }
 
-  retCode = reSelect(intfType, true);
+  retCode = reSelect(intfType, force);
   if (retCode == STATUS_CODE_TARGET_LOST) sIsISODepActivatedByApp = false;
 
   // Check we are connected to requested protocol/tech
@@ -1759,7 +1762,7 @@ void nativeNfcTag_releaseRfInterfaceMutexLock() {
 **
 *****************************************************************************/
 static JNINativeMethod gMethods[] = {
-    {"doConnect", "(I)I", (void*)nativeNfcTag_doConnect},
+    {"doConnect", "(IZ)I", (void*)nativeNfcTag_doConnect},
     {"doDisconnect", "()Z", (void*)nativeNfcTag_doDisconnect},
     {"doReconnect", "()I", (void*)nativeNfcTag_doReconnect},
     {"doTransceive", "([BZ[I)[B", (void*)nativeNfcTag_doTransceive},

@@ -168,7 +168,7 @@ public class NativeNfcTag implements TagEndpoint {
         }
     }
 
-    private native int doConnect(int handle);
+    private native int doConnect(int handle, boolean force);
 
     public synchronized int connectWithStatus(int technology) {
         if (mWatchdog != null) {
@@ -183,7 +183,7 @@ public class NativeNfcTag implements TagEndpoint {
                     i = 0;
                 }
 
-                status = doConnect(i);
+                status = doConnect(i, true);
 
                 if (status == 0) {
                     mConnectedHandle = mTechHandles[i];
@@ -213,7 +213,7 @@ public class NativeNfcTag implements TagEndpoint {
 
         // Not connected yet
         // status = doConnect(mTechHandles[i]);
-        status = doConnect(idx);
+        status = doConnect(idx, false);
 
         if (status == 0) {
             mConnectedHandle = mTechHandles[idx];
