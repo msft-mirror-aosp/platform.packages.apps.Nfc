@@ -65,4 +65,9 @@
     <!-- Whether to indicate user activity using PowerManager.userActivity for HCE activation -->
     <bool name="indicate_user_activity_for_hce">true</bool>
     <integer name="max_pause_polling_time_out_ms">0</integer>
+    <!-- Removal detection default value -->
+    <bool name="removal_detection_default">false</bool>
+    <!-- Waiting time for removal detection -->
+    <integer name="removal_detection_waiting_time">19</integer>
+    <integer name="inactive_presence_check_allowed_time">20000</integer>
 </resources>

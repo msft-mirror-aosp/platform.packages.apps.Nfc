@@ -597,6 +597,13 @@ public class NativeNfcManager implements DeviceHost {
         Trace.endSection();
     }
 
+    private native boolean doDetectEpRemoval(int waiting_time_int);
+
+    @Override
+    public boolean detectEpRemoval(int waiting_time_int) {
+        return doDetectEpRemoval(waiting_time_int);
+    }
+
     private void notifyWlcStopped(int wpt_end_condition) {
         mListener.onWlcStopped(wpt_end_condition);
     }
@@ -691,4 +698,12 @@ public class NativeNfcManager implements DeviceHost {
     public void notifyObserveModeChanged(boolean enabled) {
         mListener.onObserveModeStateChanged(enabled);
     }
+    /** Notifies remote endpoint removed */
+    private void notifyEndpointRemoved(int reason) {
+        mListener.onEndpointRemoved(reason);
+
+    }
+
+    @Override
+    public native boolean isRemovalDetectionInPollModeSupported();
 }

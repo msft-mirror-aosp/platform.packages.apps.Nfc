@@ -171,6 +171,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.TimerTask;
+import java.util.Timer;
 
 public class NfcService implements DeviceHostListener, ForegroundUtils.Callback {
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
@@ -292,6 +294,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     // Default delay used for presence checks
     static final int DEFAULT_PRESENCE_CHECK_DELAY = 125;
+
+    // Removal Detection Wait Time Range
+    static final int MIN_RF_REMOVAL_DETECTION_TIMEOUT = 0x00;
+    static final int MAX_RF_REMOVAL_DETECTION_TIMEOUT = 0x13;
 
     static final NfcProperties.snoop_log_mode_values NFC_SNOOP_LOG_MODE =
             NfcProperties.snoop_log_mode().orElse(NfcProperties.snoop_log_mode_values.FILTERED);
@@ -461,12 +467,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     boolean mIsWlcCapable;
     boolean mIsWlcEnabled;
     boolean mIsRWCapable;
+    boolean mIsRDCapable;
     WlcListenerDeviceInfo mWlcListenerDeviceInfo;
     public NfcDiagnostics  mNfcDiagnostics;
 
     // polling delay control variables
     private final int mPollDelayTime;
     private final int mPollDelayTimeLong;
+    private final int mAppInActivityDetectionTime;
+    private final int mTagRemovalDetectionWaitTime;
+    private Timer mAppInActivityDetectionTimer;
     private final int mPollDelayCountMax;
     private int mPollDelayCount;
     private int mReadErrorCount;
@@ -571,6 +581,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     @Override
     public void onRemoteEndpointDiscovered(TagEndpoint tag) {
+      Log.d(TAG, "onRemoteEndpointDiscovered()");
         sendMessage(NfcService.MSG_NDEF_TAG, tag);
     }
 
@@ -642,6 +653,21 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 .build());
             }
         }
+    }
+
+
+    /** Notifies Removal Detection procedure completed,
+        endpoint deactivation reason returned by NFCC */
+    public void onEndpointRemoved(int reason) {
+       Log.d(TAG, "onEndpointRemoved() - Deactivation reason is " + reason);
+       if (mIsWlcEnabled && (mNfcCharging.NfcChargingMode == true)) {
+         mNfcCharging.onEndpointRemoved(reason);
+       }
+       /* else send intent to notify other applications */
+    }
+
+    public boolean startRemovalDetection(int waiting_time_int) {
+      return mDeviceHost.detectEpRemoval(waiting_time_int);
     }
 
     @Override
@@ -1154,6 +1180,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             addThermalStatusListener();
         }
 
+        mIsRDCapable = Flags.removalDetection() &&
+                mContext.getResources().getBoolean(R.bool.removal_detection_default);
+
         mIsHceCapable =
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION) ||
                 pm.hasSystemFeature(PackageManager.FEATURE_NFC_HOST_CARD_EMULATION_NFCF);
@@ -1202,7 +1231,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mNotifyReadFailed = mContext.getResources().getBoolean(R.bool.enable_notify_read_failed);
 
         mPollingDisableAllowed = mContext.getResources().getBoolean(R.bool.polling_disable_allowed);
-
+        mAppInActivityDetectionTime =
+            mContext.getResources().getInteger(R.integer.inactive_presence_check_allowed_time);
+        mTagRemovalDetectionWaitTime =
+            mContext.getResources().getInteger(R.integer.removal_detection_waiting_time);
         // Make sure this is only called when object construction is complete.
         mNfcInjector.getNfcManagerRegisterer().register(mNfcAdapter);
 
@@ -2335,6 +2367,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public int pausePolling(long timeoutInMs) {
             NfcPermissions.enforceAdminPermissions(mContext);
+
+            checkAndHandleRemovalDetectionMode(false);
             synchronized (mDiscoveryLock) {
                 if (!mRfDiscoveryStarted) {
                     if (DBG) Log.d(TAG, "Polling is already disabled!");
@@ -2614,6 +2648,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 applyRouting(true);
                 return;
             }
+            checkAndHandleRemovalDetectionMode(false);
             synchronized (NfcService.this) {
                 if (!isNfcEnabled()) {
                     Log.d(TAG, "updateDiscoveryTechnology: NFC is not enabled.");
@@ -2785,6 +2820,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     applyRouting(false);
                 }
             }
+            checkAndHandleRemovalDetectionMode(true);
         }
 
         @Override
@@ -3522,6 +3558,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return ErrorCodes.ERROR_NOT_INITIALIZED;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return ErrorCodes.ERROR_NOT_INITIALIZED;
+            }
+
             /* find the tag in the hmap */
             tag = (TagEndpoint) findObject(nativeHandle);
             if (tag == null) {
@@ -3557,6 +3597,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return ErrorCodes.ERROR_NOT_INITIALIZED;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return ErrorCodes.ERROR_NOT_INITIALIZED;
+            }
+
             /* find the tag in the hmap */
             tag = (TagEndpoint) findObject(nativeHandle);
             if (tag != null) {
@@ -3582,6 +3626,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return null;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return null;
+            }
+
             /* find the tag in the hmap */
             TagEndpoint tag = (TagEndpoint) findObject(nativeHandle);
             if (tag != null) {
@@ -3600,6 +3648,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             if (!isReaderOptionEnabled()) {
+                return false;
+            }
+
+            if (checkAndHandleRemovalDetectionMode(true)) {
                 return false;
             }
 
@@ -3627,6 +3679,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return false;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return false;
+            }
+
             /* find the tag in the hmap */
             tag = (TagEndpoint) findObject(nativeHandle);
             int[] ndefInfo = new int[2];
@@ -3650,6 +3706,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             if (!isReaderOptionEnabled()) {
+                return null;
+            }
+
+            if (checkAndHandleRemovalDetectionMode(true)) {
                 return null;
             }
 
@@ -3690,6 +3750,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return null;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return null;
+            }
+
             /* find the tag in the hmap */
             tag = (TagEndpoint) findObject(nativeHandle);
             if (tag != null) {
@@ -3723,6 +3787,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return ErrorCodes.ERROR_NOT_INITIALIZED;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return ErrorCodes.ERROR_NOT_INITIALIZED;
+            }
+
             /* find the tag in the hmap */
             tag = (TagEndpoint) findObject(nativeHandle);
             if (tag == null) {
@@ -3741,6 +3809,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean ndefIsWritable(int nativeHandle) throws RemoteException {
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return false;
+            }
             throw new UnsupportedOperationException();
         }
 
@@ -3756,6 +3827,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             if (!isReaderOptionEnabled()) {
+                return ErrorCodes.ERROR_NOT_INITIALIZED;
+            }
+
+            if (checkAndHandleRemovalDetectionMode(true)) {
                 return ErrorCodes.ERROR_NOT_INITIALIZED;
             }
 
@@ -3787,6 +3862,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 return ErrorCodes.ERROR_NOT_INITIALIZED;
             }
 
+            if (checkAndHandleRemovalDetectionMode(true)) {
+                return ErrorCodes.ERROR_NOT_INITIALIZED;
+            }
+
             /* find the tag in the hmap */
             tag = (TagEndpoint) findObject(nativeHandle);
             if (tag == null) {
@@ -3812,6 +3891,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
 
             if (!isReaderOptionEnabled()) {
+                return null;
+            }
+
+            if (checkAndHandleRemovalDetectionMode(true)) {
                 return null;
             }
 
@@ -4332,6 +4415,36 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
     }
 
+    private boolean isPresenceCheckStopped() {
+        boolean isStopped = false;
+        synchronized (this) {
+            Object[] objectValues = mObjectMap.values().toArray();
+            for (Object object : objectValues) {
+                if (object instanceof TagEndpoint) {
+                    if (((TagEndpoint) object).isPresenceCheckStopped()) {
+                        isStopped = true;
+                    }
+                }
+            }
+        }
+        return isStopped;
+    }
+
+    /**
+     * Stops the Presence check thread without calling
+     * Disconnect API and onTagDisconnect callback
+     */
+    private void prepareForRemovalDetectionMode() {
+        synchronized (this) {
+            Object[] objectValues = mObjectMap.values().toArray();
+            for (Object object : objectValues) {
+                if (object instanceof TagEndpoint) {
+                    ((TagEndpoint) object).prepareForRemovalDetectionMode();
+                }
+            }
+        }
+    }
+
     private void StopPresenceChecking() {
         Object[] objectValues = mObjectMap.values().toArray();
         if (!ArrayUtils.isEmpty(objectValues)) {
@@ -4354,6 +4467,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         if (!isNfcEnabledOrShuttingDown()) {
             return;
         }
+        clearAppInactivityDetectionContext();
         Object[] objectsToDisconnect;
         synchronized (this) {
             Object[] objectValues = mObjectMap.values().toArray();
@@ -4696,6 +4810,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     if (!isNfcEnabled())
                         break;
                     if (DBG) Log.d(TAG, "Tag detected, notifying applications");
+
+                    clearAppInactivityDetectionContext();
+
                     TagEndpoint tag = (TagEndpoint) msg.obj;
                     byte[] debounceTagUid;
                     int debounceTagMs;
@@ -4712,6 +4829,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                                 @Override
                                 public void onTagDisconnected() {
                                     mCookieUpToDate = -1;
+                                    clearAppInactivityDetectionContext();
                                     executeOemOnTagConnectedCallback(false);
                                     applyRouting(false);
                                 }
@@ -4752,6 +4870,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         if (DBG) Log.d(TAG, "Skipping NDEF detection for NFC Barcode");
                         tag.startPresenceChecking(presenceCheckDelay, callback);
                         dispatchTagEndpoint(tag, readerParams);
+                        if (readerParams == null) {
+                            scheduleAppInactivityDetectionTask();
+                        }
                         break;
                     }
                     NdefMessage ndefMsg = tag.findAndReadNdef();
@@ -4830,6 +4951,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         dispatchTagEndpoint(tag, readerParams);
                     } else {
                         tag.startPresenceChecking(presenceCheckDelay, callback);
+                    }
+                    if (readerParams == null) {
+                        scheduleAppInactivityDetectionTask();
                     }
                     break;
 
@@ -5296,7 +5420,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                 }
                 refreshTagDispatcherInProvisionMode();
                 int dispatchResult = mNfcDispatcher.dispatchTag(tag);
-                if (dispatchResult == NfcDispatcher.DISPATCH_FAIL) {
+                if (dispatchResult == NfcDispatcher.DISPATCH_FAIL
+                        && !isEndPointRemovalDetectionSupported()) {
                     if (DBG) Log.d(TAG, "Tag dispatch failed");
                     executeOemOnTagConnectedCallback(false);
                     unregisterObject(tagEndpoint.getHandle());
@@ -5400,6 +5525,71 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
         }
         applyScreenState(screenState);
+    }
+
+    boolean isEndPointRemovalDetectionSupported() {
+        if(!(mIsRDCapable && mDeviceHost.isRemovalDetectionInPollModeSupported())) {
+            Log.d(TAG, "Removal Detection mode is not supported");
+            return false;
+        }
+        if (!(mAppInActivityDetectionTime >= MIN_RF_REMOVAL_DETECTION_TIMEOUT &&
+                (mTagRemovalDetectionWaitTime >= MIN_RF_REMOVAL_DETECTION_TIMEOUT &&
+                 mTagRemovalDetectionWaitTime <= MAX_RF_REMOVAL_DETECTION_TIMEOUT))) {
+            Log.d(TAG, "Unexpected Removal Detection wait time");
+            return false;
+        }
+        return true;
+    }
+
+    void scheduleAppInactivityDetectionTask() {
+        if (isEndPointRemovalDetectionSupported()) {
+            clearAppInactivityDetectionContext();
+            mAppInActivityDetectionTimer = new Timer();
+            AppInActivityHandlerTask task = new AppInActivityHandlerTask();
+            mAppInActivityDetectionTimer.schedule(task,mAppInActivityDetectionTime);
+            Log.d(TAG, "App Inactivity detection task is scheduled");
+        }
+    }
+
+    boolean checkAndHandleRemovalDetectionMode(boolean isDisconnectNeeded) {
+        if (mAppInActivityDetectionTimer != null) {
+            if (isPresenceCheckStopped()) {
+                Log.d(TAG, "Removal detection state");
+                if (isDisconnectNeeded) {
+                    Log.d(TAG, "Restarting discovery..");
+                    maybeDisconnectTarget();
+                    return true;
+                }
+            } else {
+                Log.d(TAG, "Clearing Removal Detection Timer Context");
+                clearAppInactivityDetectionContext();
+            }
+        }
+        return false;
+    }
+
+    class AppInActivityHandlerTask extends TimerTask {
+        public void run()
+        {
+            Log.d(TAG, "App Inactivity detected, Requesting to Start Removal Detection Procedure");
+            if (isTagPresent()) {
+                prepareForRemovalDetectionMode();
+                mHandler.post(() -> Toast.makeText(mContext,
+                        "No activity over reader mode, RF removal detection procedure started",
+                        Toast.LENGTH_LONG).show());
+                /* Request JNI to start remove detection procedure */
+                startRemovalDetection(mTagRemovalDetectionWaitTime);
+            } else {
+                clearAppInactivityDetectionContext();
+            }
+        }
+    }
+
+    void clearAppInactivityDetectionContext() {
+        if (mAppInActivityDetectionTimer != null) {
+            mAppInActivityDetectionTimer.cancel();
+            mAppInActivityDetectionTimer = null;
+        }
     }
 
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {

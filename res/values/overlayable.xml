@@ -64,6 +64,11 @@
             <item name="enable_euicc_support" type="bool" />
             <item name="indicate_user_activity_for_hce" type="bool" />
             <item name="max_pause_polling_time_out_ms" type="integer" />
+            <!-- Removal detection default value -->
+            <item name="removal_detection_default" type="bool" />
+            <!-- Waiting time for removal detection -->
+            <item name="removal_detection_waiting_time" type="integer" />
+            <item name="inactive_presence_check_allowed_time" type="integer" />
           <!-- Params from config.xml that can be overlaid -->
 
           <!-- Params from strings.xml that can be overlaid -->
