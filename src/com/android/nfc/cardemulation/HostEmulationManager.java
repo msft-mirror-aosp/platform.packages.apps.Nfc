@@ -1089,7 +1089,7 @@ public class HostEmulationManager {
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping APDU", e);
             if (Objects.equals(mActiveService, mPaymentService)) {
-                Log.wtf(TAG, "Rebinding payment service");
+                Log.wtf(TAG, "Rebinding payment service", e);
                 bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
             }
         }
@@ -1124,6 +1124,10 @@ public class HostEmulationManager {
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping frames", e);
             allowOneTransaction();
+            if (Objects.equals(mActiveService, mPaymentService)) {
+                Log.wtf(TAG, "Rebinding payment service", e);
+                bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
+            }
         }
     }
 
