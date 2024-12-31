@@ -52,6 +52,7 @@ message EventType {
     NfcAidRegistration aid_registration = 16;
     NfcPollingLoopRegistration polling_loop_registration = 17;
     NfcDataMigrationInProgress data_migration_in_progress = 18;
+    NfcPaymentServiceBindState payment_service_bind_state = 19;
   }
 }
 
@@ -151,4 +152,15 @@ message NfcPollingLoopRegistration {
 message NfcDataMigrationInProgress {
   required NfcAppInfo app_info = 1;
   required bool in_progress = 2;
+}
+
+enum BindState {
+  SERVICE_CONNECTED = 0;
+  SERVICE_DISCONNECTED = 1;
+  SERVICE_BINDING_DIED = 2;
+}
+
+message NfcPaymentServiceBindState {
+  required NfcComponentInfo component_info = 1;
+  required BindState bind_state = 2;
 }
