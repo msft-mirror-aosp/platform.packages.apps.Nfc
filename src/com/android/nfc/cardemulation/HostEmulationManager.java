@@ -854,7 +854,7 @@ public class HostEmulationManager {
                         Messenger existingService =
                                 bindServiceIfNeededLocked(user.getIdentifier(), resolvedService);
                         if (existingService != null) {
-                            Log.d(TAG, "Binding to existing service");
+                            Log.d(TAG, "Send data to existing service");
                             NfcInjector.getInstance().getNfcEventLog().logEvent(
                                     NfcEventProto.EventType.newBuilder()
                                             .setCeRoutedAid(
@@ -1088,6 +1088,10 @@ public class HostEmulationManager {
             mActiveService.send(msg);
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping APDU", e);
+            if (Objects.equals(mActiveService, mPaymentService)) {
+                Log.wtf(TAG, "Rebinding payment service", e);
+                bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
+            }
         }
     }
 
@@ -1120,6 +1124,10 @@ public class HostEmulationManager {
         } catch (RemoteException e) {
             Log.e(TAG, "Remote service " + mActiveServiceName + " has died, dropping frames", e);
             allowOneTransaction();
+            if (Objects.equals(mActiveService, mPaymentService)) {
+                Log.wtf(TAG, "Rebinding payment service", e);
+                bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
+            }
         }
     }
 
@@ -1308,54 +1316,102 @@ public class HostEmulationManager {
     private ServiceConnection mPaymentConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
+            ComponentName paymentServiceName = new ComponentName("", "");
             synchronized (mLock) {
                 /* Preferred Payment Service has been changed. */
                 if (!mLastBoundPaymentServiceName.equals(name)) {
-            Log.i(TAG, "Ignoring bound payment service, " + name + " != "
+                    Log.i(TAG, "Ignoring bound payment service, " + name + " != "
                     + mLastBoundPaymentServiceName);
                     return;
                 }
                 mPaymentServiceName = name;
                 mPaymentService = new Messenger(service);
+                paymentServiceName = mPaymentServiceName;
                 if (isMultipleBindingSupported()) {
                     if (mComponentNameToConnectionsMap.containsKey(
                         new ComponentNameAndUser(mPaymentServiceUserId, name))) {
-                    mComponentNameToConnectionsMap.get(
+                            mComponentNameToConnectionsMap.get(
                             new ComponentNameAndUser(mPaymentServiceUserId, name)).mMessenger =
                             mPaymentService;
-                        } else {
-                            mComponentNameToConnectionsMap.put(
+                    } else {
+                        mComponentNameToConnectionsMap.put(
                             new ComponentNameAndUser(mPaymentServiceUserId, name),
                             new HostEmulationConnection(mPaymentServiceUserId, name,
                                     this, mPaymentService));
-                        }
+                    }
                 }
                 Log.i(TAG, "Payment service bound: " + name);
             }
+            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPaymentServiceBindState(
+                                NfcEventProto.NfcPaymentServiceBindState.newBuilder()
+                                    .setBindState(NfcEventProto.BindState.SERVICE_CONNECTED)
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                paymentServiceName.getPackageName())
+                                            .setClassName(
+                                                paymentServiceName.getClassName())
+                                            .build())
+                                    .build())
+                            .build());
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             Log.i(TAG, "Payment service disconnected: " + name);
+            ComponentName paymentServiceName = new ComponentName("", "");
             synchronized (mLock) {
                 if (isMultipleBindingSupported()) {
                     ComponentNameAndUser nameAndUser =
                             new ComponentNameAndUser(mPaymentServiceUserId, name);
                     mComponentNameToConnectionsMap.remove(nameAndUser);
                 }
+                paymentServiceName = mPaymentServiceName;
                 mPaymentService = null;
                 mPaymentServiceName = null;
             }
+            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPaymentServiceBindState(
+                                NfcEventProto.NfcPaymentServiceBindState.newBuilder()
+                                    .setBindState(NfcEventProto.BindState.SERVICE_DISCONNECTED)
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                paymentServiceName.getPackageName())
+                                            .setClassName(
+                                                paymentServiceName.getClassName())
+                                            .build())
+                                    .build())
+                            .build());
         }
 
         @Override
         public void onBindingDied(ComponentName name) {
             Log.i(TAG, "Payment service died: " + name);
+            ComponentName paymentServiceName = new ComponentName("", "");
             synchronized (mLock) {
+                if (mPaymentServiceName != null) paymentServiceName = mPaymentServiceName;
                 if (mPaymentServiceUserId >= 0) {
                     bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
                 }
             }
+            NfcInjector.getInstance().getNfcEventLog().logEvent(
+                    NfcEventProto.EventType.newBuilder()
+                            .setPaymentServiceBindState(
+                                NfcEventProto.NfcPaymentServiceBindState.newBuilder()
+                                    .setBindState(NfcEventProto.BindState.SERVICE_BINDING_DIED)
+                                    .setComponentInfo(
+                                        NfcEventProto.NfcComponentInfo.newBuilder()
+                                            .setPackageName(
+                                                paymentServiceName.getPackageName())
+                                            .setClassName(
+                                                paymentServiceName.getClassName())
+                                            .build())
+                                    .build())
+                            .build());
         }
     };
 
