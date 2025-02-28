@@ -16,6 +16,7 @@
 
 package com.android.nfc.utils;
 
+import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.MANAGE_DEFAULT_APPLICATIONS;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 
@@ -366,7 +367,8 @@ public final class HceUtils {
         try {
             androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
                     .getUiAutomation()
-                    .adoptShellPermissionIdentity(MANAGE_DEFAULT_APPLICATIONS);
+                    .adoptShellPermissionIdentity(MANAGE_DEFAULT_APPLICATIONS,
+                        INTERACT_ACROSS_USERS_FULL);
             assert roleManager != null;
             roleManager.setDefaultApplication(
                     RoleManager.ROLE_WALLET,
