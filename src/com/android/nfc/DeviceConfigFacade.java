@@ -34,6 +34,8 @@ public class DeviceConfigFacade {
     // Cached values of fields updated via updateDeviceConfigFlags()
     private boolean mAntennaBlockedAlertEnabled;
 
+    private boolean mSecureNfcDefault;
+
     private static DeviceConfigFacade sInstance;
     public static DeviceConfigFacade getInstance(Context context, Handler handler) {
         if (sInstance == null) {
@@ -67,5 +69,11 @@ public class DeviceConfigFacade {
      */
     public boolean isAntennaBlockedAlertEnabled() {
         return mAntennaBlockedAlertEnabled;
+    }
+    public boolean getDefaultSecureNfcState() {
+        return mSecureNfcDefault;
+    }
+    public void setDefaultSecureNfcState(boolean SecureNfcDefault) {
+        mSecureNfcDefault = SecureNfcDefault;
     }
 }
