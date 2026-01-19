@@ -16,6 +16,7 @@
 
 package com.android.nfc;
 
+import android.app.ActivityManager;
 import android.app.backup.BackupAgentHelper;
 import android.app.backup.SharedPreferencesBackupHelper;
 import android.content.Context;
@@ -38,6 +39,7 @@ public class NfcBackupAgent extends BackupAgentHelper {
     public void onRestoreFinished() {
         NfcAdapter nfcAdapter = NfcAdapter.getDefaultAdapter(this);
         NfcService.sIsNfcRestore = true;
+        DeviceConfigFacade deviceConfigFacade = NfcInjector.getInstance().getDeviceConfigFacade();
 
         if (nfcAdapter != null) {
             SharedPreferences prefs = getSharedPreferences(NfcService.PREF,
@@ -56,7 +58,9 @@ public class NfcBackupAgent extends BackupAgentHelper {
                 nfcAdapter.enableReaderOption(false);
             }
 
-            if (prefs.getBoolean(NfcService.PREF_SECURE_NFC_ON, NfcService.SECURE_NFC_ON_DEFAULT)
+            int userId = ActivityManager.getCurrentUser();
+            if (prefs.getBoolean(NfcService.PREF_SECURE_NFC_ON + "_" + userId,
+                    deviceConfigFacade.getDefaultSecureNfcState())
                     && nfcAdapter.isSecureNfcSupported()) {
                 nfcAdapter.enableSecureNfc(true);
             } else {
