@@ -507,6 +507,22 @@ public class HostEmulationManager {
                 mPaymentServiceUserId = -1;
             }
         }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.i(TAG, "Payment service died: " + name);
+            synchronized (mLock) {
+                bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
+            }
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
+            }
+        }
     };
 
     private ServiceConnection mConnection = new ServiceConnection() {
@@ -538,6 +554,20 @@ public class HostEmulationManager {
                 mServiceName = null;
                 mServiceBound = false;
                 mServiceUserId = -1;
+            }
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.i(TAG, "onBindingDied: " + name);
+            unbindServiceIfNeededLocked();
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
             }
         }
     };
