@@ -1128,6 +1128,14 @@ public class HostEmulationManager {
                 bindPaymentServiceLocked(mPaymentServiceUserId, mLastBoundPaymentServiceName);
             }
         }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
+            }
+        }
     };
 
     private ServiceConnection mConnection = new ServiceConnection() {
@@ -1171,6 +1179,20 @@ public class HostEmulationManager {
                 mService = null;
                 mServiceName = null;
                 mServiceBound = false;
+            }
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            Log.i(TAG, "onBindingDied: " + name);
+            unbindServiceIfNeededLocked();
+        }
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            Log.i(TAG, "onNullBinding: " + name);
+            synchronized (mLock) {
+                mContext.unbindService(this);
             }
         }
     };
