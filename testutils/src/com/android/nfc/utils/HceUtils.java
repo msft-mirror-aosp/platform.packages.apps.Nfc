@@ -257,9 +257,9 @@ public final class HceUtils {
                         "000EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF9000",
                 });
 
-        CommandApdu[] largeCommandSequence = new CommandApdu[256];
-        String[] largeResponseSequence = new String[256];
-        for (int i = 0; i < 256; ++i) {
+        CommandApdu[] largeCommandSequence = new CommandApdu[50];
+        String[] largeResponseSequence = new String[50];
+        for (int i = 0; i < 50; ++i) {
             largeCommandSequence[i] =
                     buildSelectApdu(
                             LARGE_NUM_AIDS_PREFIX
