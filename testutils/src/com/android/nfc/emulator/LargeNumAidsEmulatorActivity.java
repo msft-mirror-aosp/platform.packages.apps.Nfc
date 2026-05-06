@@ -47,7 +47,7 @@ public class LargeNumAidsEmulatorActivity extends BaseEmulatorActivity {
     @Override
     protected void onServicesSetup() {
         ArrayList<String> aids = new ArrayList<String>();
-        for (int i = 0; i < 256; i++) {
+        for (int i = 0; i < 50; i++) {
             aids.add(
                     HceUtils.LARGE_NUM_AIDS_PREFIX
                             + String.format("%02X", i)
