@@ -48,6 +48,7 @@ import android.nfc.NfcAdapter;
 import android.nfc.NfcServiceManager;
 import android.nfc.tech.Ndef;
 import android.os.AsyncTask;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerExecutor;
@@ -107,7 +108,7 @@ public final class NfcServiceTest {
     private MockitoSession mStaticMockSession;
 
     @Before
-    public void setUp() {
+    public void setUp() throws PackageManager.NameNotFoundException {
         mLooper = new TestLooper();
         MockitoAnnotations.initMocks(this);
         AsyncTask.setDefaultExecutor(new HandlerExecutor(new Handler(mLooper.getLooper())));
@@ -137,6 +138,7 @@ public final class NfcServiceTest {
         when(mPreferences.edit()).thenReturn(mPreferencesEditor);
         when(mPowerManager.newWakeLock(anyInt(), anyString()))
                 .thenReturn(mock(PowerManager.WakeLock.class));
+        when(mPackageManager.getPackageUid(PKG_NAME, 0)).thenReturn(Binder.getCallingUid());
         createNfcService();
     }
 
@@ -235,7 +237,7 @@ public final class NfcServiceTest {
     public void testSetObserveMode_nfcDisabled() throws Exception {
         mNfcService.mNfcAdapter.disable(true, PKG_NAME);
 
-        Assert.assertFalse(mNfcService.mNfcAdapter.setObserveMode(true, null));
+        Assert.assertFalse(mNfcService.mNfcAdapter.setObserveMode(true, PKG_NAME));
     }
 
     @Test

@@ -1686,6 +1686,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean enable(String pkg) throws RemoteException {
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -1723,6 +1724,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public boolean disable(boolean saveState, String pkg) throws RemoteException {
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), pkg);
             boolean isDeviceOrProfileOwner = isDeviceOrProfileOwner(Binder.getCallingUid(), pkg);
             if (!NfcPermissions.checkAdminPermissions(mContext)
                     && !isDeviceOrProfileOwner) {
@@ -1782,6 +1784,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
         @Override
         public synchronized boolean setObserveMode(boolean enable, String packageName) {
+            mNfcPermissions.checkPackage(Binder.getCallingUid(), packageName);
             if (!isNfcEnabled()) {
                 Log.e(TAG, "setObserveMode: NFC must be enabled but is: " + mState);
                 return false;
